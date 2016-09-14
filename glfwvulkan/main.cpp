@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <Windows.h>
 
 
 class GlfwManager
@@ -69,6 +70,21 @@ template<typename T>
 const T* data_or_null(const std::vector<T> &v)
 {
 	return v.empty() ? nullptr : v.data();
+}
+
+
+VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
+	VkDebugReportFlagsEXT       flags,
+	VkDebugReportObjectTypeEXT  objectType,
+	uint64_t                    object,
+	size_t                      location,
+	int32_t                     messageCode,
+	const char*                 pLayerPrefix,
+	const char*                 pMessage,
+	void*                       pUserData)
+{
+	OutputDebugStringA(pMessage);
+	return VK_FALSE;
 }
 
 
@@ -165,10 +181,15 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+
 		return true;
 	}
 };
 
+
+PFN_vkCreateDebugReportCallbackEXT g_vkCreateDebugReportCallbackEXT = nullptr;
+PFN_vkDebugReportMessageEXT g_vkDebugReportMessageEXT = nullptr;
+PFN_vkDestroyDebugReportCallbackEXT g_vkDestroyDebugReportCallbackEXT = nullptr;
 
 class InstanceManager
 {
@@ -184,16 +205,29 @@ class InstanceManager
 
     std::vector<std::shared_ptr<GpuManager>> m_gpus;
 
+	VkDebugReportCallbackEXT m_callback;
+
 public:
 	InstanceManager(const std::string &app_name
 		, const std::string &engine_name)
 		: m_app_short_name(app_name), m_engine_name(engine_name)
 		, m_device(new DeviceManager)
 	{
+#ifndef NDEBUG
+        // Enable validation layers in debug builds 
+        // to detect validation errors
+        m_instance_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
+        // Enable debug report extension in debug builds 
+        // to be able to consume validation errors 
+        m_instance_extension_names.push_back("VK_EXT_debug_report");
+#endif
 	}
 
 	~InstanceManager()
 	{
+#ifndef NDEBUG
+		g_vkDestroyDebugReportCallbackEXT(m_inst, m_callback, nullptr);
+#endif
 		m_device.reset();
 		vkDestroyInstance(m_inst, NULL);
 	}
@@ -225,6 +259,20 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+
+#ifndef NDEBUG
+        /* Load VK_EXT_debug_report entry points in debug builds */
+        g_vkCreateDebugReportCallbackEXT =
+            reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>
+            (vkGetInstanceProcAddr(m_inst, "vkCreateDebugReportCallbackEXT"));
+        g_vkDebugReportMessageEXT =
+            reinterpret_cast<PFN_vkDebugReportMessageEXT>
+            (vkGetInstanceProcAddr(m_inst, "vkDebugReportMessageEXT"));
+        g_vkDestroyDebugReportCallbackEXT =
+            reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>
+            (vkGetInstanceProcAddr(m_inst, "vkDestroyDebugReportCallbackEXT"));
+#endif
+
 		return true;
 	}
 
@@ -254,30 +302,30 @@ public:
         return true;
     }
 
-#if 0
-        vkGetPhysicalDeviceQueueFamilyProperties(info.gpus[0],
-                                                 &info.queue_family_count, NULL);
-        assert(info.queue_family_count >= 1);
-
-        info.queue_props.resize(info.queue_family_count);
-        vkGetPhysicalDeviceQueueFamilyProperties(
-            info.gpus[0], &info.queue_family_count, info.queue_props.data());
-        assert(info.queue_family_count >= 1);
-
-        /* This is as good a place as any to do this */
-        vkGetPhysicalDeviceMemoryProperties(info.gpus[0], &info.memory_properties);
-        vkGetPhysicalDeviceProperties(info.gpus[0], &info.gpu_props);
-
-        return res;
-    }
-#endif
-
 	bool createDevice(size_t gpuIndex)
 	{
         if(gpuIndex>=m_gpus.size()){
             return false;
         }
-		return m_device->create(m_gpus[gpuIndex]);
+		if (!m_device->create(m_gpus[gpuIndex])) {
+			return false;
+		}
+
+#ifndef NDEBUG
+		/* Setup callback creation information */
+		VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
+		callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+		callbackCreateInfo.pNext = nullptr;
+		callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+			VK_DEBUG_REPORT_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+		callbackCreateInfo.pfnCallback = &MyDebugReportCallback;
+		callbackCreateInfo.pUserData = nullptr;
+
+		/* Register the callback */
+		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
+#endif
+		return true;
 	}
 };
 
