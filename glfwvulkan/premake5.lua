@@ -20,6 +20,7 @@ files {
 }
 includedirs { 
     "../glfw/include",
+    "C:/VulkanSDK/1.0.26.0/Include",
 }
 defines { 
     "WIN32",
@@ -27,8 +28,11 @@ defines {
     "GLFW_DLL",
 }
 buildoptions { }
-libdirs { }
+libdirs { 
+    "C:/VulkanSDK/1.0.26.0/Bin",
+}
 links { 
     "glfw3",
+    "vulkan-1",
 }
 
