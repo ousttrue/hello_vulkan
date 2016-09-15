@@ -104,8 +104,8 @@ class GpuManager
 {
 	VkPhysicalDevice m_gpu;
 	std::vector<VkQueueFamilyProperties> m_queue_props;
-	VkPhysicalDeviceMemoryProperties m_memory_properties;
-	VkPhysicalDeviceProperties m_gpu_props;
+	VkPhysicalDeviceMemoryProperties m_memory_properties = {};
+	VkPhysicalDeviceProperties m_gpu_props = {};
 
 	uint32_t m_graphics_queue_family_index = -1;
 	uint32_t m_present_queue_family_index = -1;
@@ -119,16 +119,41 @@ public:
 	}
 
 	VkPhysicalDevice get()const { return m_gpu; }
+	VkFormat getPrimaryFormat()const { return m_format; }
 	uint32_t get_graphics_queue_family_index()const
 	{
 		return m_graphics_queue_family_index;
 	}
-
 	uint32_t get_present_queue_family_index()const
 	{
 		return m_present_queue_family_index;
 	}
-	VkFormat getPrimaryFormat()const { return m_format; }
+	/*
+	const VkPhysicalDeviceMemoryProperties& get_memory_properties()const
+	{
+		return m_memory_properties;
+	}
+	*/
+	bool memory_type_from_properties(
+		uint32_t typeBits,
+		VkFlags requirements_mask,
+		uint32_t *typeIndex)const
+	{
+		// Search memtypes to find first index with those properties
+		for (uint32_t i = 0; i < m_memory_properties.memoryTypeCount; i++) {
+			if ((typeBits & 1) == 1) {
+				// Type is available, does it match user properties?
+				if ((m_memory_properties.memoryTypes[i].propertyFlags &
+					requirements_mask) == requirements_mask) {
+					*typeIndex = i;
+					return true;
+				}
+			}
+			typeBits >>= 1;
+		}
+		// No memory types matched, return failure
+		return false;
+	}
 
 	bool initialize()
 	{
@@ -368,6 +393,14 @@ public:
 };
 
 
+class CommandBufferManager
+{
+	VkCommandBuffer m_cmd = nullptr;
+
+public:
+};
+
+
 class DeviceManager
 {
 	VkDevice m_device = nullptr;
@@ -378,31 +411,60 @@ class DeviceManager
 	* Keep each of our swap chain buffers' image, command buffer and view in one
 	* spot
 	*/
-	struct swap_chain_buffer 
+	struct swap_chain_buffer
 	{
-		VkImage image=nullptr;
-		VkImageView view=nullptr;
+		VkImage image = nullptr;
+		VkImageView view = nullptr;
+
+		void destroy(VkDevice device)
+		{
+			vkDestroyImageView(device, view, NULL);
+		}
 	};
-	std::vector<swap_chain_buffer> m_buffers;
+	std::vector<std::unique_ptr<swap_chain_buffer>> m_buffers;
+
+	struct depth_buffer
+	{
+		//VkFormat format = VK_FORMAT_D16_UNORM;
+		VkImage image = nullptr;
+		VkDeviceMemory mem = nullptr;
+		VkImageView view = nullptr;
+
+		void destroy(VkDevice device)
+		{
+			vkDestroyImageView(device, view, NULL);
+			vkDestroyImage(device, image, NULL);
+			vkFreeMemory(device, mem, NULL);
+		}
+	};
+	std::unique_ptr<depth_buffer> m_depth;
 
 public:
 	DeviceManager()
+		: m_depth(new depth_buffer)
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
 
 	~DeviceManager()
 	{
+		m_depth->destroy(m_device);
+		m_depth.reset();
+		for (auto &b : m_buffers)
+		{
+			b->destroy(m_device);
+		}
+		m_buffers.clear();
 		vkDestroySwapchainKHR(m_device, m_swapchain, NULL);
 		vkDestroyDevice(m_device, NULL);
 	}
 
 	bool create(const std::shared_ptr<GpuManager> &gpu)
 	{
-        int graphics_queue_family_index=gpu->get_graphics_queue_family_index();
-        if(graphics_queue_family_index<0){
-            return false;
-        }
+		int graphics_queue_family_index = gpu->get_graphics_queue_family_index();
+		if (graphics_queue_family_index < 0) {
+			return false;
+		}
 
 		VkDeviceQueueCreateInfo queue_info = {};
 		float queue_priorities[1] = { 0.0 };
@@ -433,7 +495,7 @@ public:
 	bool createSwapchain(const std::shared_ptr<GpuManager> &gpu
 		, const std::shared_ptr<SurfaceManager> &surface
 		, int w, int h
-		, VkImageUsageFlags usageFlags= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+		, VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
 	{
 		if (!surface->getCapabilityFor(gpu->get())) {
@@ -500,7 +562,7 @@ public:
 			return false;
 		}
 
-		for (uint32_t i = 0; i < swapchainImageCount; i++) 
+		for (uint32_t i = 0; i < swapchainImageCount; i++)
 		{
 			VkImageViewCreateInfo color_image_view = {};
 			color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -519,18 +581,130 @@ public:
 			color_image_view.flags = 0;
 			color_image_view.image = swapchainImages[i];
 
-			swap_chain_buffer sc_buffer;
+			auto sc_buffer = std::make_unique<swap_chain_buffer>();
 			res = vkCreateImageView(m_device, &color_image_view, NULL,
-				&sc_buffer.view);
+				&sc_buffer->view);
 			if (res != VK_SUCCESS) {
 				return false;
 			}
-			sc_buffer.image = swapchainImages[i];
-			m_buffers.push_back(sc_buffer);
+			sc_buffer->image = swapchainImages[i];
+			m_buffers.push_back(std::move(sc_buffer));
 		}
 
 		return true;
 	}
+
+
+	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
+		, int w, int h
+		, VkFormat depth_format = VK_FORMAT_D16_UNORM
+		, VkSampleCountFlagBits samples= VK_SAMPLE_COUNT_1_BIT
+		)
+	{
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(gpu->get(), depth_format, &props);
+
+		VkImageCreateInfo image_info = {};
+		if (props.linearTilingFeatures &
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			image_info.tiling = VK_IMAGE_TILING_LINEAR;
+		}
+		else if (props.optimalTilingFeatures &
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		}
+		else {
+			/* Try other depth formats? */
+			//std::cout << "depth_format " << depth_format << " Unsupported.\n";
+			return false;
+		}
+		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image_info.pNext = NULL;
+		image_info.imageType = VK_IMAGE_TYPE_2D;
+		image_info.format = depth_format;
+		image_info.extent.width = w;
+		image_info.extent.height = h;
+		image_info.extent.depth = 1;
+		image_info.mipLevels = 1;
+		image_info.arrayLayers = 1;
+		image_info.samples = samples;
+		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image_info.queueFamilyIndexCount = 0;
+		image_info.pQueueFamilyIndices = NULL;
+		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		image_info.flags = 0;
+		auto res = vkCreateImage(m_device, &image_info, NULL, &m_depth->image);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		VkMemoryRequirements mem_reqs;
+		vkGetImageMemoryRequirements(m_device, m_depth->image, &mem_reqs);
+		VkMemoryAllocateInfo mem_alloc = {};
+		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		mem_alloc.pNext = NULL;
+		mem_alloc.allocationSize = 0;
+		mem_alloc.memoryTypeIndex = 0;
+		mem_alloc.allocationSize = mem_reqs.size;
+		// Use the memory properties to determine the type of memory required
+		auto pass = gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+		0, // No requirements
+		&mem_alloc.memoryTypeIndex);
+		if (!pass) {
+			return false;
+		}
+		// Allocate memory
+		res = vkAllocateMemory(m_device, &mem_alloc, NULL, &m_depth->mem);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		/* Bind memory */
+		res = vkBindImageMemory(m_device, m_depth->image, m_depth->mem, 0);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		VkImageViewCreateInfo view_info = {};
+		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_info.pNext = NULL;
+		view_info.image = VK_NULL_HANDLE;
+		view_info.format = depth_format;
+		view_info.components.r = VK_COMPONENT_SWIZZLE_R;
+		view_info.components.g = VK_COMPONENT_SWIZZLE_G;
+		view_info.components.b = VK_COMPONENT_SWIZZLE_B;
+		view_info.components.a = VK_COMPONENT_SWIZZLE_A;
+		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view_info.subresourceRange.baseMipLevel = 0;
+		view_info.subresourceRange.levelCount = 1;
+		view_info.subresourceRange.baseArrayLayer = 0;
+		view_info.subresourceRange.layerCount = 1;
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_info.flags = 0;
+		if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
+			depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
+			depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+			view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+		// Create image view
+		view_info.image = m_depth->image;
+		res = vkCreateImageView(m_device, &view_info, NULL, &m_depth->view);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		/*
+		// Set the image layout to depth stencil optimal
+		set_image_layout(info, info.depth.image,
+		view_info.subresourceRange.aspectMask,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		*/
+
+		return true;
+	}
+
 };
 
 
@@ -692,7 +866,13 @@ public:
 		if (m_gpus.empty()) {
 			return false;
 		}
-		return m_device->createSwapchain(m_gpus[0], m_surface, w, h);
+		if (!m_device->createSwapchain(m_gpus[0], m_surface, w, h)) {
+			return false;
+		}
+		if (!m_device->createDepthbuffer(m_gpus[0], w, h)) {
+			return false;
+		}
+		return true;
 	}
 };
 
@@ -739,6 +919,7 @@ int WINAPI WinMain(
 	{
 		return 7;
 	}
+
 
 	while (glfw.runLoop())
 	{
