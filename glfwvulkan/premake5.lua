@@ -1,7 +1,7 @@
 project "glfwvulkan"
 
-kind "ConsoleApp"
---kind "WindowedApp"
+--kind "ConsoleApp"
+kind "WindowedApp"
 --kind "StaticLib"
 --kind "SharedLib"
 --language "C"
@@ -10,7 +10,7 @@ language "C++"
 objdir "%{prj.name}"
 
 flags{
-    --"WinMain"
+    "WinMain"
     --"Unicode",
     --"StaticRuntime",
 }
@@ -26,6 +26,7 @@ defines {
     "WIN32",
     "_WINDOWS",
     "GLFW_DLL",
+    "VK_USE_PLATFORM_WIN32_KHR",
 }
 buildoptions { }
 libdirs { 
