@@ -445,6 +445,7 @@ class DeviceManager
 	std::unique_ptr<depth_buffer> m_depth;
 	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
+	std::vector<VkFramebuffer> m_framebuffers;
 
 	struct uniform_buffer
 	{
@@ -479,6 +480,12 @@ public:
 
 	~DeviceManager()
 	{
+		for (auto &fb : m_framebuffers)
+		{
+			vkDestroyFramebuffer(m_device, fb, NULL);
+		}
+		m_framebuffers.clear();
+
 		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
 		vkDestroyShaderModule(m_device, m_shaderStages[1], NULL);
 
@@ -486,6 +493,8 @@ public:
 
 		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
+
+		m_uniform_data->destroy(m_device);
 
 		m_depth->destroy(m_device);
 		m_depth.reset();
@@ -962,6 +971,39 @@ public:
 		}
 		return true;
 	}
+
+	bool createFramebuffers(int w, int h) 
+	{
+		/* DEPENDS on init_depth_buffer(), init_renderpass() and
+		* init_swapchain_extension() */
+
+		m_framebuffers.resize(m_buffers.size());
+		for (size_t i = 0; i < m_buffers.size(); i++) {
+			VkImageView attachments[2]=
+			{
+				m_buffers[i]->view,
+				m_depth->view,
+			};
+
+			VkFramebufferCreateInfo fb_info = {};
+			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			fb_info.pNext = NULL;
+			fb_info.renderPass = m_render_pass;
+			fb_info.attachmentCount = 2;
+			fb_info.pAttachments = attachments;
+			fb_info.width = w;
+			fb_info.height = h;
+			fb_info.layers = 1;
+
+			auto res = vkCreateFramebuffer(m_device, &fb_info, NULL,
+				&m_framebuffers[i]);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+		}
+
+		return true;
+	}
 };
 
 
@@ -1129,6 +1171,9 @@ public:
 		if (!m_device->createDepthbuffer(m_gpus[0], w, h)) {
 			return false;
 		}
+		if (!m_device->createFramebuffers(w, h)) {
+			return false;
+		}
 		return true;
 	}
 
@@ -1205,22 +1250,22 @@ int WINAPI WinMain(
         return 4;
     }
 
-    if(!instance.createDevice(0)){
-        return 5;
-    }
-
 	if (!instance.createSurfaceFromWindow(hInstance, glfw.getWindow()))
 	{
 		return 6;
 	}
 
-	if (!instance.createSwapchain(w, h))
-	{
-		return 7;
-	}
+	if(!instance.createDevice(0)){
+        return 5;
+    }
 
 	if (!instance.createDeviceResources()) {
 		return 8;
+	}
+
+	if (!instance.createSwapchain(w, h))
+	{
+		return 7;
 	}
 
 	if (!instance.createPipeline(
