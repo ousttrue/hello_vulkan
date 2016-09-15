@@ -7,6 +7,10 @@
 #include <memory>
 #include <Windows.h>
 
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 
 class GlfwManager
 {
@@ -439,9 +443,24 @@ class DeviceManager
 	};
 	std::unique_ptr<depth_buffer> m_depth;
 
+	struct uniform_buffer
+	{
+		VkBuffer buf = nullptr;
+		VkDeviceMemory mem = nullptr;
+		//VkDescriptorBufferInfo buffer_info = {};
+
+		void destroy(VkDevice device)
+		{
+			vkDestroyBuffer(device, buf, NULL);
+			vkFreeMemory(device, mem, NULL);
+		}
+	};
+	std::unique_ptr<uniform_buffer> m_uniform_data;
+
 public:
 	DeviceManager()
 		: m_depth(new depth_buffer)
+		, m_uniform_data(new uniform_buffer)
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
@@ -594,7 +613,6 @@ public:
 		return true;
 	}
 
-
 	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
 		, int w, int h
 		, VkFormat depth_format = VK_FORMAT_D16_UNORM
@@ -705,6 +723,96 @@ public:
 		return true;
 	}
 
+	bool createUniformBuffer(const std::shared_ptr<GpuManager> &gpu)
+	{
+		glm::mat4 MVP;
+
+		/*
+		VkResult U_ASSERT_ONLY res;
+		bool U_ASSERT_ONLY pass;
+		float fov = glm::radians(45.0f);
+		if (info.width > info.height) {
+			fov *= static_cast<float>(info.height) / static_cast<float>(info.width);
+		}
+		info.Projection = glm::perspective(fov,
+			static_cast<float>(info.width) /
+			static_cast<float>(info.height), 0.1f, 100.0f);
+		info.View = glm::lookAt(
+			glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
+			glm::vec3(0, 0, 0),  // and looks at the origin
+			glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
+		);
+		info.Model = glm::mat4(1.0f);
+		// Vulkan clip space has inverted Y and half Z.
+		info.Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, -1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 0.5f, 0.0f,
+			0.0f, 0.0f, 0.5f, 1.0f);
+
+		info.MVP = info.Clip * info.Projection * info.View * info.Model;
+		*/
+
+		VkBufferCreateInfo buf_info = {};
+		buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buf_info.pNext = NULL;
+		buf_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		buf_info.size = sizeof(MVP);
+		buf_info.queueFamilyIndexCount = 0;
+		buf_info.pQueueFamilyIndices = NULL;
+		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		buf_info.flags = 0;
+		auto res = vkCreateBuffer(m_device, &buf_info, NULL, &m_uniform_data->buf);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		VkMemoryRequirements mem_reqs;
+		vkGetBufferMemoryRequirements(m_device, m_uniform_data->buf,
+			&mem_reqs);
+		VkMemoryAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.pNext = NULL;
+		alloc_info.memoryTypeIndex = 0;
+		alloc_info.allocationSize = mem_reqs.size;
+		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&alloc_info.memoryTypeIndex))
+		{
+			//assert(pass && "No mappable, coherent memory");
+			return false;
+		}
+		res = vkAllocateMemory(m_device, &alloc_info, NULL,
+			&m_uniform_data->mem);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		res = vkBindBufferMemory(m_device, m_uniform_data->buf,
+			m_uniform_data->mem, 0);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		{
+			// MAP
+			uint8_t *pData;
+			res = vkMapMemory(m_device, m_uniform_data->mem, 0, mem_reqs.size, 0,
+				(void **)&pData);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+			memcpy(pData, &MVP, sizeof(MVP));
+			vkUnmapMemory(m_device, m_uniform_data->mem);
+		}
+
+		/*
+		m_uniform_data->buffer_info.buffer = m_uniform_data->buf;
+		m_uniform_data->buffer_info.offset = 0;
+		m_uniform_data->buffer_info.range = sizeof(MVP);
+		*/
+
+		return true;
+	}
 };
 
 
@@ -874,6 +982,14 @@ public:
 		}
 		return true;
 	}
+
+	bool createBuffer()
+	{
+		if (!m_device->createUniformBuffer(m_gpus[0])) {
+			return false;
+		}
+		return true;
+	}
 };
 
 
@@ -920,6 +1036,9 @@ int WINAPI WinMain(
 		return 7;
 	}
 
+	if (!instance.createBuffer()) {
+		return 8;
+	}
 
 	while (glfw.runLoop())
 	{
@@ -931,4 +1050,3 @@ int WINAPI WinMain(
 
 	return 0;
 }
-

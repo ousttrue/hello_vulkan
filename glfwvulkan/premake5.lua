@@ -20,6 +20,7 @@ files {
 }
 includedirs { 
     "../glfw/include",
+    "../glm/include",
     "C:/VulkanSDK/1.0.26.0/Include",
 }
 defines { 
