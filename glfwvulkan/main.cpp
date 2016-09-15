@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <fstream>
 #include <Windows.h>
 
 #define GLM_FORCE_RADIANS
@@ -464,6 +465,10 @@ class DeviceManager
 
 	VkRenderPass m_render_pass=nullptr;
 
+	VkShaderModule m_shaderStages[2] = {
+		nullptr, nullptr,
+	};
+
 public:
 	DeviceManager()
 		: m_depth(new depth_buffer)
@@ -474,6 +479,9 @@ public:
 
 	~DeviceManager()
 	{
+		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
+		vkDestroyShaderModule(m_device, m_shaderStages[1], NULL);
+
 		vkDestroyRenderPass(m_device, m_render_pass, NULL);
 
 		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
@@ -938,6 +946,22 @@ public:
 
 		return true;
 	}
+
+	bool createShader(int index, const std::vector<unsigned int> &spv)
+	{
+		VkShaderModuleCreateInfo moduleCreateInfo;
+		moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		moduleCreateInfo.pNext = NULL;
+		moduleCreateInfo.flags = 0;
+		moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
+		moduleCreateInfo.pCode = spv.data();
+		auto res = vkCreateShaderModule(m_device, &moduleCreateInfo, NULL,
+			&m_shaderStages[index]);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		return true;
+	}
 };
 
 
@@ -1121,6 +1145,34 @@ public:
 		}
 		return true;
 	}
+
+	std::vector<unsigned int> read(const std::string &path)
+	{
+		std::vector<unsigned int> buf;
+		std::ifstream ifs(path.c_str(), std::ios::binary);
+		if (ifs) {
+			ifs.seekg(0, std::ios::end);
+			auto len = ifs.tellg();
+			if (len > 0 && len % 4 == 0) {
+				buf.resize(len / 4);
+				ifs.seekg(0, std::ios::beg);
+				ifs.read((char*)&buf[0], len);
+			}
+		}
+		return buf;
+	}
+
+	bool createPipeline(const std::string &vertSpvPath
+		, const std::string &fragSpvPath)
+	{
+		if (!m_device->createShader(0, read(vertSpvPath))) {
+			return false;
+		}
+		if (!m_device->createShader(1, read(fragSpvPath))) {
+			return false;
+		}
+		return true;
+	}
 };
 
 
@@ -1169,6 +1221,12 @@ int WINAPI WinMain(
 
 	if (!instance.createDeviceResources()) {
 		return 8;
+	}
+
+	if (!instance.createPipeline(
+		"../15-draw_cube.vert.spv"
+		, "../15-draw_cube.frag.spv")) {
+		return 9;
 	}
 
 	while (glfw.runLoop())
