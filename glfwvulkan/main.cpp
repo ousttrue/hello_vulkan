@@ -447,6 +447,18 @@ class DeviceManager
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 	std::vector<VkFramebuffer> m_framebuffers;
 
+	struct vertex_buffer 
+	{
+		VkBuffer buf=nullptr;
+		VkDeviceMemory mem=nullptr;
+		//VkDescriptorBufferInfo buffer_info = {};
+	};
+	vertex_buffer m_vertex_data;
+	/*
+	VkVertexInputBindingDescription m_vi_binding = {};
+	VkVertexInputAttributeDescription m_vi_attribs[2];
+	*/
+
 	struct uniform_buffer
 	{
 		VkBuffer buf = nullptr;
@@ -480,6 +492,9 @@ public:
 
 	~DeviceManager()
 	{
+		vkDestroyBuffer(m_device, m_vertex_data.buf, NULL);
+		vkFreeMemory(m_device, m_vertex_data.mem, NULL);
+
 		for (auto &fb : m_framebuffers)
 		{
 			vkDestroyFramebuffer(m_device, fb, NULL);
@@ -1004,6 +1019,83 @@ public:
 
 		return true;
 	}
+
+	bool createVertexBuffer(const std::shared_ptr<GpuManager> &gpu
+		, const void *vertexData
+		, uint32_t dataSize, uint32_t dataStride)
+	{
+		VkBufferCreateInfo buf_info = {};
+		buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buf_info.pNext = NULL;
+		buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		buf_info.size = dataSize;
+		buf_info.queueFamilyIndexCount = 0;
+		buf_info.pQueueFamilyIndices = NULL;
+		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		buf_info.flags = 0;
+		auto res = vkCreateBuffer(m_device, &buf_info, NULL
+			, &m_vertex_data.buf);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		VkMemoryRequirements mem_reqs;
+		vkGetBufferMemoryRequirements(m_device, m_vertex_data.buf,
+			&mem_reqs);
+
+		VkMemoryAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.pNext = NULL;
+		alloc_info.memoryTypeIndex = 0;
+		alloc_info.allocationSize = mem_reqs.size;
+		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&alloc_info.memoryTypeIndex)){
+			//assert(pass && "No mappable, coherent memory");
+			return false;
+		}
+		res = vkAllocateMemory(m_device, &alloc_info, NULL,
+			&(m_vertex_data.mem));
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		//m_vertex_data.buffer_info.range = mem_reqs.size;
+		//m_vertex_data.buffer_info.offset = 0;
+
+		{
+			uint8_t *pData;
+			res = vkMapMemory(m_device
+				, m_vertex_data.mem, 0, mem_reqs.size, 0,
+				(void **)&pData);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+			memcpy(pData, vertexData, dataSize);
+			vkUnmapMemory(m_device, m_vertex_data.mem);
+		}
+
+		res = vkBindBufferMemory(m_device, m_vertex_data.buf,
+			m_vertex_data.mem, 0);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		/*
+		m_vi_binding.binding = 0;
+		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		m_vi_binding.stride = dataStride;
+		m_vi_attribs[0].binding = 0;
+		m_vi_attribs[0].location = 0;
+		m_vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		m_vi_attribs[0].offset = 0;
+		m_vi_attribs[1].binding = 0;
+		m_vi_attribs[1].location = 1;
+		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		m_vi_attribs[1].offset = 16;
+		*/
+		return true;
+	}
 };
 
 
@@ -1177,7 +1269,8 @@ public:
 		return true;
 	}
 
-	bool createDeviceResources()
+	bool createDeviceResources(const void *vertexData,
+		uint32_t dataSize, uint32_t dataStride)
 	{
 		if (!m_device->createUniformBuffer(m_gpus[0])) {
 			return false;
@@ -1186,6 +1279,12 @@ public:
 			return false;
 		}
 		if (!m_device->createRenderpass(m_gpus[0])) {
+			return false;
+		}
+		if (!m_device->createVertexBuffer(m_gpus[0]
+			, vertexData
+			, dataSize, dataStride))
+		{
 			return false;
 		}
 		return true;
@@ -1208,7 +1307,8 @@ public:
 	}
 
 	bool createPipeline(const std::string &vertSpvPath
-		, const std::string &fragSpvPath)
+		, const std::string &fragSpvPath
+		)
 	{
 		if (!m_device->createShader(0, read(vertSpvPath))) {
 			return false;
@@ -1259,7 +1359,59 @@ int WINAPI WinMain(
         return 5;
     }
 
-	if (!instance.createDeviceResources()) {
+	struct Vertex {
+		float posX, posY, posZ, posW; // Position data
+		float r, g, b, a;             // Color
+	};
+#define XYZ1(_x_, _y_, _z_) (_x_), (_y_), (_z_), 1.f
+	static const Vertex g_vb_solid_face_colors_Data[] = {
+		//red face
+		{ XYZ1(-1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
+		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
+		{ XYZ1(1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
+		{ XYZ1(1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
+		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
+		{ XYZ1(1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
+		//green face
+		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
+		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
+		{ XYZ1(-1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
+		{ XYZ1(-1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
+		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
+		{ XYZ1(1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
+		//blue face
+		{ XYZ1(-1, 1, 1), XYZ1(0.f, 0.f, 1.f) },
+		{ XYZ1(-1,-1, 1), XYZ1(0.f, 0.f, 1.f) },
+		{ XYZ1(-1, 1,-1), XYZ1(0.f, 0.f, 1.f) },
+		{ XYZ1(-1, 1,-1), XYZ1(0.f, 0.f, 1.f) },
+		{ XYZ1(-1,-1, 1), XYZ1(0.f, 0.f, 1.f) },
+		{ XYZ1(-1,-1,-1), XYZ1(0.f, 0.f, 1.f) },
+		//yellow face
+		{ XYZ1(1, 1, 1), XYZ1(1.f, 1.f, 0.f) },
+		{ XYZ1(1, 1,-1), XYZ1(1.f, 1.f, 0.f) },
+		{ XYZ1(1,-1, 1), XYZ1(1.f, 1.f, 0.f) },
+		{ XYZ1(1,-1, 1), XYZ1(1.f, 1.f, 0.f) },
+		{ XYZ1(1, 1,-1), XYZ1(1.f, 1.f, 0.f) },
+		{ XYZ1(1,-1,-1), XYZ1(1.f, 1.f, 0.f) },
+		//magenta face
+		{ XYZ1(1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
+		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
+		{ XYZ1(1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
+		{ XYZ1(1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
+		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
+		{ XYZ1(-1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
+		//cyan face
+		{ XYZ1(1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
+		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
+		{ XYZ1(-1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
+		{ XYZ1(-1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
+		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
+		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
+	};
+#undef XYZ1;
+	if (!instance.createDeviceResources(g_vb_solid_face_colors_Data,
+		sizeof(g_vb_solid_face_colors_Data),
+		sizeof(g_vb_solid_face_colors_Data[0]))) {
 		return 8;
 	}
 
@@ -1270,7 +1422,9 @@ int WINAPI WinMain(
 
 	if (!instance.createPipeline(
 		"../15-draw_cube.vert.spv"
-		, "../15-draw_cube.frag.spv")) {
+		, "../15-draw_cube.frag.spv"
+		
+		)) {
 		return 9;
 	}
 
