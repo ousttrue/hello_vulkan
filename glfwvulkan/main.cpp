@@ -442,6 +442,8 @@ class DeviceManager
 		}
 	};
 	std::unique_ptr<depth_buffer> m_depth;
+	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
+	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 
 	struct uniform_buffer
 	{
@@ -457,6 +459,11 @@ class DeviceManager
 	};
 	std::unique_ptr<uniform_buffer> m_uniform_data;
 
+	VkDescriptorSetLayout m_desc_layout=nullptr;
+	VkPipelineLayout m_pipeline_layout=nullptr;
+
+	VkRenderPass m_render_pass=nullptr;
+
 public:
 	DeviceManager()
 		: m_depth(new depth_buffer)
@@ -467,6 +474,11 @@ public:
 
 	~DeviceManager()
 	{
+		vkDestroyRenderPass(m_device, m_render_pass, NULL);
+
+		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
+		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
+
 		m_depth->destroy(m_device);
 		m_depth.reset();
 		for (auto &b : m_buffers)
@@ -615,12 +627,10 @@ public:
 
 	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
 		, int w, int h
-		, VkFormat depth_format = VK_FORMAT_D16_UNORM
-		, VkSampleCountFlagBits samples= VK_SAMPLE_COUNT_1_BIT
 		)
 	{
 		VkFormatProperties props;
-		vkGetPhysicalDeviceFormatProperties(gpu->get(), depth_format, &props);
+		vkGetPhysicalDeviceFormatProperties(gpu->get(), m_depth_format, &props);
 
 		VkImageCreateInfo image_info = {};
 		if (props.linearTilingFeatures &
@@ -639,13 +649,13 @@ public:
 		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		image_info.pNext = NULL;
 		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.format = depth_format;
+		image_info.format = m_depth_format;
 		image_info.extent.width = w;
 		image_info.extent.height = h;
 		image_info.extent.depth = 1;
 		image_info.mipLevels = 1;
 		image_info.arrayLayers = 1;
-		image_info.samples = samples;
+		image_info.samples = m_depth_samples;
 		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		image_info.queueFamilyIndexCount = 0;
 		image_info.pQueueFamilyIndices = NULL;
@@ -687,7 +697,7 @@ public:
 		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view_info.pNext = NULL;
 		view_info.image = VK_NULL_HANDLE;
-		view_info.format = depth_format;
+		view_info.format = m_depth_format;
 		view_info.components.r = VK_COMPONENT_SWIZZLE_R;
 		view_info.components.g = VK_COMPONENT_SWIZZLE_G;
 		view_info.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -699,9 +709,9 @@ public:
 		view_info.subresourceRange.layerCount = 1;
 		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		view_info.flags = 0;
-		if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
-			depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
-			depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+		if (m_depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
+			m_depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
+			m_depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
 			view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
 		// Create image view
@@ -810,6 +820,121 @@ public:
 		m_uniform_data->buffer_info.offset = 0;
 		m_uniform_data->buffer_info.range = sizeof(MVP);
 		*/
+
+		return true;
+	}
+
+	bool createDescriptorAndPipelineLayout()
+	{
+		VkDescriptorSetLayoutBinding layout_bindings[1];
+		layout_bindings[0].binding = 0;
+		layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		layout_bindings[0].descriptorCount = 1;
+		layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		layout_bindings[0].pImmutableSamplers = NULL;
+
+		// Next take layout bindings and use them to create a descriptor set layout
+		VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
+		descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descriptor_layout.pNext = NULL;
+		descriptor_layout.bindingCount = 1;
+		descriptor_layout.pBindings = layout_bindings;
+
+		auto res = vkCreateDescriptorSetLayout(m_device, &descriptor_layout, NULL,
+			&m_desc_layout);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		/* Now use the descriptor layout to create a pipeline layout */
+		VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = {};
+		pPipelineLayoutCreateInfo.sType =
+			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pPipelineLayoutCreateInfo.pNext = NULL;
+		pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+		pPipelineLayoutCreateInfo.pPushConstantRanges = NULL;
+		pPipelineLayoutCreateInfo.setLayoutCount = 1;
+		pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
+
+		res = vkCreatePipelineLayout(m_device, &pPipelineLayoutCreateInfo, NULL,
+			&m_pipeline_layout);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool createRenderpass(const std::shared_ptr<GpuManager> &gpu
+		, bool include_depth=true
+		, bool clear=true
+		, VkImageLayout finalLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+	{
+		/* DEPENDS on init_swap_chain() and init_depth_buffer() */
+
+		/* Need attachments for render target and depth buffer */
+		VkAttachmentDescription attachments[2];
+		attachments[0].format = gpu->getPrimaryFormat();
+		attachments[0].samples = m_depth_samples;
+		attachments[0].loadOp =
+			clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachments[0].finalLayout = finalLayout;
+		attachments[0].flags = 0;
+
+		if (include_depth) {
+			attachments[1].format = m_depth_format;
+			attachments[1].samples = m_depth_samples;
+			attachments[1].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
+				: VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+			attachments[1].initialLayout =
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachments[1].finalLayout =
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachments[1].flags = 0;
+		}
+
+		VkAttachmentReference color_reference = {};
+		color_reference.attachment = 0;
+		color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depth_reference = {};
+		depth_reference.attachment = 1;
+		depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass = {};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.flags = 0;
+		subpass.inputAttachmentCount = 0;
+		subpass.pInputAttachments = NULL;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_reference;
+		subpass.pResolveAttachments = NULL;
+		subpass.pDepthStencilAttachment = include_depth ? &depth_reference : NULL;
+		subpass.preserveAttachmentCount = 0;
+		subpass.pPreserveAttachments = NULL;
+
+		VkRenderPassCreateInfo rp_info = {};
+		rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		rp_info.pNext = NULL;
+		rp_info.attachmentCount = include_depth ? 2 : 1;
+		rp_info.pAttachments = attachments;
+		rp_info.subpassCount = 1;
+		rp_info.pSubpasses = &subpass;
+		rp_info.dependencyCount = 0;
+		rp_info.pDependencies = NULL;
+
+		auto res = vkCreateRenderPass(m_device, &rp_info, NULL, &m_render_pass);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
 
 		return true;
 	}
@@ -983,9 +1108,15 @@ public:
 		return true;
 	}
 
-	bool createBuffer()
+	bool createDeviceResources()
 	{
 		if (!m_device->createUniformBuffer(m_gpus[0])) {
+			return false;
+		}
+		if (!m_device->createDescriptorAndPipelineLayout()) {
+			return false;
+		}
+		if (!m_device->createRenderpass(m_gpus[0])) {
 			return false;
 		}
 		return true;
@@ -1036,7 +1167,7 @@ int WINAPI WinMain(
 		return 7;
 	}
 
-	if (!instance.createBuffer()) {
+	if (!instance.createDeviceResources()) {
 		return 8;
 	}
 
