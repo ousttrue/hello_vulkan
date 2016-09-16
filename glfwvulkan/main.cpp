@@ -671,6 +671,224 @@ public:
 };
 
 
+class DepthBuffer : IDeviceResource
+{
+	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
+	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
+
+	VkImageCreateInfo m_image_info = {};
+	VkImage m_image = nullptr;
+	VkDeviceMemory m_mem = nullptr;
+	VkImageView m_view = nullptr;
+
+public:
+	void onDestroy(VkDevice device)override
+	{
+		vkDestroyImageView(device, m_view, NULL);
+		vkDestroyImage(device, m_image, NULL);
+		vkFreeMemory(device, m_mem, NULL);
+	}
+
+	VkSampleCountFlagBits getSamples()const { return m_depth_samples; }
+	VkFormat getFormat()const { return m_depth_format; }
+	VkImageView getView()const { return m_view; }
+
+	bool onCreate(VkDevice device)override
+	{
+		auto res = vkCreateImage(device, &m_image_info, NULL, &m_image);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		return true;
+	}
+
+	bool configure(const std::shared_ptr<GpuManager> &gpu
+		, int w, int h
+	)
+	{
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(gpu->get(), m_depth_format, &props);
+
+		if (props.linearTilingFeatures &
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			m_image_info.tiling = VK_IMAGE_TILING_LINEAR;
+		}
+		else if (props.optimalTilingFeatures &
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			m_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		}
+		else {
+			/* Try other depth formats? */
+			//std::cout << "depth_format " << depth_format << " Unsupported.\n";
+			return false;
+		}
+		m_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		m_image_info.pNext = NULL;
+		m_image_info.imageType = VK_IMAGE_TYPE_2D;
+		m_image_info.format = m_depth_format;
+		m_image_info.extent.width = w;
+		m_image_info.extent.height = h;
+		m_image_info.extent.depth = 1;
+		m_image_info.mipLevels = 1;
+		m_image_info.arrayLayers = 1;
+		m_image_info.samples = m_depth_samples;
+		m_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		m_image_info.queueFamilyIndexCount = 0;
+		m_image_info.pQueueFamilyIndices = NULL;
+		m_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		m_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		m_image_info.flags = 0;
+		return true;
+	}
+
+	bool allocate(VkDevice device, const std::shared_ptr<GpuManager> &gpu)
+	{
+		VkMemoryRequirements mem_reqs;
+		vkGetImageMemoryRequirements(device, m_image, &mem_reqs);
+
+		VkMemoryAllocateInfo mem_alloc = {};
+		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		mem_alloc.pNext = NULL;
+		mem_alloc.allocationSize = 0;
+		mem_alloc.memoryTypeIndex = 0;
+		mem_alloc.allocationSize = mem_reqs.size;
+		// Use the memory properties to determine the type of memory required
+		auto pass = gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+			0, // No requirements
+			&mem_alloc.memoryTypeIndex);
+		if (!pass) {
+			return false;
+		}
+
+		// Allocate memory
+		auto res = vkAllocateMemory(device, &mem_alloc, NULL, &m_mem);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		// Bind memory
+		res = vkBindImageMemory(device, m_image, m_mem, 0);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+
+#if 0
+	void set_image_layout(VkImage image,
+		VkImageAspectFlags aspectMask,
+		VkImageLayout old_image_layout,
+		VkImageLayout new_image_layout) {
+		/* DEPENDS on info.cmd and info.queue initialized */
+
+		//assert(info.cmd != VK_NULL_HANDLE);
+		//assert(info.graphics_queue != VK_NULL_HANDLE);
+
+		VkImageMemoryBarrier image_memory_barrier = {};
+		image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_memory_barrier.pNext = NULL;
+		image_memory_barrier.srcAccessMask = 0;
+		image_memory_barrier.dstAccessMask = 0;
+		image_memory_barrier.oldLayout = old_image_layout;
+		image_memory_barrier.newLayout = new_image_layout;
+		image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_memory_barrier.image = image;
+		image_memory_barrier.subresourceRange.aspectMask = aspectMask;
+		image_memory_barrier.subresourceRange.baseMipLevel = 0;
+		image_memory_barrier.subresourceRange.levelCount = 1;
+		image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+		image_memory_barrier.subresourceRange.layerCount = 1;
+
+		if (old_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+			image_memory_barrier.srcAccessMask =
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		}
+
+		if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		}
+
+		if (new_image_layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+			image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		}
+
+		if (old_image_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		}
+
+		if (old_image_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+			image_memory_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+		}
+
+		if (new_image_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		}
+
+		if (new_image_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+			image_memory_barrier.dstAccessMask =
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		}
+
+		if (new_image_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+			image_memory_barrier.dstAccessMask =
+				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		}
+
+		VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+		vkCmdPipelineBarrier(info.cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
+			1, &image_memory_barrier);
+	}
+#endif
+
+	bool createView(VkDevice device)
+	{
+		VkImageViewCreateInfo view_info = {};
+		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view_info.pNext = NULL;
+		view_info.image = VK_NULL_HANDLE;
+		view_info.format = m_depth_format;
+		view_info.components.r = VK_COMPONENT_SWIZZLE_R;
+		view_info.components.g = VK_COMPONENT_SWIZZLE_G;
+		view_info.components.b = VK_COMPONENT_SWIZZLE_B;
+		view_info.components.a = VK_COMPONENT_SWIZZLE_A;
+		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view_info.subresourceRange.baseMipLevel = 0;
+		view_info.subresourceRange.levelCount = 1;
+		view_info.subresourceRange.baseArrayLayer = 0;
+		view_info.subresourceRange.layerCount = 1;
+		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view_info.flags = 0;
+		if (m_depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
+			m_depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
+			m_depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+			view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+		// Create image view
+		view_info.image = m_image;
+		auto res = vkCreateImageView(device, &view_info, NULL, &m_view);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		/* command
+		// Set the image layout to depth stencil optimal
+		set_image_layout(info, info.depth.image,
+		view_info.subresourceRange.aspectMask,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		*/
+
+		return true;
+	}
+};
+typedef DeviceResource<DepthBuffer> DepthBufferResource;
+
+
 class DeviceManager
 {
 	VkDevice m_device = nullptr;
@@ -693,24 +911,7 @@ class DeviceManager
 	};
 	std::vector<std::unique_ptr<swap_chain_buffer>> m_buffers;
 
-	struct depth_buffer
-	{
-		//VkFormat format = VK_FORMAT_D16_UNORM;
-		VkImage image = nullptr;
-		VkDeviceMemory mem = nullptr;
-		VkImageView view = nullptr;
-
-		void destroy(VkDevice device)
-		{
-			vkDestroyImageView(device, view, NULL);
-			vkDestroyImage(device, image, NULL);
-			vkFreeMemory(device, mem, NULL);
-		}
-	};
-	std::unique_ptr<depth_buffer> m_depth;
-	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
-	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
-
+	std::unique_ptr<DepthBufferResource> m_depth;
 	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
 	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
 	std::unique_ptr<UniformBufferResource> m_uniform_data;
@@ -726,7 +927,6 @@ class DeviceManager
 
 public:
 	DeviceManager()
-		: m_depth(new depth_buffer)
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
@@ -736,6 +936,7 @@ public:
 		m_vertex_buffer.reset();
 		m_framebuffers.clear();
 		m_uniform_data.reset();
+		m_depth.reset();
 
 		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
 		vkDestroyShaderModule(m_device, m_shaderStages[1], NULL);
@@ -745,8 +946,6 @@ public:
 		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
 
-		m_depth->destroy(m_device);
-		m_depth.reset();
 		for (auto &b : m_buffers)
 		{
 			b->destroy(m_device);
@@ -892,109 +1091,21 @@ public:
 	}
 
 	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
-		, int w, int h
-		)
+		, int w, int h)
 	{
-		VkFormatProperties props;
-		vkGetPhysicalDeviceFormatProperties(gpu->get(), m_depth_format, &props);
-
-		VkImageCreateInfo image_info = {};
-		if (props.linearTilingFeatures &
-			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			image_info.tiling = VK_IMAGE_TILING_LINEAR;
-		}
-		else if (props.optimalTilingFeatures &
-			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		}
-		else {
-			/* Try other depth formats? */
-			//std::cout << "depth_format " << depth_format << " Unsupported.\n";
+		m_depth = std::make_unique<DepthBufferResource>();
+		if (!m_depth->resource().configure(gpu, w, h)) {
 			return false;
 		}
-		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_info.pNext = NULL;
-		image_info.imageType = VK_IMAGE_TYPE_2D;
-		image_info.format = m_depth_format;
-		image_info.extent.width = w;
-		image_info.extent.height = h;
-		image_info.extent.depth = 1;
-		image_info.mipLevels = 1;
-		image_info.arrayLayers = 1;
-		image_info.samples = m_depth_samples;
-		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image_info.queueFamilyIndexCount = 0;
-		image_info.pQueueFamilyIndices = NULL;
-		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		image_info.flags = 0;
-		auto res = vkCreateImage(m_device, &image_info, NULL, &m_depth->image);
-		if (res != VK_SUCCESS) {
+		if (!m_depth->create(m_device)) {
 			return false;
 		}
-
-		VkMemoryRequirements mem_reqs;
-		vkGetImageMemoryRequirements(m_device, m_depth->image, &mem_reqs);
-		VkMemoryAllocateInfo mem_alloc = {};
-		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		mem_alloc.pNext = NULL;
-		mem_alloc.allocationSize = 0;
-		mem_alloc.memoryTypeIndex = 0;
-		mem_alloc.allocationSize = mem_reqs.size;
-		// Use the memory properties to determine the type of memory required
-		auto pass = gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-		0, // No requirements
-		&mem_alloc.memoryTypeIndex);
-		if (!pass) {
+		if (!m_depth->resource().allocate(m_device, gpu)) {
 			return false;
 		}
-		// Allocate memory
-		res = vkAllocateMemory(m_device, &mem_alloc, NULL, &m_depth->mem);
-		if (res != VK_SUCCESS) {
+		if (!m_depth->resource().createView(m_device)) {
 			return false;
 		}
-		/* Bind memory */
-		res = vkBindImageMemory(m_device, m_depth->image, m_depth->mem, 0);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		VkImageViewCreateInfo view_info = {};
-		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view_info.pNext = NULL;
-		view_info.image = VK_NULL_HANDLE;
-		view_info.format = m_depth_format;
-		view_info.components.r = VK_COMPONENT_SWIZZLE_R;
-		view_info.components.g = VK_COMPONENT_SWIZZLE_G;
-		view_info.components.b = VK_COMPONENT_SWIZZLE_B;
-		view_info.components.a = VK_COMPONENT_SWIZZLE_A;
-		view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		view_info.subresourceRange.baseMipLevel = 0;
-		view_info.subresourceRange.levelCount = 1;
-		view_info.subresourceRange.baseArrayLayer = 0;
-		view_info.subresourceRange.layerCount = 1;
-		view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view_info.flags = 0;
-		if (m_depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
-			m_depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
-			m_depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-			view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		}
-		// Create image view
-		view_info.image = m_depth->image;
-		res = vkCreateImageView(m_device, &view_info, NULL, &m_depth->view);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		/*
-		// Set the image layout to depth stencil optimal
-		set_image_layout(info, info.depth.image,
-		view_info.subresourceRange.aspectMask,
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-		*/
 
 		return true;
 	}
@@ -1070,7 +1181,7 @@ public:
 		/* Need attachments for render target and depth buffer */
 		VkAttachmentDescription attachments[2];
 		attachments[0].format = gpu->getPrimaryFormat();
-		attachments[0].samples = m_depth_samples;
+		attachments[0].samples = m_depth->resource().getSamples();
 		attachments[0].loadOp =
 			clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1081,8 +1192,8 @@ public:
 		attachments[0].flags = 0;
 
 		if (include_depth) {
-			attachments[1].format = m_depth_format;
-			attachments[1].samples = m_depth_samples;
+			attachments[1].format = m_depth->resource().getFormat();
+			attachments[1].samples = m_depth->resource().getSamples();
 			attachments[1].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
 				: VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -1179,7 +1290,7 @@ public:
 			VkImageView attachments[] =
 			{
 				m_buffers[i]->view,
-				m_depth->view,
+				m_depth->resource().getView(),
 			};
 
 			auto fb=std::make_unique<FramebufferResource>();
@@ -1362,14 +1473,14 @@ public:
 		if (!m_device->createDepthbuffer(m_gpus[0], w, h)) {
 			return false;
 		}
-		if (!m_device->createFramebuffers(w, h)) {
-			return false;
-		}
 		return true;
 	}
 
-	bool createDeviceResources(const void *vertexData,
-		uint32_t dataSize, uint32_t dataStride)
+	bool createDeviceResources(
+		int w, int h
+		, const void *vertexData
+		, uint32_t dataSize, uint32_t dataStride
+	)
 	{
 		if (!m_device->createUniformBuffer(m_gpus[0])) {
 			return false;
@@ -1384,6 +1495,9 @@ public:
 			, vertexData
 			, dataSize, dataStride))
 		{
+			return false;
+		}
+		if (!m_device->createFramebuffers(w, h)) {
 			return false;
 		}
 		return true;
@@ -1508,15 +1622,17 @@ int WINAPI WinMain(
 		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
 	};
 #undef XYZ1;
-	if (!instance.createDeviceResources(g_vb_solid_face_colors_Data,
-		sizeof(g_vb_solid_face_colors_Data),
-		sizeof(g_vb_solid_face_colors_Data[0]))) {
-		return 8;
-	}
 
 	if (!instance.createSwapchain(w, h))
 	{
 		return 7;
+	}
+
+	if (!instance.createDeviceResources(w, h,
+		g_vb_solid_face_colors_Data,
+		sizeof(g_vb_solid_face_colors_Data),
+		sizeof(g_vb_solid_face_colors_Data[0]))) {
+		return 8;
 	}
 
 	if (!instance.createPipeline(
