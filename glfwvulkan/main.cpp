@@ -406,58 +406,90 @@ public:
 };
 
 
-class Framebuffer
+template<class T>
+class DeviceResource
 {
-	VkDevice m_device;
-	VkFramebuffer m_framebuffer = nullptr;
+	VkDevice m_device=nullptr;
 
-	Framebuffer(const Framebuffer &) = delete;
-	Framebuffer& operator=(const Framebuffer &) = delete;
+	// avoid copy
+	DeviceResource(const DeviceResource &) = delete;
+	DeviceResource& operator=(const DeviceResource &) = delete;
+
+	T m_t;
+
 public:
-	Framebuffer(VkDevice device)
-		: m_device(device)
+	DeviceResource()
 	{
-
 	}
 
-	~Framebuffer()
+	virtual ~DeviceResource()
+	{
+		m_t.onDestroy(m_device);
+	}
+
+	bool create(VkDevice device)
+	{
+		m_device = device;
+		return m_t.onCreate(m_device);
+	}
+
+	template<typename ... Args>
+	bool configure(Args... args)
+	{
+		return m_t.configure(args...);
+	}
+};
+
+
+struct IDeviceResource
+{
+	virtual void onDestroy(VkDevice device) = 0;
+	virtual bool onCreate(VkDevice device) = 0;
+};
+
+
+class Framebuffer: public IDeviceResource
+{
+	VkFramebuffer m_framebuffer = nullptr;
+	VkFramebufferCreateInfo m_fb_info = {};
+
+public:
+	void onDestroy(VkDevice device)override
 	{
 		if (m_framebuffer) {
-			vkDestroyFramebuffer(m_device, m_framebuffer, NULL);
+			vkDestroyFramebuffer(device, m_framebuffer, NULL);
+			m_framebuffer = nullptr;
 		}
 	}
 
-	Framebuffer(Framebuffer &&rhs)
+	bool onCreate(VkDevice device)override
 	{
-		m_device = rhs.m_device;
-		m_framebuffer = rhs.m_framebuffer;
-		rhs.m_framebuffer = nullptr;
-	}
-
-	bool create(VkRenderPass render_pass,
-		const VkImageView *attachments, int count, int w, int h)
-	{
-		VkFramebufferCreateInfo fb_info = {};
-		fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		fb_info.pNext = NULL;
-
-		fb_info.renderPass = render_pass;
-		fb_info.attachmentCount = count;
-
-		fb_info.pAttachments = attachments;
-		fb_info.width = w;
-		fb_info.height = h;
-		fb_info.layers = 1;
-
-		auto res = vkCreateFramebuffer(m_device, &fb_info, NULL,
+		auto res = vkCreateFramebuffer(device, &m_fb_info, nullptr,
 			&m_framebuffer);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+		return true;
+	}
+
+	bool configure(VkRenderPass render_pass,
+		const VkImageView *attachments, int count, int w, int h)
+	{
+		m_fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		m_fb_info.pNext = nullptr;
+
+		m_fb_info.renderPass = render_pass;
+		m_fb_info.attachmentCount = count;
+
+		m_fb_info.pAttachments = attachments;
+		m_fb_info.width = w;
+		m_fb_info.height = h;
+		m_fb_info.layers = 1;
 
 		return true;
 	}
 };
+typedef DeviceResource<Framebuffer> FramebufferResource;
 
 
 class DeviceManager
@@ -500,7 +532,7 @@ class DeviceManager
 	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 
-	std::vector<Framebuffer> m_framebuffers;
+	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
 
 	struct vertex_buffer 
 	{
@@ -1126,10 +1158,13 @@ public:
 				m_depth->view,
 			};
 
-			Framebuffer fb(m_device);
-			if (!fb.create(m_render_pass
+			auto fb=std::make_unique<FramebufferResource>();
+			if (!fb->configure(m_render_pass
 				, attachments, _countof(attachments)
 				, w, h)) {
+				return false;
+			}
+			if (!fb->create(m_device)) {
 				return false;
 			}
 			m_framebuffers.push_back(std::move(fb));
