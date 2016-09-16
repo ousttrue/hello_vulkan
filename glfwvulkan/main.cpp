@@ -102,6 +102,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
 	void*                       pUserData)
 {
 	OutputDebugStringA(pMessage);
+	OutputDebugStringA("\n");
 	return VK_FALSE;
 }
 
@@ -460,6 +461,8 @@ class Framebuffer: public IDeviceResource
 	VkFramebufferCreateInfo m_fb_info = {};
 
 public:
+	VkRenderPass getRenderPass()const { return m_render_pass; }
+
 	void onDestroy(VkDevice device)override
 	{
 		if (m_framebuffer) {
@@ -591,6 +594,7 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+
 		return true;
 	}
 
@@ -663,12 +667,21 @@ public:
 typedef DeviceResource<Buffer> BufferResource;
 
 
-class VertexBufferResource: public BufferResource
+class VertexbufferResource: public BufferResource
 {
 	VkVertexInputBindingDescription m_vi_binding = {};
 	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
 
 public:
+	const VkVertexInputBindingDescription& getBindingDesc()const {
+		return m_vi_binding;
+	}
+
+	const VkVertexInputAttributeDescription* getAttribs()const
+	{
+		return m_vi_attribs.empty() ? nullptr : m_vi_attribs.data();
+	}
+
 	bool configure(uint32_t dataSize, uint32_t dataStride)
 	{
 		if (!resource().configure(dataSize)) {
@@ -696,7 +709,7 @@ public:
 };
 
 
-class UniformBufferResource: public BufferResource
+class UniformbufferResource: public BufferResource
 {
 	glm::mat4 m_MVP;
 
@@ -751,7 +764,7 @@ public:
 };
 
 
-class DepthBuffer : IDeviceResource
+class Depthbuffer : IDeviceResource
 {
 	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
@@ -966,7 +979,7 @@ public:
 		return true;
 	}
 };
-typedef DeviceResource<DepthBuffer> DepthBufferResource;
+typedef DeviceResource<Depthbuffer> DepthbufferResource;
 
 
 class Swapchain : public IDeviceResource
@@ -1117,59 +1130,16 @@ public:
 typedef DeviceResource<Swapchain>  SwapchainResource;
 
 
-class Shader: public IDeviceResource
+class Pipeline: IDeviceResource
 {
 	struct shader_stage
 	{
 		std::vector<unsigned int> spv;
 		VkShaderModuleCreateInfo m_moduleCreateInfo;
-		VkShaderModule m_shaderStage;
 	};
-	std::vector<shader_stage> m_stages;
+	std::vector<shader_stage> m_shaderInfos;
+	VkPipelineShaderStageCreateInfo m_shaderStages[2];
 
-public:
-	void onDestroy(VkDevice device)override
-	{
-		for (auto &stage: m_stages)
-		{
-			vkDestroyShaderModule(device, stage.m_shaderStage, nullptr);
-		}
-	}
-
-	bool onCreate(VkDevice device)override
-	{
-		for (auto &stage : m_stages)
-		{
-			auto res = vkCreateShaderModule(device, &stage.m_moduleCreateInfo, nullptr,
-				&stage.m_shaderStage);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	bool configure(int index, const std::vector<unsigned int> &spv)
-	{
-		if (spv.empty()) {
-			return false;
-		}
-		m_stages.resize(2);
-		auto &stage = m_stages[index];
-		stage.spv = spv;
-		stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		stage.m_moduleCreateInfo.pNext = nullptr;
-		stage.m_moduleCreateInfo.flags = 0;
-		stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
-		stage.m_moduleCreateInfo.pCode = stage.spv.data();
-		return true;
-	}
-};
-typedef DeviceResource<Shader> ShaderResource;
-
-
-class PipelineLayout : IDeviceResource
-{
 	VkDescriptorSetLayoutBinding m_layout_bindings[1];
 	VkDescriptorSetLayoutCreateInfo m_descriptor_layout = {};
 	VkDescriptorSetLayout m_desc_layout = nullptr;
@@ -1177,16 +1147,59 @@ class PipelineLayout : IDeviceResource
 	VkPipelineLayoutCreateInfo m_pPipelineLayoutCreateInfo = {};
 	VkPipelineLayout m_pipeline_layout = nullptr;
 
+	VkPipelineCache m_pipelineCache = nullptr;
+	VkPipelineCacheCreateInfo m_pipelineCacheInfo = {};
+
+	VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE];
+	VkPipelineDynamicStateCreateInfo dynamicState = {};
+	VkPipelineVertexInputStateCreateInfo vi = {};
+	VkPipelineInputAssemblyStateCreateInfo ia = {};
+	VkPipelineRasterizationStateCreateInfo rs = {};
+	VkPipelineColorBlendStateCreateInfo cb = {};
+	VkPipelineColorBlendAttachmentState att_state[1];
+	VkPipelineViewportStateCreateInfo vp = {};
+	VkPipelineDepthStencilStateCreateInfo ds = {};
+	VkPipelineMultisampleStateCreateInfo ms = {};
+	VkGraphicsPipelineCreateInfo pipeline = {};
+	VkPipeline m_pipeline = nullptr;
+
+	/* Number of viewports and number of scissors have to be the same */
+	/* at pipeline creation and in any call to set them dynamically   */
+	/* They also have to be the same as each other                    */
+	const int NUM_VIEWPORTS = 1;
+	const int NUM_SCISSORS = NUM_VIEWPORTS;
+	VkSampleCountFlagBits NUM_SAMPLES = VK_SAMPLE_COUNT_1_BIT;
 
 public:
+	Pipeline()
+	{
+		memset(dynamicStateEnables, 0, sizeof dynamicStateEnables);
+	}
+
 	void onDestroy(VkDevice device)override
 	{
+		vkDestroyPipeline(device, m_pipeline, nullptr);
+		vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
 		vkDestroyDescriptorSetLayout(device, m_desc_layout, nullptr);
 		vkDestroyPipelineLayout(device, m_pipeline_layout, nullptr);
+
+		for (auto &stage : m_shaderStages)
+		{
+			vkDestroyShaderModule(device, stage.module, nullptr);
+		}
 	}
 
 	bool onCreate(VkDevice device)override
 	{
+		for (size_t i=0; i<m_shaderInfos.size(); ++i)
+		{
+			auto res = vkCreateShaderModule(device, &m_shaderInfos[i].m_moduleCreateInfo, nullptr,
+				&m_shaderStages[i].module);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+		}
+
 		auto res = vkCreateDescriptorSetLayout(device, &m_descriptor_layout, nullptr,
 			&m_desc_layout);
 		if (res != VK_SUCCESS) {
@@ -1200,25 +1213,78 @@ public:
 		{
 			return false;
 		}
+		pipeline.layout = m_pipeline_layout;
+
+		res = vkCreatePipelineCache(device, &m_pipelineCacheInfo, NULL,
+			&m_pipelineCache);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		res = vkCreateGraphicsPipelines(device, m_pipelineCache, 1,
+			&pipeline, NULL, &m_pipeline);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
 
 		return true;
 	}
 
-	bool configure()
+	bool configure(const std::vector<unsigned int> &vertSpv
+		, const std::vector<unsigned int> &fragSpv
+		, const std::unique_ptr<VertexbufferResource> &vertexbuffer
+		, const std::unique_ptr<FramebufferResource> &framebuffer) 
 	{
+		// shader
+		m_shaderInfos.resize(2);
+		{
+			auto &stage = m_shaderInfos[0];
+			stage.spv = vertSpv;
+			stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			stage.m_moduleCreateInfo.pNext = nullptr;
+			stage.m_moduleCreateInfo.flags = 0;
+			stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
+			stage.m_moduleCreateInfo.pCode = stage.spv.data();
+
+			m_shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			m_shaderStages[0].pNext = NULL;
+			m_shaderStages[0].flags = 0;
+			m_shaderStages[0].pSpecializationInfo = NULL;
+			m_shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+			m_shaderStages[0].pName = "main";
+		}
+		{
+			auto &stage = m_shaderInfos[1];
+			stage.spv = fragSpv;
+			stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+			stage.m_moduleCreateInfo.pNext = nullptr;
+			stage.m_moduleCreateInfo.flags = 0;
+			stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
+			stage.m_moduleCreateInfo.pCode = stage.spv.data();
+
+			m_shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			m_shaderStages[1].pNext = NULL;
+			m_shaderStages[1].flags = 0;
+			m_shaderStages[1].pSpecializationInfo = NULL;
+			m_shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+			m_shaderStages[1].pName = "main";
+		}
+		
+		// binding
 		m_layout_bindings[0].binding = 0;
 		m_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		m_layout_bindings[0].descriptorCount = 1;
 		m_layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 		m_layout_bindings[0].pImmutableSamplers = nullptr;
-
 		// Next take layout bindings and use them to create a descriptor set layout
 		m_descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		m_descriptor_layout.pNext = nullptr;
 		m_descriptor_layout.bindingCount = 1;
 		m_descriptor_layout.pBindings = m_layout_bindings;
 
-		/* Now use the descriptor layout to create a pipeline layout */
+		// Now use the descriptor layout to create a pipeline layout
 		m_pPipelineLayoutCreateInfo.sType =
 			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		m_pPipelineLayoutCreateInfo.pNext = nullptr;
@@ -1226,10 +1292,131 @@ public:
 		m_pPipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
 		m_pPipelineLayoutCreateInfo.setLayoutCount = 1;
 
+		m_pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		m_pipelineCacheInfo.pNext = NULL;
+		m_pipelineCacheInfo.initialDataSize = 0;
+		m_pipelineCacheInfo.pInitialData = NULL;
+		m_pipelineCacheInfo.flags = 0;
+
+		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicState.pNext = NULL;
+		dynamicState.pDynamicStates = dynamicStateEnables;
+		dynamicState.dynamicStateCount = 0;
+
+		vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		vi.pNext = NULL;
+		vi.flags = 0;
+		vi.vertexBindingDescriptionCount = 1;
+		vi.pVertexBindingDescriptions = &vertexbuffer->getBindingDesc();
+		vi.vertexAttributeDescriptionCount = 2;
+		vi.pVertexAttributeDescriptions = vertexbuffer->getAttribs();
+
+		ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+		ia.pNext = NULL;
+		ia.flags = 0;
+		ia.primitiveRestartEnable = VK_FALSE;
+		ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+		rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		rs.pNext = NULL;
+		rs.flags = 0;
+		rs.polygonMode = VK_POLYGON_MODE_FILL;
+		rs.cullMode = VK_CULL_MODE_BACK_BIT;
+		rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rs.depthClampEnable = VK_TRUE;
+		rs.rasterizerDiscardEnable = VK_FALSE;
+		rs.depthBiasEnable = VK_FALSE;
+		rs.depthBiasConstantFactor = 0;
+		rs.depthBiasClamp = 0;
+		rs.depthBiasSlopeFactor = 0;
+		rs.lineWidth = 1.0f;
+
+		att_state[0].colorWriteMask = 0xf;
+		att_state[0].blendEnable = VK_FALSE;
+		att_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
+		att_state[0].colorBlendOp = VK_BLEND_OP_ADD;
+		att_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		att_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		att_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+		att_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+
+		cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+		cb.flags = 0;
+		cb.pNext = NULL;
+		cb.attachmentCount = 1;
+		cb.pAttachments = att_state;
+		cb.logicOpEnable = VK_FALSE;
+		cb.logicOp = VK_LOGIC_OP_NO_OP;
+		cb.blendConstants[0] = 1.0f;
+		cb.blendConstants[1] = 1.0f;
+		cb.blendConstants[2] = 1.0f;
+		cb.blendConstants[3] = 1.0f;
+
+		vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		vp.pNext = NULL;
+		vp.flags = 0;
+		vp.viewportCount = NUM_VIEWPORTS;
+		dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
+		vp.scissorCount = NUM_SCISSORS;
+		dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+		vp.pScissors = NULL;
+		vp.pViewports = NULL;
+
+		ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		ds.pNext = NULL;
+		ds.flags = 0;
+		ds.depthTestEnable = VK_TRUE;
+		ds.depthWriteEnable = VK_TRUE;
+		ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+		ds.depthBoundsTestEnable = VK_FALSE;
+		ds.stencilTestEnable = VK_FALSE;
+		ds.back.failOp = VK_STENCIL_OP_KEEP;
+		ds.back.passOp = VK_STENCIL_OP_KEEP;
+		ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
+		ds.back.compareMask = 0;
+		ds.back.reference = 0;
+		ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
+		ds.back.writeMask = 0;
+		ds.minDepthBounds = 0;
+		ds.maxDepthBounds = 0;
+		ds.stencilTestEnable = VK_FALSE;
+		ds.front = ds.back;
+
+		ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		ms.pNext = NULL;
+		ms.flags = 0;
+		ms.pSampleMask = NULL;
+		ms.rasterizationSamples = NUM_SAMPLES;
+		ms.sampleShadingEnable = VK_FALSE;
+		ms.alphaToCoverageEnable = VK_FALSE;
+		ms.alphaToOneEnable = VK_FALSE;
+		ms.minSampleShading = 0.0;
+
+		pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipeline.pNext = NULL;
+		pipeline.basePipelineHandle = VK_NULL_HANDLE;
+		pipeline.basePipelineIndex = 0;
+		pipeline.flags = 0;
+		pipeline.pVertexInputState = &vi;
+		pipeline.pInputAssemblyState = &ia;
+		pipeline.pRasterizationState = &rs;
+		pipeline.pColorBlendState = &cb;
+		pipeline.pTessellationState = NULL;
+		pipeline.pMultisampleState = &ms;
+		pipeline.pDynamicState = &dynamicState;
+		pipeline.pViewportState = &vp;
+		pipeline.pDepthStencilState = &ds;
+
+		pipeline.stageCount = 2;
+		pipeline.pStages = m_shaderStages;
+
+		pipeline.renderPass = framebuffer->resource().getRenderPass();
+		pipeline.subpass = 0;
+
 		return true;
 	}
 };
-typedef DeviceResource<PipelineLayout> PipelineLayoutResource;
+typedef DeviceResource<Pipeline> PipelineResource;
 
 
 class DeviceManager
@@ -1238,13 +1425,11 @@ class DeviceManager
 	VkDevice m_device;
 
 	std::unique_ptr<SwapchainResource> m_swapchain;
-	std::unique_ptr<DepthBufferResource> m_depth;
+	std::unique_ptr<DepthbufferResource> m_depth;
 	std::unique_ptr<FramebufferResource> m_framebuffer;
-	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
-	std::unique_ptr<UniformBufferResource> m_uniform_data;
-	std::unique_ptr<ShaderResource> m_shader;
-	std::unique_ptr<PipelineLayoutResource> m_pipelinelayout;
-
+	std::unique_ptr<VertexbufferResource> m_vertex_buffer;
+	std::unique_ptr<UniformbufferResource> m_uniform_data;
+	std::unique_ptr<PipelineResource> m_pipeline;
 public:
 	DeviceManager()
 	{
@@ -1252,8 +1437,7 @@ public:
 	}
 	~DeviceManager()
 	{
-		m_pipelinelayout.reset();
-		m_shader.reset();
+		m_pipeline.reset();
 		m_uniform_data.reset();
 		m_vertex_buffer.reset();
 		m_framebuffer.reset();
@@ -1316,7 +1500,7 @@ public:
 	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
 		, int w, int h)
 	{
-		m_depth = std::make_unique<DepthBufferResource>();
+		m_depth = std::make_unique<DepthbufferResource>();
 		if (!m_depth->resource().configure(gpu, w, h)) {
 			return false;
 		}
@@ -1335,7 +1519,7 @@ public:
 
 	bool createUniformBuffer(const std::shared_ptr<GpuManager> &gpu)
 	{
-		m_uniform_data = std::make_unique<UniformBufferResource>();
+		m_uniform_data = std::make_unique<UniformbufferResource>();
 
 		if (!m_uniform_data->configure()) {
 			return false;
@@ -1352,39 +1536,11 @@ public:
 		return true;
 	}
 	
-	bool createDescriptorAndPipelineLayout() {
-		m_pipelinelayout = std::make_unique<PipelineLayoutResource>();
-		if (!m_pipelinelayout->resource().configure()) {
-			return false;
-		}
-		if (!m_pipelinelayout->create(m_device)) {
-			return false;
-		}
-
-		return true;
-	}
-
-	bool createShader(const std::vector<unsigned int> &vertSpv
-		, const std::vector<unsigned int> &fragSpv)
-	{
-		m_shader = std::make_unique<ShaderResource>();
-		if (!m_shader->resource().configure(0, vertSpv)) {
-			return false;
-		}
-		if (!m_shader->resource().configure(1, fragSpv)) {
-			return false;
-		}
-		if (!m_shader->create(m_device)) {
-			return false;
-		}
-		return true;
-	}
-
 	bool createVertexBuffer(const std::shared_ptr<GpuManager> &gpu
 		, const void *vertexData
 		, uint32_t dataSize, uint32_t dataStride)
 	{
-		m_vertex_buffer = std::make_unique<VertexBufferResource>();
+		m_vertex_buffer = std::make_unique<VertexbufferResource>();
 		if (!m_vertex_buffer->configure(dataSize, dataStride)) {
 			return false;
 		}
@@ -1418,6 +1574,23 @@ public:
 		}
 
 		if (!m_framebuffer->create(m_device)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	bool createPipeline(const std::vector<unsigned int> &vertSpv
+		, const std::vector<unsigned int> &fragSpv
+	)
+	{
+		m_pipeline = std::make_unique<PipelineResource>();
+		if (!m_pipeline->resource().configure(vertSpv, fragSpv
+		, m_vertex_buffer, m_framebuffer))
+		{
+			return false;
+		}
+		if (!m_pipeline->create(m_device)) {
 			return false;
 		}
 
@@ -1634,11 +1807,7 @@ public:
 		, const std::string &fragSpvPath
 		)
 	{
-		if (!m_device->createShader(read(fragSpvPath), read(vertSpvPath))) {
-			return false;
-		}
-		if (!m_device->createDescriptorAndPipelineLayout())
-		{
+		if (!m_device->createPipeline(read(vertSpvPath), read(fragSpvPath))) {
 			return false;
 		}
 		return true;
@@ -1733,7 +1902,7 @@ int WINAPI WinMain(
 		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
 		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
 	};
-#undef XYZ1;
+#undef XYZ1
 
 	if (!instance.createSwapchain(w, h))
 	{
