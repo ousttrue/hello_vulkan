@@ -490,15 +490,12 @@ public:
 typedef DeviceResource<Framebuffer> FramebufferResource;
 
 
-class VertexBuffer : public IDeviceResource
+class Buffer : public IDeviceResource
 {
 	VkBuffer m_buf = nullptr;
 	VkBufferCreateInfo m_buf_info = {};
-
 	VkDeviceMemory m_mem = nullptr;
 	VkDescriptorBufferInfo m_buffer_info = {};
-	VkVertexInputBindingDescription m_vi_binding = {};
-	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
 
 public:
 	void onDestroy(VkDevice device)override
@@ -514,6 +511,19 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+		return true;
+	}
+
+	bool configure(uint32_t dataSize)
+	{
+		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		m_buf_info.pNext = NULL;
+		m_buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		m_buf_info.size = dataSize;
+		m_buf_info.queueFamilyIndexCount = 0;
+		m_buf_info.pQueueFamilyIndices = NULL;
+		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		m_buf_info.flags = 0;
 		return true;
 	}
 
@@ -551,16 +561,36 @@ public:
 		return true;
 	}
 
+	bool map(VkDevice device, const std::function<void(uint8_t*, uint32_t)> &mapCallback)
+	{
+		uint8_t *pData;
+		auto res = vkMapMemory(device, m_mem, 0, m_buffer_info.range, 0
+			, (void **)&pData);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		mapCallback(pData, m_buffer_info.range);
+
+		vkUnmapMemory(device, m_mem);
+
+		return true;
+	}
+};
+typedef DeviceResource<Buffer> BufferResource;
+
+
+class VertexBuffer: public BufferResource
+{
+	VkVertexInputBindingDescription m_vi_binding = {};
+	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
+
+public:
 	bool configure(uint32_t dataSize, uint32_t dataStride)
 	{
-		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		m_buf_info.pNext = NULL;
-		m_buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		m_buf_info.size = dataSize;
-		m_buf_info.queueFamilyIndexCount = 0;
-		m_buf_info.pQueueFamilyIndices = NULL;
-		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		m_buf_info.flags = 0;
+		if (!resource().configure(dataSize)) {
+			return false;
+		}
 
 		m_vi_binding.binding = 0;
 		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
@@ -580,24 +610,7 @@ public:
 
 		return true;
 	}
-
-	bool map(VkDevice device, const std::function<void(uint8_t*, uint32_t)> &mapCallback)
-	{
-		uint8_t *pData;
-		auto res = vkMapMemory(device, m_mem, 0, m_buffer_info.range, 0
-			,(void **)&pData);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-	
-		mapCallback(pData, m_buffer_info.range);
-
-		vkUnmapMemory(device, m_mem);
-
-		return true;
-	}
 };
-typedef DeviceResource<VertexBuffer> VertexBufferResource;
 
 
 class DeviceManager
@@ -642,7 +655,7 @@ class DeviceManager
 
 	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
 
-	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
+	std::unique_ptr<VertexBuffer> m_vertex_buffer;
 
 	struct uniform_buffer
 	{
@@ -1170,8 +1183,8 @@ public:
 		, const void *vertexData
 		, uint32_t dataSize, uint32_t dataStride)
 	{
-		m_vertex_buffer = std::make_unique<VertexBufferResource>();
-		if (!m_vertex_buffer->resource().configure(dataSize, dataStride)) {
+		m_vertex_buffer = std::make_unique<VertexBuffer>();
+		if (!m_vertex_buffer->configure(dataSize, dataStride)) {
 			return false;
 		}
 		if (!m_vertex_buffer->create(m_device)) {
