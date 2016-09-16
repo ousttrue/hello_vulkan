@@ -1006,6 +1006,7 @@ class Swapchain : public IDeviceResource
 public:
 	uint32_t getImageCount()const { return m_buffers.size(); }
 	VkImageView getView(uint32_t index)const { return m_buffers[index]->view; }
+	VkSwapchainKHR getSwapchain()const { return m_swapchain; }
 
 	void onDestroy(VkDevice device)override
 	{
@@ -1419,6 +1420,50 @@ public:
 typedef DeviceResource<Pipeline> PipelineResource;
 
 
+class Renderer: IDeviceResource
+{
+	//VkClearValue m_clear_values[2];
+	VkSemaphoreCreateInfo m_imageAcquiredSemaphoreCreateInfo = {};
+	VkSemaphore m_imageAcquiredSemaphore=nullptr;
+
+public:
+	Renderer()
+	{
+		/*
+		m_clear_values[0].color.float32[0] = 0.2f;
+		m_clear_values[0].color.float32[1] = 0.2f;
+		m_clear_values[0].color.float32[2] = 0.2f;
+		m_clear_values[0].color.float32[3] = 0.2f;
+		m_clear_values[1].depthStencil.depth = 1.0f;
+		m_clear_values[1].depthStencil.stencil = 0;
+		*/
+		m_imageAcquiredSemaphoreCreateInfo.sType =
+			VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		m_imageAcquiredSemaphoreCreateInfo.pNext = NULL;
+		m_imageAcquiredSemaphoreCreateInfo.flags = 0;
+	}
+
+	VkSemaphore getImageAcquiredSemaphore()const { return m_imageAcquiredSemaphore; }
+
+	void onDestroy(VkDevice device)
+	{
+		vkDestroySemaphore(device, m_imageAcquiredSemaphore, nullptr);
+	}
+
+	bool onCreate(VkDevice device)
+	{
+		auto res = vkCreateSemaphore(device, &m_imageAcquiredSemaphoreCreateInfo,
+			NULL, &m_imageAcquiredSemaphore);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+};
+typedef DeviceResource<Renderer> RendererResource;
+
+
 class DeviceManager
 {
 	std::vector<const char*> m_device_extension_names;
@@ -1430,13 +1475,17 @@ class DeviceManager
 	std::unique_ptr<VertexbufferResource> m_vertex_buffer;
 	std::unique_ptr<UniformbufferResource> m_uniform_data;
 	std::unique_ptr<PipelineResource> m_pipeline;
+
+	std::unique_ptr<RendererResource> m_renderer;
 public:
 	DeviceManager()
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
+
 	~DeviceManager()
 	{
+		m_renderer.reset();
 		m_pipeline.reset();
 		m_uniform_data.reset();
 		m_vertex_buffer.reset();
@@ -1580,12 +1629,28 @@ public:
 		return true;
 	}
 
-	bool createPipeline(const std::vector<unsigned int> &vertSpv
-		, const std::vector<unsigned int> &fragSpv
+	std::vector<unsigned int> read(const std::string &path)
+	{
+		std::vector<unsigned int> buf;
+		std::ifstream ifs(path.c_str(), std::ios::binary);
+		if (ifs) {
+			ifs.seekg(0, std::ios::end);
+			auto len = ifs.tellg();
+			if (len > 0 && len % 4 == 0) {
+				buf.resize(len / 4);
+				ifs.seekg(0, std::ios::beg);
+				ifs.read((char*)&buf[0], len);
+			}
+		}
+		return buf;
+	}
+
+	bool createPipeline(const std::string &vertSpvPath
+		, const std::string &fragSpvPath
 	)
 	{
 		m_pipeline = std::make_unique<PipelineResource>();
-		if (!m_pipeline->resource().configure(vertSpv, fragSpv
+		if (!m_pipeline->resource().configure(read(vertSpvPath), read(fragSpvPath)
 		, m_vertex_buffer, m_framebuffer))
 		{
 			return false;
@@ -1594,7 +1659,29 @@ public:
 			return false;
 		}
 
+		m_renderer = std::make_unique<RendererResource>();
+		if (!m_renderer->create(m_device)) {
+			return false;
+		}
+
 		return true;
+	}
+
+	void Render()
+	{
+		uint32_t current_buffer;
+		// Get the index of the next available swapchain image:
+		auto res = vkAcquireNextImageKHR(m_device
+			, m_swapchain->resource().getSwapchain()
+			, UINT64_MAX
+			, m_renderer->resource().getImageAcquiredSemaphore()
+			, VK_NULL_HANDLE,
+			&current_buffer);
+		// TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
+		// return codes
+		if (res != VK_SUCCESS) {
+			return;
+		}
 	}
 };
 
@@ -1609,20 +1696,14 @@ class InstanceManager
 	std::vector<const char *> m_instance_layer_names;
 	std::vector<const char *> m_instance_extension_names;
 
-	std::shared_ptr<DeviceManager> m_device;
-
     std::vector<std::shared_ptr<GpuManager>> m_gpus;
 
 	VkDebugReportCallbackEXT m_callback;
-
-	std::shared_ptr<SurfaceManager> m_surface;
 
 public:
 	InstanceManager(const std::string &app_name
 		, const std::string &engine_name)
 		: m_app_short_name(app_name), m_engine_name(engine_name)
-		, m_device(new DeviceManager)
-		, m_surface(new SurfaceManager)
 	{
 		m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 		m_instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
@@ -1642,10 +1723,10 @@ public:
 #ifndef NDEBUG
 		g_vkDestroyDebugReportCallbackEXT(m_inst, m_callback, nullptr);
 #endif
-		m_device.reset();
-		m_surface.reset();
 		vkDestroyInstance(m_inst, nullptr);
 	}
+
+	VkInstance get()const { return m_inst; }
 
 	bool create()
 	{
@@ -1717,17 +1798,27 @@ public:
         return true;
     }
 
-	bool createDevice(size_t gpuIndex)
+	std::shared_ptr<GpuManager> getGpu(int index)const
+	{
+		if (index < 0)return nullptr;
+		if (index >= m_gpus.size())return nullptr;
+		return m_gpus[index];
+	}
+
+	std::shared_ptr<DeviceManager> createDevice(size_t gpuIndex
+		, const std::shared_ptr<SurfaceManager> &surface)
 	{
         if(gpuIndex>=m_gpus.size()){
             return false;
         }
 		auto gpu = m_gpus[gpuIndex];
-		if (!gpu->prepared(m_surface->get())) {
+		if (!gpu->prepared(surface->get())) {
 			return false;
 		}
-		if (!m_device->create(gpu)) {
-			return false;
+
+		auto device = std::make_shared<DeviceManager>();
+		if (!device->create(gpu)) {
+			return nullptr;
 		}
 
 #ifndef NDEBUG
@@ -1744,75 +1835,13 @@ public:
 		/* Register the callback */
 		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
 #endif
-		return true;
-	}
 
-	bool createSurfaceFromWindow(HINSTANCE hInstance, HWND hWnd)
-	{
-		return m_surface->initialize(m_inst, hInstance, hWnd);
-	}
-
-	bool createSwapchain(int w, int h)
-	{
-		if (m_gpus.empty()) {
-			return false;
-		}
-		if (!m_device->createSwapchain(m_gpus[0], m_surface, w, h)) {
-			return false;
-		}
-		if (!m_device->createDepthbuffer(m_gpus[0], w, h)) {
-			return false;
-		}
-		return true;
-	}
-
-	bool createDeviceResources(
-		int w, int h
-		, const void *vertexData
-		, uint32_t dataSize, uint32_t dataStride
-	)
-	{
-		if (!m_device->createUniformBuffer(m_gpus[0])) {
-			return false;
-		}
-		if (!m_device->createVertexBuffer(m_gpus[0]
-			, vertexData
-			, dataSize, dataStride))
-		{
-			return false;
-		}
-		if (!m_device->createFramebuffers(m_gpus[0]->getPrimaryFormat(), w, h)) {
-			return false;
-		}
-		return true;
-	}
-
-	std::vector<unsigned int> read(const std::string &path)
-	{
-		std::vector<unsigned int> buf;
-		std::ifstream ifs(path.c_str(), std::ios::binary);
-		if (ifs) {
-			ifs.seekg(0, std::ios::end);
-			auto len = ifs.tellg();
-			if (len > 0 && len % 4 == 0) {
-				buf.resize(len / 4);
-				ifs.seekg(0, std::ios::beg);
-				ifs.read((char*)&buf[0], len);
-			}
-		}
-		return buf;
-	}
-
-	bool createPipeline(const std::string &vertSpvPath
-		, const std::string &fragSpvPath
-		)
-	{
-		if (!m_device->createPipeline(read(vertSpvPath), read(fragSpvPath))) {
-			return false;
-		}
-		return true;
+		return device;
 	}
 };
+
+
+#include "cube_vertices.h"
 
 
 int WINAPI WinMain(
@@ -1843,92 +1872,57 @@ int WINAPI WinMain(
     if(!instance.enumerate_gpu()){
         return 4;
     }
+	auto gpu = instance.getGpu(0);
+	if (!gpu) {
+		return 5;
+	}
 
-	if (!instance.createSurfaceFromWindow(hInstance, glfw.getWindow()))
+	auto surface = std::make_shared<SurfaceManager>();
+	if (!surface->initialize(instance.get(), hInstance, glfw.getWindow()))
 	{
 		return 6;
 	}
 
-	if(!instance.createDevice(0)){
-        return 5;
+	auto device = instance.createDevice(0, surface);
+	if(!device){
+        return 7;
     }
 
-	struct Vertex {
-		float posX, posY, posZ, posW; // Position data
-		float r, g, b, a;             // Color
-	};
-#define XYZ1(_x_, _y_, _z_) (_x_), (_y_), (_z_), 1.f
-	static const Vertex g_vb_solid_face_colors_Data[] = {
-		//red face
-		{ XYZ1(-1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
-		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
-		{ XYZ1(1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
-		{ XYZ1(1,-1, 1), XYZ1(1.f, 0.f, 0.f) },
-		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
-		{ XYZ1(1, 1, 1), XYZ1(1.f, 0.f, 0.f) },
-		//green face
-		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
-		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
-		{ XYZ1(-1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
-		{ XYZ1(-1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
-		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 0.f) },
-		{ XYZ1(1, 1,-1), XYZ1(0.f, 1.f, 0.f) },
-		//blue face
-		{ XYZ1(-1, 1, 1), XYZ1(0.f, 0.f, 1.f) },
-		{ XYZ1(-1,-1, 1), XYZ1(0.f, 0.f, 1.f) },
-		{ XYZ1(-1, 1,-1), XYZ1(0.f, 0.f, 1.f) },
-		{ XYZ1(-1, 1,-1), XYZ1(0.f, 0.f, 1.f) },
-		{ XYZ1(-1,-1, 1), XYZ1(0.f, 0.f, 1.f) },
-		{ XYZ1(-1,-1,-1), XYZ1(0.f, 0.f, 1.f) },
-		//yellow face
-		{ XYZ1(1, 1, 1), XYZ1(1.f, 1.f, 0.f) },
-		{ XYZ1(1, 1,-1), XYZ1(1.f, 1.f, 0.f) },
-		{ XYZ1(1,-1, 1), XYZ1(1.f, 1.f, 0.f) },
-		{ XYZ1(1,-1, 1), XYZ1(1.f, 1.f, 0.f) },
-		{ XYZ1(1, 1,-1), XYZ1(1.f, 1.f, 0.f) },
-		{ XYZ1(1,-1,-1), XYZ1(1.f, 1.f, 0.f) },
-		//magenta face
-		{ XYZ1(1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
-		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
-		{ XYZ1(1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
-		{ XYZ1(1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
-		{ XYZ1(-1, 1, 1), XYZ1(1.f, 0.f, 1.f) },
-		{ XYZ1(-1, 1,-1), XYZ1(1.f, 0.f, 1.f) },
-		//cyan face
-		{ XYZ1(1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
-		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
-		{ XYZ1(-1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
-		{ XYZ1(-1,-1, 1), XYZ1(0.f, 1.f, 1.f) },
-		{ XYZ1(1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
-		{ XYZ1(-1,-1,-1), XYZ1(0.f, 1.f, 1.f) },
-	};
-#undef XYZ1
-
-	if (!instance.createSwapchain(w, h))
+	if (!device->createSwapchain(gpu
+		, surface
+		, w, h))
 	{
-		return 7;
-	}
-
-	if (!instance.createDeviceResources(w, h,
-		g_vb_solid_face_colors_Data,
-		sizeof(g_vb_solid_face_colors_Data),
-		sizeof(g_vb_solid_face_colors_Data[0]))) {
 		return 8;
 	}
+	if (!device->createDepthbuffer(gpu, w, h)) {
+		return 9;
+	}
+	if (!device->createFramebuffers(gpu->getPrimaryFormat(), w, h)) {
+		return 10;
+	}
 
-	if (!instance.createPipeline(
+	if (!device->createVertexBuffer(gpu
+			, g_vb_solid_face_colors_Data
+			, sizeof(g_vb_solid_face_colors_Data)
+			, sizeof(g_vb_solid_face_colors_Data[0])))
+	{
+		return 11;
+	}
+
+	if (!device->createPipeline(
 		"../15-draw_cube.vert.spv"
 		, "../15-draw_cube.frag.spv"
 		
 		)) {
-		return 9;
+		return 12;
+	}
+
+	if (!device->createUniformBuffer(gpu)) {
+		return 13;
 	}
 
 	while (glfw.runLoop())
 	{
-		/* Render here */
-		//glClear(GL_COLOR_BUFFER_BIT);
-
 		glfw.swapBuffer();
 	}
 
