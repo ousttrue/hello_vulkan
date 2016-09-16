@@ -1037,6 +1037,57 @@ public:
 typedef DeviceResource<Swapchain>  SwapchainResource;
 
 
+class Shader: public IDeviceResource
+{
+	struct shader_stage
+	{
+		std::vector<unsigned int> spv;
+		VkShaderModuleCreateInfo m_moduleCreateInfo;
+		VkShaderModule m_shaderStage;
+	};
+	std::vector<shader_stage> m_stages;
+
+public:
+	void onDestroy(VkDevice device)override
+	{
+		for (auto &stage: m_stages)
+		{
+			vkDestroyShaderModule(device, stage.m_shaderStage, NULL);
+		}
+	}
+
+	bool onCreate(VkDevice device)override
+	{
+		for (auto &stage : m_stages)
+		{
+			auto res = vkCreateShaderModule(device, &stage.m_moduleCreateInfo, NULL,
+				&stage.m_shaderStage);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool configure(int index, const std::vector<unsigned int> &spv)
+	{
+		if (spv.empty()) {
+			return false;
+		}
+		m_stages.resize(2);
+		auto &stage = m_stages[index];
+		stage.spv = spv;
+		stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		stage.m_moduleCreateInfo.pNext = NULL;
+		stage.m_moduleCreateInfo.flags = 0;
+		stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
+		stage.m_moduleCreateInfo.pCode = stage.spv.data();
+		return true;
+	}
+};
+typedef DeviceResource<Shader> ShaderResource;
+
+
 class DeviceManager
 {
 	VkDevice m_device = nullptr;
@@ -1053,9 +1104,7 @@ class DeviceManager
 
 	VkRenderPass m_render_pass=nullptr;
 
-	VkShaderModule m_shaderStages[2] = {
-		nullptr, nullptr,
-	};
+	std::unique_ptr<ShaderResource> m_shader;
 
 public:
 	DeviceManager()
@@ -1069,9 +1118,7 @@ public:
 		m_framebuffers.clear();
 		m_uniform_data.reset();
 		m_depth.reset();
-
-		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
-		vkDestroyShaderModule(m_device, m_shaderStages[1], NULL);
+		m_shader.reset();
 
 		vkDestroyRenderPass(m_device, m_render_pass, NULL);
 
@@ -1288,17 +1335,17 @@ public:
 		return true;
 	}
 
-	bool createShader(int index, const std::vector<unsigned int> &spv)
+	bool createShader(const std::vector<unsigned int> &vertSpv
+		, const std::vector<unsigned int> &fragSpv)
 	{
-		VkShaderModuleCreateInfo moduleCreateInfo;
-		moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		moduleCreateInfo.pNext = NULL;
-		moduleCreateInfo.flags = 0;
-		moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
-		moduleCreateInfo.pCode = spv.data();
-		auto res = vkCreateShaderModule(m_device, &moduleCreateInfo, NULL,
-			&m_shaderStages[index]);
-		if (res != VK_SUCCESS) {
+		m_shader = std::make_unique<ShaderResource>();
+		if (!m_shader->resource().configure(0, vertSpv)) {
+			return false;
+		}
+		if (!m_shader->resource().configure(1, fragSpv)) {
+			return false;
+		}
+		if (!m_shader->create(m_device)) {
 			return false;
 		}
 		return true;
@@ -1567,10 +1614,7 @@ public:
 		, const std::string &fragSpvPath
 		)
 	{
-		if (!m_device->createShader(0, read(vertSpvPath))) {
-			return false;
-		}
-		if (!m_device->createShader(1, read(fragSpvPath))) {
+		if (!m_device->createShader(read(fragSpvPath), read(vertSpvPath))) {
 			return false;
 		}
 		return true;
