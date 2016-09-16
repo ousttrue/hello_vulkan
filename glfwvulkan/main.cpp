@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <fstream>
+#include <functional>
 #include <Windows.h>
 
 #define GLM_FORCE_RADIANS
@@ -433,11 +434,8 @@ public:
 		return m_t.onCreate(m_device);
 	}
 
-	template<typename ... Args>
-	bool configure(Args... args)
-	{
-		return m_t.configure(args...);
-	}
+	T &resource() { return m_t; }
+	const T &resource()const { return m_t; }
 };
 
 
@@ -492,6 +490,116 @@ public:
 typedef DeviceResource<Framebuffer> FramebufferResource;
 
 
+class VertexBuffer : public IDeviceResource
+{
+	VkBuffer m_buf = nullptr;
+	VkBufferCreateInfo m_buf_info = {};
+
+	VkDeviceMemory m_mem = nullptr;
+	VkDescriptorBufferInfo m_buffer_info = {};
+	VkVertexInputBindingDescription m_vi_binding = {};
+	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
+
+public:
+	void onDestroy(VkDevice device)override
+	{
+		vkDestroyBuffer(device, m_buf, NULL);
+		vkFreeMemory(device, m_mem, NULL);
+	}
+
+	bool onCreate(VkDevice device)override
+	{
+		auto res = vkCreateBuffer(device, &m_buf_info, NULL
+			, &m_buf);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		return true;
+	}
+
+	bool allocate(VkDevice device, const std::shared_ptr<GpuManager> &gpu)
+	{
+		VkMemoryRequirements mem_reqs;
+		vkGetBufferMemoryRequirements(device, m_buf, &mem_reqs);
+
+		VkMemoryAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.pNext = NULL;
+		alloc_info.memoryTypeIndex = 0;
+		alloc_info.allocationSize = mem_reqs.size;
+		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&alloc_info.memoryTypeIndex)) {
+			//assert(pass && "No mappable, coherent memory");
+			return false;
+		}
+		auto res = vkAllocateMemory(device, &alloc_info, NULL, &m_mem);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		m_buffer_info.range = mem_reqs.size;
+		m_buffer_info.offset = 0;
+
+		res = vkBindBufferMemory(device, m_buf,
+			m_mem, 0);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+
+	bool configure(uint32_t dataSize, uint32_t dataStride)
+	{
+		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		m_buf_info.pNext = NULL;
+		m_buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		m_buf_info.size = dataSize;
+		m_buf_info.queueFamilyIndexCount = 0;
+		m_buf_info.pQueueFamilyIndices = NULL;
+		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		m_buf_info.flags = 0;
+
+		m_vi_binding.binding = 0;
+		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		m_vi_binding.stride = dataStride;
+
+		m_vi_attribs.resize(2);
+
+		m_vi_attribs[0].binding = 0;
+		m_vi_attribs[0].location = 0;
+		m_vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		m_vi_attribs[0].offset = 0;
+
+		m_vi_attribs[1].binding = 0;
+		m_vi_attribs[1].location = 1;
+		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		m_vi_attribs[1].offset = 16;
+
+		return true;
+	}
+
+	bool map(VkDevice device, const std::function<void(uint8_t*, uint32_t)> &mapCallback)
+	{
+		uint8_t *pData;
+		auto res = vkMapMemory(device, m_mem, 0, m_buffer_info.range, 0
+			,(void **)&pData);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+	
+		mapCallback(pData, m_buffer_info.range);
+
+		vkUnmapMemory(device, m_mem);
+
+		return true;
+	}
+};
+typedef DeviceResource<VertexBuffer> VertexBufferResource;
+
+
 class DeviceManager
 {
 	VkDevice m_device = nullptr;
@@ -534,17 +642,7 @@ class DeviceManager
 
 	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
 
-	struct vertex_buffer 
-	{
-		VkBuffer buf=nullptr;
-		VkDeviceMemory mem=nullptr;
-		//VkDescriptorBufferInfo buffer_info = {};
-	};
-	vertex_buffer m_vertex_data;
-	/*
-	VkVertexInputBindingDescription m_vi_binding = {};
-	VkVertexInputAttributeDescription m_vi_attribs[2];
-	*/
+	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
 
 	struct uniform_buffer
 	{
@@ -579,9 +677,7 @@ public:
 
 	~DeviceManager()
 	{
-		vkDestroyBuffer(m_device, m_vertex_data.buf, NULL);
-		vkFreeMemory(m_device, m_vertex_data.mem, NULL);
-
+		m_vertex_buffer.reset();
 		m_framebuffers.clear();
 
 		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
@@ -1070,81 +1166,26 @@ public:
 		return true;
 	}
 
-
 	bool createVertexBuffer(const std::shared_ptr<GpuManager> &gpu
 		, const void *vertexData
 		, uint32_t dataSize, uint32_t dataStride)
 	{
-		VkBufferCreateInfo buf_info = {};
-		buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buf_info.pNext = NULL;
-		buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		buf_info.size = dataSize;
-		buf_info.queueFamilyIndexCount = 0;
-		buf_info.pQueueFamilyIndices = NULL;
-		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buf_info.flags = 0;
-		auto res = vkCreateBuffer(m_device, &buf_info, NULL
-			, &m_vertex_data.buf);
-		if (res != VK_SUCCESS) {
+		m_vertex_buffer = std::make_unique<VertexBufferResource>();
+		if (!m_vertex_buffer->resource().configure(dataSize, dataStride)) {
 			return false;
 		}
-
-		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(m_device, m_vertex_data.buf,
-			&mem_reqs);
-
-		VkMemoryAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.pNext = NULL;
-		alloc_info.memoryTypeIndex = 0;
-		alloc_info.allocationSize = mem_reqs.size;
-		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&alloc_info.memoryTypeIndex)){
-			//assert(pass && "No mappable, coherent memory");
+		if (!m_vertex_buffer->create(m_device)) {
 			return false;
 		}
-		res = vkAllocateMemory(m_device, &alloc_info, NULL,
-			&(m_vertex_data.mem));
-		if (res != VK_SUCCESS) {
+		if (!m_vertex_buffer->resource().allocate(m_device, gpu)) {
 			return false;
 		}
-		//m_vertex_data.buffer_info.range = mem_reqs.size;
-		//m_vertex_data.buffer_info.offset = 0;
-
-		{
-			uint8_t *pData;
-			res = vkMapMemory(m_device
-				, m_vertex_data.mem, 0, mem_reqs.size, 0,
-				(void **)&pData);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
+		auto callback= [vertexData, dataSize](uint8_t *pData, uint32_t size) {
 			memcpy(pData, vertexData, dataSize);
-			vkUnmapMemory(m_device, m_vertex_data.mem);
-		}
-
-		res = vkBindBufferMemory(m_device, m_vertex_data.buf,
-			m_vertex_data.mem, 0);
-		if (res != VK_SUCCESS) {
+		};
+		if (!m_vertex_buffer->resource().map(m_device, callback)) {
 			return false;
 		}
-
-		/*
-		m_vi_binding.binding = 0;
-		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		m_vi_binding.stride = dataStride;
-		m_vi_attribs[0].binding = 0;
-		m_vi_attribs[0].location = 0;
-		m_vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		m_vi_attribs[0].offset = 0;
-		m_vi_attribs[1].binding = 0;
-		m_vi_attribs[1].location = 1;
-		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		m_vi_attribs[1].offset = 16;
-		*/
 		return true;
 	}
 
@@ -1159,7 +1200,7 @@ public:
 			};
 
 			auto fb=std::make_unique<FramebufferResource>();
-			if (!fb->configure(m_render_pass
+			if (!fb->resource().configure(m_render_pass
 				, attachments, _countof(attachments)
 				, w, h)) {
 				return false;
