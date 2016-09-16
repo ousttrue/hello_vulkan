@@ -889,10 +889,9 @@ public:
 typedef DeviceResource<DepthBuffer> DepthBufferResource;
 
 
-class DeviceManager
+class Swapchain : public IDeviceResource
 {
-	VkDevice m_device = nullptr;
-	std::vector<const char*> m_device_extension_names;
+	VkSwapchainCreateInfoKHR m_swapchain_ci = {};
 	VkSwapchainKHR m_swapchain = nullptr;
 
 	/*
@@ -911,6 +910,139 @@ class DeviceManager
 	};
 	std::vector<std::unique_ptr<swap_chain_buffer>> m_buffers;
 
+public:
+	uint32_t getImageCount()const { return m_buffers.size(); }
+	VkImageView getView(uint32_t index)const { return m_buffers[index]->view; }
+
+	void onDestroy(VkDevice device)override
+	{
+		for (auto &b : m_buffers)
+		{
+			b->destroy(device);
+		}
+		m_buffers.clear();
+		vkDestroySwapchainKHR(device, m_swapchain, NULL);
+	}
+
+	bool onCreate(VkDevice device)override
+	{
+		auto res = vkCreateSwapchainKHR(device, &m_swapchain_ci, NULL,
+			&m_swapchain);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+
+	bool configure(const std::shared_ptr<GpuManager> &gpu
+		, const std::shared_ptr<SurfaceManager> &surface
+		, int w, int h
+		, VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+	{
+		if (!surface->getCapabilityFor(gpu->get())) {
+			return false;
+		}
+
+		auto swapchainExtent = surface->getExtent(w, h);
+
+		m_swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		m_swapchain_ci.pNext = NULL;
+		m_swapchain_ci.surface = surface->get();
+		m_swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
+		m_swapchain_ci.imageFormat = gpu->getPrimaryFormat();
+		m_swapchain_ci.imageExtent.width = swapchainExtent.width;
+		m_swapchain_ci.imageExtent.height = swapchainExtent.height;
+		m_swapchain_ci.preTransform = surface->getPreTransform();
+		m_swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		m_swapchain_ci.imageArrayLayers = 1;
+		m_swapchain_ci.presentMode = surface->getSwapchainPresentMode();
+		m_swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
+		m_swapchain_ci.clipped = true;
+
+		m_swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+		m_swapchain_ci.imageUsage = usageFlags;
+		m_swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		m_swapchain_ci.queueFamilyIndexCount = 0;
+		m_swapchain_ci.pQueueFamilyIndices = NULL;
+
+		if (gpu->get_graphics_queue_family_index() != gpu->get_present_queue_family_index()) {
+			// If the graphics and present queues are from different queue families,
+			// we either have to explicitly transfer ownership of images between the
+			// queues, or we have to create the swapchain with imageSharingMode
+			// as VK_SHARING_MODE_CONCURRENT
+			uint32_t queueFamilyIndices[2] = {
+				gpu->get_graphics_queue_family_index(),
+				gpu->get_present_queue_family_index(),
+			};
+			m_swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			m_swapchain_ci.queueFamilyIndexCount = 2;
+			m_swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
+		}
+		return true;
+	}
+
+	bool prepareImages(VkDevice device, VkFormat format)
+	{
+		uint32_t swapchainImageCount;
+		auto res = vkGetSwapchainImagesKHR(device, m_swapchain,
+			&swapchainImageCount, NULL);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		if (swapchainImageCount == 0) {
+			return false;
+		}
+
+		std::vector<VkImage> swapchainImages(swapchainImageCount);
+		res = vkGetSwapchainImagesKHR(device, m_swapchain,
+			&swapchainImageCount, swapchainImages.data());
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		for (uint32_t i = 0; i < swapchainImageCount; i++)
+		{
+			VkImageViewCreateInfo color_image_view = {};
+			color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			color_image_view.pNext = NULL;
+			color_image_view.format = format;
+			color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
+			color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
+			color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
+			color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
+			color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			color_image_view.subresourceRange.baseMipLevel = 0;
+			color_image_view.subresourceRange.levelCount = 1;
+			color_image_view.subresourceRange.baseArrayLayer = 0;
+			color_image_view.subresourceRange.layerCount = 1;
+			color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			color_image_view.flags = 0;
+			color_image_view.image = swapchainImages[i];
+
+			auto sc_buffer = std::make_unique<swap_chain_buffer>();
+			res = vkCreateImageView(device, &color_image_view, NULL,
+				&sc_buffer->view);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+			sc_buffer->image = swapchainImages[i];
+			m_buffers.push_back(std::move(sc_buffer));
+		}
+
+		return true;
+	}
+};
+typedef DeviceResource<Swapchain>  SwapchainResource;
+
+
+class DeviceManager
+{
+	VkDevice m_device = nullptr;
+	std::vector<const char*> m_device_extension_names;
+
+	std::unique_ptr<SwapchainResource> m_swapchain;
 	std::unique_ptr<DepthBufferResource> m_depth;
 	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
 	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
@@ -946,12 +1078,7 @@ public:
 		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
 
-		for (auto &b : m_buffers)
-		{
-			b->destroy(m_device);
-		}
-		m_buffers.clear();
-		vkDestroySwapchainKHR(m_device, m_swapchain, NULL);
+		m_swapchain.reset();
 		vkDestroyDevice(m_device, NULL);
 	}
 
@@ -991,100 +1118,17 @@ public:
 	bool createSwapchain(const std::shared_ptr<GpuManager> &gpu
 		, const std::shared_ptr<SurfaceManager> &surface
 		, int w, int h
-		, VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
+		)
 	{
-		if (!surface->getCapabilityFor(gpu->get())) {
+		m_swapchain = std::make_unique<SwapchainResource>();
+		if (!m_swapchain->resource().configure(gpu, surface, w, h)) {
 			return false;
 		}
-
-		auto swapchainExtent = surface->getExtent(w, h);
-
-		VkSwapchainCreateInfoKHR swapchain_ci = {};
-		swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		swapchain_ci.pNext = NULL;
-		swapchain_ci.surface = surface->get();
-		swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
-		swapchain_ci.imageFormat = gpu->getPrimaryFormat();
-		swapchain_ci.imageExtent.width = swapchainExtent.width;
-		swapchain_ci.imageExtent.height = swapchainExtent.height;
-		swapchain_ci.preTransform = surface->getPreTransform();
-		swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchain_ci.imageArrayLayers = 1;
-		swapchain_ci.presentMode = surface->getSwapchainPresentMode();
-		swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
-		swapchain_ci.clipped = true;
-
-		swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-		swapchain_ci.imageUsage = usageFlags;
-		swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		swapchain_ci.queueFamilyIndexCount = 0;
-		swapchain_ci.pQueueFamilyIndices = NULL;
-
-		if (gpu->get_graphics_queue_family_index() != gpu->get_present_queue_family_index()) {
-			// If the graphics and present queues are from different queue families,
-			// we either have to explicitly transfer ownership of images between the
-			// queues, or we have to create the swapchain with imageSharingMode
-			// as VK_SHARING_MODE_CONCURRENT
-			uint32_t queueFamilyIndices[2] = {
-				gpu->get_graphics_queue_family_index(),
-				gpu->get_present_queue_family_index(),
-			};
-			swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			swapchain_ci.queueFamilyIndexCount = 2;
-			swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
-		}
-
-		auto res = vkCreateSwapchainKHR(m_device, &swapchain_ci, NULL,
-			&m_swapchain);
-		if (res != VK_SUCCESS) {
+		if (!m_swapchain->create(m_device)) {
 			return false;
 		}
-
-		uint32_t swapchainImageCount;
-		res = vkGetSwapchainImagesKHR(m_device, m_swapchain,
-			&swapchainImageCount, NULL);
-		if (res != VK_SUCCESS) {
+		if (!m_swapchain->resource().prepareImages(m_device, gpu->getPrimaryFormat())) {
 			return false;
-		}
-		if (swapchainImageCount == 0) {
-			return false;
-		}
-
-		std::vector<VkImage> swapchainImages(swapchainImageCount);
-		res = vkGetSwapchainImagesKHR(m_device, m_swapchain,
-			&swapchainImageCount, swapchainImages.data());
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		for (uint32_t i = 0; i < swapchainImageCount; i++)
-		{
-			VkImageViewCreateInfo color_image_view = {};
-			color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			color_image_view.pNext = NULL;
-			color_image_view.format = gpu->getPrimaryFormat();
-			color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
-			color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
-			color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
-			color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
-			color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			color_image_view.subresourceRange.baseMipLevel = 0;
-			color_image_view.subresourceRange.levelCount = 1;
-			color_image_view.subresourceRange.baseArrayLayer = 0;
-			color_image_view.subresourceRange.layerCount = 1;
-			color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			color_image_view.flags = 0;
-			color_image_view.image = swapchainImages[i];
-
-			auto sc_buffer = std::make_unique<swap_chain_buffer>();
-			res = vkCreateImageView(m_device, &color_image_view, NULL,
-				&sc_buffer->view);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
-			sc_buffer->image = swapchainImages[i];
-			m_buffers.push_back(std::move(sc_buffer));
 		}
 
 		return true;
@@ -1285,11 +1329,11 @@ public:
 
 	bool createFramebuffers(int w, int h)
 	{
-		for (size_t i = 0; i < m_buffers.size(); ++i) 
+		for (uint32_t i = 0; i < m_swapchain->resource().getImageCount(); ++i) 
 		{
 			VkImageView attachments[] =
 			{
-				m_buffers[i]->view,
+				m_swapchain->resource().getView(i),
 				m_depth->resource().getView(),
 			};
 
