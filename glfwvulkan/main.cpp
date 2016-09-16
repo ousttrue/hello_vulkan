@@ -406,6 +406,60 @@ public:
 };
 
 
+class Framebuffer
+{
+	VkDevice m_device;
+	VkFramebuffer m_framebuffer = nullptr;
+
+	Framebuffer(const Framebuffer &) = delete;
+	Framebuffer& operator=(const Framebuffer &) = delete;
+public:
+	Framebuffer(VkDevice device)
+		: m_device(device)
+	{
+
+	}
+
+	~Framebuffer()
+	{
+		if (m_framebuffer) {
+			vkDestroyFramebuffer(m_device, m_framebuffer, NULL);
+		}
+	}
+
+	Framebuffer(Framebuffer &&rhs)
+	{
+		m_device = rhs.m_device;
+		m_framebuffer = rhs.m_framebuffer;
+		rhs.m_framebuffer = nullptr;
+	}
+
+	bool create(VkRenderPass render_pass,
+		const VkImageView *attachments, int count, int w, int h)
+	{
+		VkFramebufferCreateInfo fb_info = {};
+		fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb_info.pNext = NULL;
+
+		fb_info.renderPass = render_pass;
+		fb_info.attachmentCount = count;
+
+		fb_info.pAttachments = attachments;
+		fb_info.width = w;
+		fb_info.height = h;
+		fb_info.layers = 1;
+
+		auto res = vkCreateFramebuffer(m_device, &fb_info, NULL,
+			&m_framebuffer);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+};
+
+
 class DeviceManager
 {
 	VkDevice m_device = nullptr;
@@ -445,7 +499,8 @@ class DeviceManager
 	std::unique_ptr<depth_buffer> m_depth;
 	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
-	std::vector<VkFramebuffer> m_framebuffers;
+
+	std::vector<Framebuffer> m_framebuffers;
 
 	struct vertex_buffer 
 	{
@@ -495,10 +550,6 @@ public:
 		vkDestroyBuffer(m_device, m_vertex_data.buf, NULL);
 		vkFreeMemory(m_device, m_vertex_data.mem, NULL);
 
-		for (auto &fb : m_framebuffers)
-		{
-			vkDestroyFramebuffer(m_device, fb, NULL);
-		}
 		m_framebuffers.clear();
 
 		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
@@ -987,38 +1038,6 @@ public:
 		return true;
 	}
 
-	bool createFramebuffers(int w, int h) 
-	{
-		/* DEPENDS on init_depth_buffer(), init_renderpass() and
-		* init_swapchain_extension() */
-
-		m_framebuffers.resize(m_buffers.size());
-		for (size_t i = 0; i < m_buffers.size(); i++) {
-			VkImageView attachments[2]=
-			{
-				m_buffers[i]->view,
-				m_depth->view,
-			};
-
-			VkFramebufferCreateInfo fb_info = {};
-			fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			fb_info.pNext = NULL;
-			fb_info.renderPass = m_render_pass;
-			fb_info.attachmentCount = 2;
-			fb_info.pAttachments = attachments;
-			fb_info.width = w;
-			fb_info.height = h;
-			fb_info.layers = 1;
-
-			auto res = vkCreateFramebuffer(m_device, &fb_info, NULL,
-				&m_framebuffers[i]);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
-		}
-
-		return true;
-	}
 
 	bool createVertexBuffer(const std::shared_ptr<GpuManager> &gpu
 		, const void *vertexData
@@ -1094,6 +1113,27 @@ public:
 		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		m_vi_attribs[1].offset = 16;
 		*/
+		return true;
+	}
+
+	bool createFramebuffers(int w, int h)
+	{
+		for (size_t i = 0; i < m_buffers.size(); ++i) 
+		{
+			VkImageView attachments[] =
+			{
+				m_buffers[i]->view,
+				m_depth->view,
+			};
+
+			Framebuffer fb(m_device);
+			if (!fb.create(m_render_pass
+				, attachments, _countof(attachments)
+				, w, h)) {
+				return false;
+			}
+			m_framebuffers.push_back(std::move(fb));
+		}
 		return true;
 	}
 };
