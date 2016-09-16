@@ -518,12 +518,14 @@ public:
 	{
 		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		m_buf_info.pNext = NULL;
+		m_buf_info.flags = 0;
+
 		m_buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 		m_buf_info.size = dataSize;
 		m_buf_info.queueFamilyIndexCount = 0;
 		m_buf_info.pQueueFamilyIndices = NULL;
 		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		m_buf_info.flags = 0;
+
 		return true;
 	}
 
@@ -549,6 +551,7 @@ public:
 			return false;
 		}
 
+		m_buffer_info.buffer = m_buf;
 		m_buffer_info.range = mem_reqs.size;
 		m_buffer_info.offset = 0;
 
@@ -580,7 +583,7 @@ public:
 typedef DeviceResource<Buffer> BufferResource;
 
 
-class VertexBuffer: public BufferResource
+class VertexBufferResource: public BufferResource
 {
 	VkVertexInputBindingDescription m_vi_binding = {};
 	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
@@ -608,6 +611,61 @@ public:
 		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		m_vi_attribs[1].offset = 16;
 
+		return true;
+	}
+};
+
+
+class UniformBufferResource: public BufferResource
+{
+	glm::mat4 m_MVP;
+
+public:
+	bool configure()
+	{
+		/*
+		VkResult U_ASSERT_ONLY res;
+		bool U_ASSERT_ONLY pass;
+		float fov = glm::radians(45.0f);
+		if (info.width > info.height) {
+		fov *= static_cast<float>(info.height) / static_cast<float>(info.width);
+		}
+		info.Projection = glm::perspective(fov,
+		static_cast<float>(info.width) /
+		static_cast<float>(info.height), 0.1f, 100.0f);
+		info.View = glm::lookAt(
+		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
+		glm::vec3(0, 0, 0),  // and looks at the origin
+		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
+		);
+		info.Model = glm::mat4(1.0f);
+		// Vulkan clip space has inverted Y and half Z.
+		info.Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.5f, 0.0f,
+		0.0f, 0.0f, 0.5f, 1.0f);
+
+		info.MVP = info.Clip * info.Projection * info.View * info.Model;
+		*/
+
+		if (!resource().configure(sizeof(m_MVP)))
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool map(VkDevice device)
+	{
+		auto callback = [&MVP=m_MVP](uint8_t *pData, uint32_t size)
+		{
+			// MAP
+			memcpy(pData, &MVP, sizeof(MVP));
+		};
+		if (!resource().map(device, callback)) {
+			return false;
+		}
 		return true;
 	}
 };
@@ -654,22 +712,8 @@ class DeviceManager
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 
 	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
-
-	std::unique_ptr<VertexBuffer> m_vertex_buffer;
-
-	struct uniform_buffer
-	{
-		VkBuffer buf = nullptr;
-		VkDeviceMemory mem = nullptr;
-		//VkDescriptorBufferInfo buffer_info = {};
-
-		void destroy(VkDevice device)
-		{
-			vkDestroyBuffer(device, buf, NULL);
-			vkFreeMemory(device, mem, NULL);
-		}
-	};
-	std::unique_ptr<uniform_buffer> m_uniform_data;
+	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
+	std::unique_ptr<UniformBufferResource> m_uniform_data;
 
 	VkDescriptorSetLayout m_desc_layout=nullptr;
 	VkPipelineLayout m_pipeline_layout=nullptr;
@@ -683,7 +727,6 @@ class DeviceManager
 public:
 	DeviceManager()
 		: m_depth(new depth_buffer)
-		, m_uniform_data(new uniform_buffer)
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
@@ -692,6 +735,7 @@ public:
 	{
 		m_vertex_buffer.reset();
 		m_framebuffers.clear();
+		m_uniform_data.reset();
 
 		vkDestroyShaderModule(m_device, m_shaderStages[0], NULL);
 		vkDestroyShaderModule(m_device, m_shaderStages[1], NULL);
@@ -700,8 +744,6 @@ public:
 
 		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
 		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
-
-		m_uniform_data->destroy(m_device);
 
 		m_depth->destroy(m_device);
 		m_depth.reset();
@@ -959,95 +1001,23 @@ public:
 
 	bool createUniformBuffer(const std::shared_ptr<GpuManager> &gpu)
 	{
-		glm::mat4 MVP;
+		m_uniform_data = std::make_unique<UniformBufferResource>();
 
-		/*
-		VkResult U_ASSERT_ONLY res;
-		bool U_ASSERT_ONLY pass;
-		float fov = glm::radians(45.0f);
-		if (info.width > info.height) {
-			fov *= static_cast<float>(info.height) / static_cast<float>(info.width);
-		}
-		info.Projection = glm::perspective(fov,
-			static_cast<float>(info.width) /
-			static_cast<float>(info.height), 0.1f, 100.0f);
-		info.View = glm::lookAt(
-			glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
-			glm::vec3(0, 0, 0),  // and looks at the origin
-			glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
-		);
-		info.Model = glm::mat4(1.0f);
-		// Vulkan clip space has inverted Y and half Z.
-		info.Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, -1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 0.5f, 0.0f,
-			0.0f, 0.0f, 0.5f, 1.0f);
-
-		info.MVP = info.Clip * info.Projection * info.View * info.Model;
-		*/
-
-		VkBufferCreateInfo buf_info = {};
-		buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buf_info.pNext = NULL;
-		buf_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		buf_info.size = sizeof(MVP);
-		buf_info.queueFamilyIndexCount = 0;
-		buf_info.pQueueFamilyIndices = NULL;
-		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buf_info.flags = 0;
-		auto res = vkCreateBuffer(m_device, &buf_info, NULL, &m_uniform_data->buf);
-		if (res != VK_SUCCESS) {
+		if (!m_uniform_data->configure()) {
 			return false;
 		}
-		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(m_device, m_uniform_data->buf,
-			&mem_reqs);
-		VkMemoryAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.pNext = NULL;
-		alloc_info.memoryTypeIndex = 0;
-		alloc_info.allocationSize = mem_reqs.size;
-		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&alloc_info.memoryTypeIndex))
-		{
-			//assert(pass && "No mappable, coherent memory");
+		if (!m_uniform_data->create(m_device)) {
 			return false;
 		}
-		res = vkAllocateMemory(m_device, &alloc_info, NULL,
-			&m_uniform_data->mem);
-		if (res != VK_SUCCESS) {
+		if (!m_uniform_data->resource().allocate(m_device, gpu)) {
 			return false;
 		}
-
-		res = vkBindBufferMemory(m_device, m_uniform_data->buf,
-			m_uniform_data->mem, 0);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		{
-			// MAP
-			uint8_t *pData;
-			res = vkMapMemory(m_device, m_uniform_data->mem, 0, mem_reqs.size, 0,
-				(void **)&pData);
-			if (res != VK_SUCCESS) {
+		if (!m_uniform_data->map(m_device)) {
 				return false;
-			}
-			memcpy(pData, &MVP, sizeof(MVP));
-			vkUnmapMemory(m_device, m_uniform_data->mem);
 		}
-
-		/*
-		m_uniform_data->buffer_info.buffer = m_uniform_data->buf;
-		m_uniform_data->buffer_info.offset = 0;
-		m_uniform_data->buffer_info.range = sizeof(MVP);
-		*/
-
 		return true;
 	}
-
+	
 	bool createDescriptorAndPipelineLayout()
 	{
 		VkDescriptorSetLayoutBinding layout_bindings[1];
@@ -1183,7 +1153,7 @@ public:
 		, const void *vertexData
 		, uint32_t dataSize, uint32_t dataStride)
 	{
-		m_vertex_buffer = std::make_unique<VertexBuffer>();
+		m_vertex_buffer = std::make_unique<VertexBufferResource>();
 		if (!m_vertex_buffer->configure(dataSize, dataStride)) {
 			return false;
 		}
