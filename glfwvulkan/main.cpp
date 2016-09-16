@@ -50,7 +50,7 @@ public:
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 		m_window = glfwCreateWindow(w, h
-			, title.c_str(), NULL, NULL);
+			, title.c_str(), nullptr, nullptr);
 		if (!m_window) {
 			return false;
 		}
@@ -165,7 +165,7 @@ public:
 	{
 		uint32_t queue_family_count;
 		vkGetPhysicalDeviceQueueFamilyProperties(m_gpu,
-			&queue_family_count, NULL);
+			&queue_family_count, nullptr);
 		if (queue_family_count == 0) {
 			return false;
 		}
@@ -231,7 +231,7 @@ public:
 		// Get the list of VkFormats that are supported:
 		uint32_t formatCount;
 		auto res = vkGetPhysicalDeviceSurfaceFormatsKHR(m_gpu, surface,
-			&formatCount, NULL);
+			&formatCount, nullptr);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -288,11 +288,11 @@ public:
 	{
 		VkWin32SurfaceCreateInfoKHR createInfo = {};
 		createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		createInfo.pNext = NULL;
+		createInfo.pNext = nullptr;
 		createInfo.hinstance = hInstance;
 		createInfo.hwnd = hWnd;
 		auto res = vkCreateWin32SurfaceKHR(inst, &createInfo,
-			NULL, &m_surface);
+			nullptr, &m_surface);
 		m_inst = inst;
 		return true;
 	}
@@ -307,7 +307,7 @@ public:
 
 		uint32_t presentModeCount;
 		res = vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, m_surface,
-			&presentModeCount, NULL);
+			&presentModeCount, nullptr);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -448,6 +448,14 @@ struct IDeviceResource
 
 class Framebuffer: public IDeviceResource
 {
+	VkRenderPass m_render_pass = nullptr;
+	VkAttachmentDescription m_attachments[2];
+	VkRenderPassCreateInfo m_rp_info = {};
+	VkAttachmentReference color_reference = {};
+	VkAttachmentReference depth_reference = {};
+	VkSubpassDescription subpass = {};
+	VkImageView views[2];
+
 	VkFramebuffer m_framebuffer = nullptr;
 	VkFramebufferCreateInfo m_fb_info = {};
 
@@ -455,31 +463,103 @@ public:
 	void onDestroy(VkDevice device)override
 	{
 		if (m_framebuffer) {
-			vkDestroyFramebuffer(device, m_framebuffer, NULL);
+			vkDestroyFramebuffer(device, m_framebuffer, nullptr);
 			m_framebuffer = nullptr;
+		}
+		if (m_render_pass) {
+			vkDestroyRenderPass(device, m_render_pass, nullptr);
+			m_render_pass = nullptr;
 		}
 	}
 
 	bool onCreate(VkDevice device)override
 	{
-		auto res = vkCreateFramebuffer(device, &m_fb_info, nullptr,
+		// renderpass
+		auto res = vkCreateRenderPass(device, &m_rp_info, nullptr, &m_render_pass);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		// framebuffer
+		m_fb_info.renderPass = m_render_pass;
+		res = vkCreateFramebuffer(device, &m_fb_info, nullptr,
 			&m_framebuffer);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+
 		return true;
 	}
 
-	bool configure(VkRenderPass render_pass,
-		const VkImageView *attachments, int count, int w, int h)
+	bool configure(
+		VkImageView imageView, VkSampleCountFlagBits imageSamples, VkFormat imageFormat, int w, int h
+		, VkImageView depthView, VkSampleCountFlagBits depthSamples, VkFormat depthFormat
+		, VkImageLayout finalLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, bool clear = true
+	)
 	{
+		/* Need m_attachments for render target and depth buffer */
+		{
+			m_attachments[0].format = imageFormat;
+			m_attachments[0].samples = imageSamples;
+			m_attachments[0].loadOp =
+				clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			m_attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			m_attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			m_attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			m_attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			m_attachments[0].finalLayout = finalLayout;
+			m_attachments[0].flags = 0;
+		}
+		{
+			m_attachments[1].format = depthFormat;
+			m_attachments[1].samples = depthSamples;
+			m_attachments[1].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
+				: VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			m_attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			m_attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			m_attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+			m_attachments[1].initialLayout =
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			m_attachments[1].finalLayout =
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			m_attachments[1].flags = 0;
+		}
+
+		color_reference.attachment = 0;
+		color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		depth_reference.attachment = 1;
+		depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.flags = 0;
+		subpass.inputAttachmentCount = 0;
+		subpass.pInputAttachments = nullptr;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &color_reference;
+		subpass.pResolveAttachments = nullptr;
+		subpass.pDepthStencilAttachment = &depth_reference;
+		subpass.preserveAttachmentCount = 0;
+		subpass.pPreserveAttachments = nullptr;
+
+		m_rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		m_rp_info.pNext = nullptr;
+		m_rp_info.attachmentCount = 2;
+		m_rp_info.pAttachments = m_attachments;
+		m_rp_info.subpassCount = 1;
+		m_rp_info.pSubpasses = &subpass;
+		m_rp_info.dependencyCount = 0;
+		m_rp_info.pDependencies = nullptr;
+
 		m_fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		m_fb_info.pNext = nullptr;
 
-		m_fb_info.renderPass = render_pass;
-		m_fb_info.attachmentCount = count;
+		//m_fb_info.renderPass = m_render_pass;
+		views[0] = imageView;
+		views[1] = depthView;
+		m_fb_info.attachmentCount = 2;
+		m_fb_info.pAttachments = views;
 
-		m_fb_info.pAttachments = attachments;
 		m_fb_info.width = w;
 		m_fb_info.height = h;
 		m_fb_info.layers = 1;
@@ -500,13 +580,13 @@ class Buffer : public IDeviceResource
 public:
 	void onDestroy(VkDevice device)override
 	{
-		vkDestroyBuffer(device, m_buf, NULL);
-		vkFreeMemory(device, m_mem, NULL);
+		vkDestroyBuffer(device, m_buf, nullptr);
+		vkFreeMemory(device, m_mem, nullptr);
 	}
 
 	bool onCreate(VkDevice device)override
 	{
-		auto res = vkCreateBuffer(device, &m_buf_info, NULL
+		auto res = vkCreateBuffer(device, &m_buf_info, nullptr
 			, &m_buf);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -517,13 +597,13 @@ public:
 	bool configure(uint32_t dataSize)
 	{
 		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		m_buf_info.pNext = NULL;
+		m_buf_info.pNext = nullptr;
 		m_buf_info.flags = 0;
 
 		m_buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 		m_buf_info.size = dataSize;
 		m_buf_info.queueFamilyIndexCount = 0;
-		m_buf_info.pQueueFamilyIndices = NULL;
+		m_buf_info.pQueueFamilyIndices = nullptr;
 		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 		return true;
@@ -536,7 +616,7 @@ public:
 
 		VkMemoryAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.pNext = NULL;
+		alloc_info.pNext = nullptr;
 		alloc_info.memoryTypeIndex = 0;
 		alloc_info.allocationSize = mem_reqs.size;
 		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
@@ -546,7 +626,7 @@ public:
 			//assert(pass && "No mappable, coherent memory");
 			return false;
 		}
-		auto res = vkAllocateMemory(device, &alloc_info, NULL, &m_mem);
+		auto res = vkAllocateMemory(device, &alloc_info, nullptr, &m_mem);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -684,9 +764,9 @@ class DepthBuffer : IDeviceResource
 public:
 	void onDestroy(VkDevice device)override
 	{
-		vkDestroyImageView(device, m_view, NULL);
-		vkDestroyImage(device, m_image, NULL);
-		vkFreeMemory(device, m_mem, NULL);
+		vkDestroyImageView(device, m_view, nullptr);
+		vkDestroyImage(device, m_image, nullptr);
+		vkFreeMemory(device, m_mem, nullptr);
 	}
 
 	VkSampleCountFlagBits getSamples()const { return m_depth_samples; }
@@ -695,7 +775,7 @@ public:
 
 	bool onCreate(VkDevice device)override
 	{
-		auto res = vkCreateImage(device, &m_image_info, NULL, &m_image);
+		auto res = vkCreateImage(device, &m_image_info, nullptr, &m_image);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -723,7 +803,7 @@ public:
 			return false;
 		}
 		m_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		m_image_info.pNext = NULL;
+		m_image_info.pNext = nullptr;
 		m_image_info.imageType = VK_IMAGE_TYPE_2D;
 		m_image_info.format = m_depth_format;
 		m_image_info.extent.width = w;
@@ -734,7 +814,7 @@ public:
 		m_image_info.samples = m_depth_samples;
 		m_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		m_image_info.queueFamilyIndexCount = 0;
-		m_image_info.pQueueFamilyIndices = NULL;
+		m_image_info.pQueueFamilyIndices = nullptr;
 		m_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		m_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 		m_image_info.flags = 0;
@@ -748,7 +828,7 @@ public:
 
 		VkMemoryAllocateInfo mem_alloc = {};
 		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		mem_alloc.pNext = NULL;
+		mem_alloc.pNext = nullptr;
 		mem_alloc.allocationSize = 0;
 		mem_alloc.memoryTypeIndex = 0;
 		mem_alloc.allocationSize = mem_reqs.size;
@@ -761,7 +841,7 @@ public:
 		}
 
 		// Allocate memory
-		auto res = vkAllocateMemory(device, &mem_alloc, NULL, &m_mem);
+		auto res = vkAllocateMemory(device, &mem_alloc, nullptr, &m_mem);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -787,7 +867,7 @@ public:
 
 		VkImageMemoryBarrier image_memory_barrier = {};
 		image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		image_memory_barrier.pNext = NULL;
+		image_memory_barrier.pNext = nullptr;
 		image_memory_barrier.srcAccessMask = 0;
 		image_memory_barrier.dstAccessMask = 0;
 		image_memory_barrier.oldLayout = old_image_layout;
@@ -839,7 +919,7 @@ public:
 		VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-		vkCmdPipelineBarrier(info.cmd, src_stages, dest_stages, 0, 0, NULL, 0, NULL,
+		vkCmdPipelineBarrier(info.cmd, src_stages, dest_stages, 0, 0, nullptr, 0, nullptr,
 			1, &image_memory_barrier);
 	}
 #endif
@@ -848,7 +928,7 @@ public:
 	{
 		VkImageViewCreateInfo view_info = {};
 		view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view_info.pNext = NULL;
+		view_info.pNext = nullptr;
 		view_info.image = VK_NULL_HANDLE;
 		view_info.format = m_depth_format;
 		view_info.components.r = VK_COMPONENT_SWIZZLE_R;
@@ -869,7 +949,7 @@ public:
 		}
 		// Create image view
 		view_info.image = m_image;
-		auto res = vkCreateImageView(device, &view_info, NULL, &m_view);
+		auto res = vkCreateImageView(device, &view_info, nullptr, &m_view);
 		if (res != VK_SUCCESS)
 		{
 			return false;
@@ -905,7 +985,7 @@ class Swapchain : public IDeviceResource
 
 		void destroy(VkDevice device)
 		{
-			vkDestroyImageView(device, view, NULL);
+			vkDestroyImageView(device, view, nullptr);
 		}
 	};
 	std::vector<std::unique_ptr<swap_chain_buffer>> m_buffers;
@@ -921,12 +1001,12 @@ public:
 			b->destroy(device);
 		}
 		m_buffers.clear();
-		vkDestroySwapchainKHR(device, m_swapchain, NULL);
+		vkDestroySwapchainKHR(device, m_swapchain, nullptr);
 	}
 
 	bool onCreate(VkDevice device)override
 	{
-		auto res = vkCreateSwapchainKHR(device, &m_swapchain_ci, NULL,
+		auto res = vkCreateSwapchainKHR(device, &m_swapchain_ci, nullptr,
 			&m_swapchain);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -948,7 +1028,7 @@ public:
 		auto swapchainExtent = surface->getExtent(w, h);
 
 		m_swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		m_swapchain_ci.pNext = NULL;
+		m_swapchain_ci.pNext = nullptr;
 		m_swapchain_ci.surface = surface->get();
 		m_swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
 		m_swapchain_ci.imageFormat = gpu->getPrimaryFormat();
@@ -965,7 +1045,7 @@ public:
 		m_swapchain_ci.imageUsage = usageFlags;
 		m_swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		m_swapchain_ci.queueFamilyIndexCount = 0;
-		m_swapchain_ci.pQueueFamilyIndices = NULL;
+		m_swapchain_ci.pQueueFamilyIndices = nullptr;
 
 		if (gpu->get_graphics_queue_family_index() != gpu->get_present_queue_family_index()) {
 			// If the graphics and present queues are from different queue families,
@@ -987,7 +1067,7 @@ public:
 	{
 		uint32_t swapchainImageCount;
 		auto res = vkGetSwapchainImagesKHR(device, m_swapchain,
-			&swapchainImageCount, NULL);
+			&swapchainImageCount, nullptr);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -1006,7 +1086,7 @@ public:
 		{
 			VkImageViewCreateInfo color_image_view = {};
 			color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			color_image_view.pNext = NULL;
+			color_image_view.pNext = nullptr;
 			color_image_view.format = format;
 			color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
 			color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
@@ -1022,7 +1102,7 @@ public:
 			color_image_view.image = swapchainImages[i];
 
 			auto sc_buffer = std::make_unique<swap_chain_buffer>();
-			res = vkCreateImageView(device, &color_image_view, NULL,
+			res = vkCreateImageView(device, &color_image_view, nullptr,
 				&sc_buffer->view);
 			if (res != VK_SUCCESS) {
 				return false;
@@ -1052,7 +1132,7 @@ public:
 	{
 		for (auto &stage: m_stages)
 		{
-			vkDestroyShaderModule(device, stage.m_shaderStage, NULL);
+			vkDestroyShaderModule(device, stage.m_shaderStage, nullptr);
 		}
 	}
 
@@ -1060,7 +1140,7 @@ public:
 	{
 		for (auto &stage : m_stages)
 		{
-			auto res = vkCreateShaderModule(device, &stage.m_moduleCreateInfo, NULL,
+			auto res = vkCreateShaderModule(device, &stage.m_moduleCreateInfo, nullptr,
 				&stage.m_shaderStage);
 			if (res != VK_SUCCESS) {
 				return false;
@@ -1078,7 +1158,7 @@ public:
 		auto &stage = m_stages[index];
 		stage.spv = spv;
 		stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		stage.m_moduleCreateInfo.pNext = NULL;
+		stage.m_moduleCreateInfo.pNext = nullptr;
 		stage.m_moduleCreateInfo.flags = 0;
 		stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
 		stage.m_moduleCreateInfo.pCode = stage.spv.data();
@@ -1088,45 +1168,98 @@ public:
 typedef DeviceResource<Shader> ShaderResource;
 
 
+class PipelineLayout : IDeviceResource
+{
+	VkDescriptorSetLayoutBinding m_layout_bindings[1];
+	VkDescriptorSetLayoutCreateInfo m_descriptor_layout = {};
+	VkDescriptorSetLayout m_desc_layout = nullptr;
+
+	VkPipelineLayoutCreateInfo m_pPipelineLayoutCreateInfo = {};
+	VkPipelineLayout m_pipeline_layout = nullptr;
+
+
+public:
+	void onDestroy(VkDevice device)override
+	{
+		vkDestroyDescriptorSetLayout(device, m_desc_layout, nullptr);
+		vkDestroyPipelineLayout(device, m_pipeline_layout, nullptr);
+	}
+
+	bool onCreate(VkDevice device)override
+	{
+		auto res = vkCreateDescriptorSetLayout(device, &m_descriptor_layout, nullptr,
+			&m_desc_layout);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		m_pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
+		res = vkCreatePipelineLayout(device, &m_pPipelineLayoutCreateInfo, nullptr,
+			&m_pipeline_layout);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool configure()
+	{
+		m_layout_bindings[0].binding = 0;
+		m_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		m_layout_bindings[0].descriptorCount = 1;
+		m_layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		m_layout_bindings[0].pImmutableSamplers = nullptr;
+
+		// Next take layout bindings and use them to create a descriptor set layout
+		m_descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		m_descriptor_layout.pNext = nullptr;
+		m_descriptor_layout.bindingCount = 1;
+		m_descriptor_layout.pBindings = m_layout_bindings;
+
+		/* Now use the descriptor layout to create a pipeline layout */
+		m_pPipelineLayoutCreateInfo.sType =
+			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		m_pPipelineLayoutCreateInfo.pNext = nullptr;
+		m_pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+		m_pPipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+		m_pPipelineLayoutCreateInfo.setLayoutCount = 1;
+
+		return true;
+	}
+};
+typedef DeviceResource<PipelineLayout> PipelineLayoutResource;
+
+
 class DeviceManager
 {
-	VkDevice m_device = nullptr;
 	std::vector<const char*> m_device_extension_names;
+	VkDevice m_device;
 
 	std::unique_ptr<SwapchainResource> m_swapchain;
 	std::unique_ptr<DepthBufferResource> m_depth;
-	std::vector<std::unique_ptr<FramebufferResource>> m_framebuffers;
+	std::unique_ptr<FramebufferResource> m_framebuffer;
 	std::unique_ptr<VertexBufferResource> m_vertex_buffer;
 	std::unique_ptr<UniformBufferResource> m_uniform_data;
-
-	VkDescriptorSetLayout m_desc_layout=nullptr;
-	VkPipelineLayout m_pipeline_layout=nullptr;
-
-	VkRenderPass m_render_pass=nullptr;
-
 	std::unique_ptr<ShaderResource> m_shader;
+	std::unique_ptr<PipelineLayoutResource> m_pipelinelayout;
 
 public:
 	DeviceManager()
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 	}
-
 	~DeviceManager()
 	{
-		m_vertex_buffer.reset();
-		m_framebuffers.clear();
-		m_uniform_data.reset();
-		m_depth.reset();
+		m_pipelinelayout.reset();
 		m_shader.reset();
-
-		vkDestroyRenderPass(m_device, m_render_pass, NULL);
-
-		vkDestroyDescriptorSetLayout(m_device, m_desc_layout, NULL);
-		vkDestroyPipelineLayout(m_device, m_pipeline_layout, NULL);
-
+		m_uniform_data.reset();
+		m_vertex_buffer.reset();
+		m_framebuffer.reset();
+		m_depth.reset();
 		m_swapchain.reset();
-		vkDestroyDevice(m_device, NULL);
+		vkDestroyDevice(m_device, nullptr);
 	}
 
 	bool create(const std::shared_ptr<GpuManager> &gpu)
@@ -1139,22 +1272,21 @@ public:
 		VkDeviceQueueCreateInfo queue_info = {};
 		float queue_priorities[1] = { 0.0 };
 		queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_info.pNext = NULL;
+		queue_info.pNext = nullptr;
 		queue_info.queueCount = 1;
 		queue_info.pQueuePriorities = queue_priorities;
 		queue_info.queueFamilyIndex = graphics_queue_family_index;
 
 		VkDeviceCreateInfo device_info = {};
 		device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		device_info.pNext = NULL;
+		device_info.pNext = nullptr;
 		device_info.queueCreateInfoCount = 1;
 		device_info.pQueueCreateInfos = &queue_info;
 		device_info.enabledExtensionCount = m_device_extension_names.size();
 		device_info.ppEnabledExtensionNames = data_or_null(m_device_extension_names);
-		device_info.pEnabledFeatures = NULL;
+		device_info.pEnabledFeatures = nullptr;
 
-		auto res = vkCreateDevice(gpu->get(), &device_info, NULL, &m_device);
-
+		auto res = vkCreateDevice(gpu->get(), &device_info, nullptr, &m_device);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -1220,115 +1352,12 @@ public:
 		return true;
 	}
 	
-	bool createDescriptorAndPipelineLayout()
-	{
-		VkDescriptorSetLayoutBinding layout_bindings[1];
-		layout_bindings[0].binding = 0;
-		layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		layout_bindings[0].descriptorCount = 1;
-		layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		layout_bindings[0].pImmutableSamplers = NULL;
-
-		// Next take layout bindings and use them to create a descriptor set layout
-		VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
-		descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		descriptor_layout.pNext = NULL;
-		descriptor_layout.bindingCount = 1;
-		descriptor_layout.pBindings = layout_bindings;
-
-		auto res = vkCreateDescriptorSetLayout(m_device, &descriptor_layout, NULL,
-			&m_desc_layout);
-		if (res != VK_SUCCESS) {
+	bool createDescriptorAndPipelineLayout() {
+		m_pipelinelayout = std::make_unique<PipelineLayoutResource>();
+		if (!m_pipelinelayout->resource().configure()) {
 			return false;
 		}
-
-		/* Now use the descriptor layout to create a pipeline layout */
-		VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = {};
-		pPipelineLayoutCreateInfo.sType =
-			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pPipelineLayoutCreateInfo.pNext = NULL;
-		pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-		pPipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-		pPipelineLayoutCreateInfo.setLayoutCount = 1;
-		pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
-
-		res = vkCreatePipelineLayout(m_device, &pPipelineLayoutCreateInfo, NULL,
-			&m_pipeline_layout);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	bool createRenderpass(const std::shared_ptr<GpuManager> &gpu
-		, bool include_depth=true
-		, bool clear=true
-		, VkImageLayout finalLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-	{
-		/* DEPENDS on init_swap_chain() and init_depth_buffer() */
-
-		/* Need attachments for render target and depth buffer */
-		VkAttachmentDescription attachments[2];
-		attachments[0].format = gpu->getPrimaryFormat();
-		attachments[0].samples = m_depth->resource().getSamples();
-		attachments[0].loadOp =
-			clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		attachments[0].finalLayout = finalLayout;
-		attachments[0].flags = 0;
-
-		if (include_depth) {
-			attachments[1].format = m_depth->resource().getFormat();
-			attachments[1].samples = m_depth->resource().getSamples();
-			attachments[1].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
-				: VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-			attachments[1].initialLayout =
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			attachments[1].finalLayout =
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			attachments[1].flags = 0;
-		}
-
-		VkAttachmentReference color_reference = {};
-		color_reference.attachment = 0;
-		color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-		VkAttachmentReference depth_reference = {};
-		depth_reference.attachment = 1;
-		depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-		VkSubpassDescription subpass = {};
-		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.flags = 0;
-		subpass.inputAttachmentCount = 0;
-		subpass.pInputAttachments = NULL;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &color_reference;
-		subpass.pResolveAttachments = NULL;
-		subpass.pDepthStencilAttachment = include_depth ? &depth_reference : NULL;
-		subpass.preserveAttachmentCount = 0;
-		subpass.pPreserveAttachments = NULL;
-
-		VkRenderPassCreateInfo rp_info = {};
-		rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		rp_info.pNext = NULL;
-		rp_info.attachmentCount = include_depth ? 2 : 1;
-		rp_info.pAttachments = attachments;
-		rp_info.subpassCount = 1;
-		rp_info.pSubpasses = &subpass;
-		rp_info.dependencyCount = 0;
-		rp_info.pDependencies = NULL;
-
-		auto res = vkCreateRenderPass(m_device, &rp_info, NULL, &m_render_pass);
-		if (res != VK_SUCCESS) {
+		if (!m_pipelinelayout->create(m_device)) {
 			return false;
 		}
 
@@ -1374,27 +1403,24 @@ public:
 		return true;
 	}
 
-	bool createFramebuffers(int w, int h)
+	bool createFramebuffers(VkFormat imageFormat, int w, int h)
 	{
-		for (uint32_t i = 0; i < m_swapchain->resource().getImageCount(); ++i) 
+		m_framebuffer=std::make_unique<FramebufferResource>();
+		auto imageView = m_swapchain->resource().getView(0);
+		auto imageSamples = m_depth->resource().getSamples();
+		auto depthView = m_depth->resource().getView();
+		auto depthSamples = m_depth->resource().getSamples();
+		auto depthFormat = m_depth->resource().getFormat();
+		if (!m_framebuffer->resource().configure(imageView, imageSamples, imageFormat, w, h
+			, depthView, depthSamples, depthFormat))
 		{
-			VkImageView attachments[] =
-			{
-				m_swapchain->resource().getView(i),
-				m_depth->resource().getView(),
-			};
-
-			auto fb=std::make_unique<FramebufferResource>();
-			if (!fb->resource().configure(m_render_pass
-				, attachments, _countof(attachments)
-				, w, h)) {
-				return false;
-			}
-			if (!fb->create(m_device)) {
-				return false;
-			}
-			m_framebuffers.push_back(std::move(fb));
+			return false;
 		}
+
+		if (!m_framebuffer->create(m_device)) {
+			return false;
+		}
+
 		return true;
 	}
 };
@@ -1445,14 +1471,14 @@ public:
 #endif
 		m_device.reset();
 		m_surface.reset();
-		vkDestroyInstance(m_inst, NULL);
+		vkDestroyInstance(m_inst, nullptr);
 	}
 
 	bool create()
 	{
 		VkApplicationInfo app_info = {};
 		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		app_info.pNext = NULL;
+		app_info.pNext = nullptr;
 		app_info.pApplicationName = m_app_short_name.c_str();
 		app_info.applicationVersion = 1;
 		app_info.pEngineName = m_engine_name.c_str();
@@ -1461,7 +1487,7 @@ public:
 
 		VkInstanceCreateInfo inst_info = {};
 		inst_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		inst_info.pNext = NULL;
+		inst_info.pNext = nullptr;
 		inst_info.flags = 0;
 		inst_info.pApplicationInfo = &app_info;
 		// layers
@@ -1471,7 +1497,7 @@ public:
 		inst_info.enabledExtensionCount = m_instance_extension_names.size();
 		inst_info.ppEnabledExtensionNames = data_or_null(m_instance_extension_names);
 
-		VkResult res = vkCreateInstance(&inst_info, NULL, &m_inst);
+		VkResult res = vkCreateInstance(&inst_info, nullptr, &m_inst);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -1495,7 +1521,7 @@ public:
     bool enumerate_gpu() 
     {
         uint32_t gpu_count=0;
-        VkResult res = vkEnumeratePhysicalDevices(m_inst, &gpu_count, NULL);
+        VkResult res = vkEnumeratePhysicalDevices(m_inst, &gpu_count, nullptr);
         if(gpu_count==0){
             return false;
         }
@@ -1576,19 +1602,13 @@ public:
 		if (!m_device->createUniformBuffer(m_gpus[0])) {
 			return false;
 		}
-		if (!m_device->createDescriptorAndPipelineLayout()) {
-			return false;
-		}
-		if (!m_device->createRenderpass(m_gpus[0])) {
-			return false;
-		}
 		if (!m_device->createVertexBuffer(m_gpus[0]
 			, vertexData
 			, dataSize, dataStride))
 		{
 			return false;
 		}
-		if (!m_device->createFramebuffers(w, h)) {
+		if (!m_device->createFramebuffers(m_gpus[0]->getPrimaryFormat(), w, h)) {
 			return false;
 		}
 		return true;
@@ -1615,6 +1635,10 @@ public:
 		)
 	{
 		if (!m_device->createShader(read(fragSpvPath), read(vertSpvPath))) {
+			return false;
+		}
+		if (!m_device->createDescriptorAndPipelineLayout())
+		{
 			return false;
 		}
 		return true;
