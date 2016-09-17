@@ -1,7 +1,4 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
+#include "glfwmanager.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -13,70 +10,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-
-class GlfwManager
-{
-	GLFWwindow *m_window = nullptr;
-
-public:
-	GlfwManager()
-	{
-	}
-
-	~GlfwManager()
-	{
-		glfwTerminate();
-	}
-
-	bool initilize() {
-		if (!glfwInit()) {
-			return false;
-		}
-
-		if (!glfwVulkanSupported())
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	bool createWindow(int w, int h
-		, const std::string &title)
-	{
-		if (m_window) {
-			return false;
-		}
-
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		m_window = glfwCreateWindow(w, h
-			, title.c_str(), nullptr, nullptr);
-		if (!m_window) {
-			return false;
-		}
-		//glfwMakeContextCurrent(m_window);
-		return true;
-	}
-
-	HWND getWindow()const
-	{
-		return glfwGetWin32Window(m_window);
-	}
-
-	bool runLoop()
-	{
-		if (glfwWindowShouldClose(m_window)) {
-			return false;
-		}
-		glfwPollEvents();
-		return true;
-	}
-
-	void swapBuffer()
-	{
-		glfwSwapBuffers(m_window);
-	}
-};
 
 
 template<typename T>
