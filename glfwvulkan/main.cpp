@@ -19,11 +19,6 @@ const T* data_or_null(const std::vector<T> &v)
 }
 
 
-PFN_vkCreateDebugReportCallbackEXT g_vkCreateDebugReportCallbackEXT = nullptr;
-PFN_vkDebugReportMessageEXT g_vkDebugReportMessageEXT = nullptr;
-PFN_vkDestroyDebugReportCallbackEXT g_vkDestroyDebugReportCallbackEXT = nullptr;
-
-
 VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
 	VkDebugReportFlagsEXT       flags,
 	VkDebugReportObjectTypeEXT  objectType,
@@ -1886,36 +1881,17 @@ public:
 
 class InstanceManager
 {
-	std::string m_app_short_name;
-	std::string m_engine_name;
-
 	VkInstance m_inst = nullptr;
-
-	std::vector<const char *> m_instance_layer_names;
-	std::vector<const char *> m_instance_extension_names;
-
-    std::vector<std::shared_ptr<GpuManager>> m_gpus;
-
 	VkDebugReportCallbackEXT m_callback;
+	PFN_vkCreateDebugReportCallbackEXT g_vkCreateDebugReportCallbackEXT = nullptr;
+	PFN_vkDebugReportMessageEXT g_vkDebugReportMessageEXT = nullptr;
+	PFN_vkDestroyDebugReportCallbackEXT g_vkDestroyDebugReportCallbackEXT = nullptr;
+
+	InstanceManager(VkInstance inst)
+		: m_inst(inst)
+	{}
 
 public:
-	InstanceManager(const std::string &app_name
-		, const std::string &engine_name)
-		: m_app_short_name(app_name), m_engine_name(engine_name)
-	{
-		m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		m_instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-
-#ifndef NDEBUG
-        // Enable validation layers in debug builds 
-        // to detect validation errors
-        m_instance_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
-        // Enable debug report extension in debug builds 
-        // to be able to consume validation errors 
-        m_instance_extension_names.push_back("VK_EXT_debug_report");
-#endif
-	}
-
 	~InstanceManager()
 	{
 #ifndef NDEBUG
@@ -1926,14 +1902,60 @@ public:
 
 	VkInstance get()const { return m_inst; }
 
-	bool create()
+	bool setupDebugCallback()
 	{
+		// Load VK_EXT_debug_report entry points in debug builds
+		g_vkCreateDebugReportCallbackEXT =
+			reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkCreateDebugReportCallbackEXT"));
+		g_vkDebugReportMessageEXT =
+			reinterpret_cast<PFN_vkDebugReportMessageEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkDebugReportMessageEXT"));
+		g_vkDestroyDebugReportCallbackEXT =
+			reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkDestroyDebugReportCallbackEXT"));
+
+		// Setup callback creation information
+		VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
+		callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+		callbackCreateInfo.pNext = nullptr;
+		callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+			VK_DEBUG_REPORT_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+		callbackCreateInfo.pfnCallback = &MyDebugReportCallback;
+		callbackCreateInfo.pUserData = nullptr;
+
+		// Register the callback
+		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
+		if (result != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+
+	static std::shared_ptr<InstanceManager> create(const std::string &app_name
+	, const std::string &engine_name)
+	{
+		std::vector<const char *> m_instance_layer_names;
+		std::vector<const char *> m_instance_extension_names;
+		m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+		m_instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#ifndef NDEBUG
+		// Enable validation layers in debug builds 
+		// to detect validation errors
+		m_instance_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
+		// Enable debug report extension in debug builds 
+		// to be able to consume validation errors 
+		m_instance_extension_names.push_back("VK_EXT_debug_report");
+#endif
+
 		VkApplicationInfo app_info = {};
 		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		app_info.pNext = nullptr;
-		app_info.pApplicationName = m_app_short_name.c_str();
+		app_info.pApplicationName = app_name.c_str();
 		app_info.applicationVersion = 1;
-		app_info.pEngineName = m_engine_name.c_str();
+		app_info.pEngineName = engine_name.c_str();
 		app_info.engineVersion = 1;
 		app_info.apiVersion = VK_API_VERSION_1_0;
 
@@ -1949,93 +1971,43 @@ public:
 		inst_info.enabledExtensionCount = m_instance_extension_names.size();
 		inst_info.ppEnabledExtensionNames = data_or_null(m_instance_extension_names);
 
-		VkResult res = vkCreateInstance(&inst_info, nullptr, &m_inst);
+		VkInstance inst;
+		VkResult res = vkCreateInstance(&inst_info, nullptr, &inst);
 		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-#ifndef NDEBUG
-        /* Load VK_EXT_debug_report entry points in debug builds */
-        g_vkCreateDebugReportCallbackEXT =
-            reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>
-            (vkGetInstanceProcAddr(m_inst, "vkCreateDebugReportCallbackEXT"));
-        g_vkDebugReportMessageEXT =
-            reinterpret_cast<PFN_vkDebugReportMessageEXT>
-            (vkGetInstanceProcAddr(m_inst, "vkDebugReportMessageEXT"));
-        g_vkDestroyDebugReportCallbackEXT =
-            reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>
-            (vkGetInstanceProcAddr(m_inst, "vkDestroyDebugReportCallbackEXT"));
-#endif
-
-		return true;
-	}
-
-    bool enumerate_gpu() 
-    {
-        uint32_t gpu_count=0;
-        VkResult res = vkEnumeratePhysicalDevices(m_inst, &gpu_count, nullptr);
-        if(gpu_count==0){
-            return false;
-        }
-
-        std::vector<VkPhysicalDevice> gpus(gpu_count);
-        res = vkEnumeratePhysicalDevices(m_inst, &gpu_count, gpus.data());
-        if(res!=VK_SUCCESS){
-            return false;
-        }
-
-        for(auto gpu: gpus)
-        {
-            auto gpuManager=std::make_shared<GpuManager>(gpu);
-            if(!gpuManager->initialize()){
-                return false;
-            }
-            m_gpus.push_back(gpuManager);
-        }
-
-        return true;
-    }
-
-	std::shared_ptr<GpuManager> getGpu(int index)const
-	{
-		if (index < 0)return nullptr;
-		if (index >= m_gpus.size())return nullptr;
-		return m_gpus[index];
-	}
-
-	std::shared_ptr<DeviceManager> createDevice(size_t gpuIndex
-		, const std::shared_ptr<SurfaceManager> &surface)
-	{
-        if(gpuIndex>=m_gpus.size()){
-            return false;
-        }
-		auto gpu = m_gpus[gpuIndex];
-		if (!gpu->prepared(surface->get())) {
-			return false;
-		}
-
-		auto device = std::make_shared<DeviceManager>();
-		if (!device->create(gpu)) {
 			return nullptr;
 		}
+		auto instanceManager = std::shared_ptr<InstanceManager>(new InstanceManager(inst));
 
 #ifndef NDEBUG
-		/* Setup callback creation information */
-		VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
-		callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-		callbackCreateInfo.pNext = nullptr;
-		callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
-			VK_DEBUG_REPORT_WARNING_BIT_EXT |
-			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-		callbackCreateInfo.pfnCallback = &MyDebugReportCallback;
-		callbackCreateInfo.pUserData = nullptr;
-
-		/* Register the callback */
-		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
+		if (!instanceManager->setupDebugCallback()) {
+			return nullptr;
+		}
 #endif
 
-		return device;
+		return instanceManager;
 	}
+
+    std::vector<std::shared_ptr<GpuManager>> enumerate_gpu() 
+    {
+		std::vector<std::shared_ptr<GpuManager>> gpus;
+        uint32_t pdevice_count=0;
+        VkResult res = vkEnumeratePhysicalDevices(m_inst, &pdevice_count, nullptr);
+		if (pdevice_count > 0) {
+			std::vector<VkPhysicalDevice> pdevices(pdevice_count);
+			res = vkEnumeratePhysicalDevices(m_inst, &pdevice_count, pdevices.data());
+			if (res == VK_SUCCESS) {
+				for (auto pdevice : pdevices)
+				{
+					auto gpuManager = std::make_shared<GpuManager>(pdevice);
+					if (!gpuManager->initialize()) {
+						break;
+					}
+					gpus.push_back(gpuManager);
+				}
+			}
+		}
+        return gpus;
+    }
 };
 
 
@@ -2056,33 +2028,33 @@ int WINAPI WinMain(
 	if (!glfw.initilize()) {
 		return 1;
 	}
-
 	if (!glfw.createWindow(w, h, "Hello vulkan")) {
 		return 2;
 	}
 
 	// instance
-	InstanceManager instance("glfwvulkan", "vulkan engine");
-	if (!instance.create()) {
+	auto instance=InstanceManager::create("glfwvulkan", "vulkan engine");
+	if (!instance) {
 		return 3;
 	}
 
-    if(!instance.enumerate_gpu()){
+	auto gpus = instance->enumerate_gpu();
+    if(gpus.empty()){
         return 4;
     }
-	auto gpu = instance.getGpu(0);
-	if (!gpu) {
-		return 5;
-	}
+	auto gpu = gpus.front();
 
 	auto surface = std::make_shared<SurfaceManager>();
-	if (!surface->initialize(instance.get(), hInstance, glfw.getWindow()))
+	if (!surface->initialize(instance->get(), hInstance, glfw.getWindow()))
 	{
 		return 6;
 	}
+	if (!gpu->prepared(surface->get())) {
+		return 6;
+	}
 
-	auto device = instance.createDevice(0, surface);
-	if(!device){
+	auto device = std::make_shared<DeviceManager>();
+	if(!device->create(gpu)){
         return 7;
     }
 
