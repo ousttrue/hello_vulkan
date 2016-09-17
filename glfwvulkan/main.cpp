@@ -187,8 +187,6 @@ public:
 
 		return true;
     }
-
-
 };
 
 
@@ -367,46 +365,60 @@ struct IDeviceResource
 };
 
 
-class Framebuffer: public IDeviceResource
+class FramebufferResource
 {
-	VkRenderPass m_render_pass = nullptr;
-	VkAttachmentDescription m_attachments[2];
-	VkRenderPassCreateInfo m_rp_info = {};
-	VkAttachmentReference color_reference = {};
-	VkAttachmentReference depth_reference = {};
-	VkSubpassDescription subpass = {};
-	VkImageView views[2];
-
+	VkDevice m_device=nullptr;
+	VkRenderPass m_renderpass = nullptr;
 	VkFramebuffer m_framebuffer = nullptr;
-	VkFramebufferCreateInfo m_fb_info = {};
+
+	VkAttachmentReference m_color_reference = {};
+	VkAttachmentReference m_depth_reference = {};
+	std::vector<VkSubpassDescription> m_subpasses;
+	std::vector<VkAttachmentDescription> m_attachments;
+	std::vector<VkImageView> m_views;
 
 public:
-	VkRenderPass getRenderPass()const { return m_render_pass; }
+	VkRenderPass getRenderPass()const { return m_renderpass; }
 	VkFramebuffer getFramebuffer()const { return m_framebuffer; }
 
-	void onDestroy(VkDevice device)override
+	FramebufferResource(VkDevice device)
+		: m_device(device)
+	{}
+
+	~FramebufferResource()
 	{
-		if (m_framebuffer) {
-			vkDestroyFramebuffer(device, m_framebuffer, nullptr);
-			m_framebuffer = nullptr;
-		}
-		if (m_render_pass) {
-			vkDestroyRenderPass(device, m_render_pass, nullptr);
-			m_render_pass = nullptr;
-		}
+		vkDestroyFramebuffer(m_device, m_framebuffer, nullptr);
+		vkDestroyRenderPass(m_device, m_renderpass, nullptr);
 	}
 
-	bool onCreate(VkDevice device)override
+	bool create(int w, int h)
 	{
 		// renderpass
-		auto res = vkCreateRenderPass(device, &m_rp_info, nullptr, &m_render_pass);
+		VkRenderPassCreateInfo rp_info = {};
+		rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		rp_info.pNext = nullptr;
+		rp_info.attachmentCount = m_attachments.size();
+		rp_info.pAttachments = m_attachments.data();
+		rp_info.subpassCount = m_subpasses.size();
+		rp_info.pSubpasses = m_subpasses.data();
+		rp_info.dependencyCount = 0;
+		rp_info.pDependencies = nullptr;
+		auto res = vkCreateRenderPass(m_device, &rp_info, nullptr, &m_renderpass);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 
 		// framebuffer
-		m_fb_info.renderPass = m_render_pass;
-		res = vkCreateFramebuffer(device, &m_fb_info, nullptr,
+		VkFramebufferCreateInfo fb_info = {};
+		fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb_info.pNext = nullptr;
+		fb_info.renderPass = m_renderpass;
+		fb_info.attachmentCount = m_views.size();
+		fb_info.pAttachments = m_views.data();
+		fb_info.width = w;
+		fb_info.height = h;
+		fb_info.layers = 1;
+		res = vkCreateFramebuffer(m_device, &fb_info, nullptr,
 			&m_framebuffer);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -415,83 +427,63 @@ public:
 		return true;
 	}
 
-	bool configure(
-		VkImageView imageView, VkSampleCountFlagBits imageSamples, VkFormat imageFormat, int w, int h
-		, VkImageView depthView, VkSampleCountFlagBits depthSamples, VkFormat depthFormat
-		, VkImageLayout finalLayout= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, bool clear = true
-	)
+	void attachColor(VkImageView view, VkFormat format, VkSampleCountFlagBits samples
+		, bool clear=true)
 	{
-		/* Need m_attachments for render target and depth buffer */
-		{
-			m_attachments[0].format = imageFormat;
-			m_attachments[0].samples = imageSamples;
-			m_attachments[0].loadOp =
-				clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			m_attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			m_attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			m_attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			m_attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			m_attachments[0].finalLayout = finalLayout;
-			m_attachments[0].flags = 0;
-		}
-		{
-			m_attachments[1].format = depthFormat;
-			m_attachments[1].samples = depthSamples;
-			m_attachments[1].loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
-				: VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			m_attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			m_attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			m_attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-			m_attachments[1].initialLayout =
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			m_attachments[1].finalLayout =
-				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			m_attachments[1].flags = 0;
-		}
+		m_views.push_back(view);
+		m_attachments.push_back(VkAttachmentDescription());
+		auto &a = m_attachments.back();
+		a.format = format;
+		a.samples = samples;
+		a.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		a.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		a.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		a.flags = 0;
+	}
 
-		color_reference.attachment = 0;
-		color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	void attachDepth(VkImageView view, VkFormat format, VkSampleCountFlagBits samples
+		, bool clear = true)
+	{
+		m_views.push_back(view);
+		m_attachments.push_back(VkAttachmentDescription());
+		auto &a = m_attachments.back();
+		a.format = format;
+		a.samples = samples;
+		a.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+		a.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		a.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		a.flags = 0;
+	}
 
-		depth_reference.attachment = 1;
-		depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	void pushSubpass(int colorIndex, int depthIndex)
+	{
+		m_subpasses.push_back(VkSubpassDescription());
+		auto &subpass = m_subpasses.back();
+
+		m_color_reference.attachment = colorIndex;
+		m_color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		m_depth_reference.attachment = depthIndex;
+		m_depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.flags = 0;
 		subpass.inputAttachmentCount = 0;
 		subpass.pInputAttachments = nullptr;
 		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &color_reference;
+		subpass.pColorAttachments = &m_color_reference;
 		subpass.pResolveAttachments = nullptr;
-		subpass.pDepthStencilAttachment = &depth_reference;
+		subpass.pDepthStencilAttachment = &m_depth_reference;
 		subpass.preserveAttachmentCount = 0;
 		subpass.pPreserveAttachments = nullptr;
-
-		m_rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		m_rp_info.pNext = nullptr;
-		m_rp_info.attachmentCount = 2;
-		m_rp_info.pAttachments = m_attachments;
-		m_rp_info.subpassCount = 1;
-		m_rp_info.pSubpasses = &subpass;
-		m_rp_info.dependencyCount = 0;
-		m_rp_info.pDependencies = nullptr;
-
-		m_fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		m_fb_info.pNext = nullptr;
-
-		//m_fb_info.renderPass = m_render_pass;
-		views[0] = imageView;
-		views[1] = depthView;
-		m_fb_info.attachmentCount = 2;
-		m_fb_info.pAttachments = views;
-
-		m_fb_info.width = w;
-		m_fb_info.height = h;
-		m_fb_info.layers = 1;
-
-		return true;
 	}
 };
-typedef DeviceResource<Framebuffer> FramebufferResource;
 
 
 class Buffer : public IDeviceResource
@@ -1397,7 +1389,7 @@ public:
 		pipeline.stageCount = 2;
 		pipeline.pStages = m_shaderStages;
 
-		pipeline.renderPass = framebuffer->resource().getRenderPass();
+		pipeline.renderPass = framebuffer->getRenderPass();
 		pipeline.subpass = 0;
 
 		return true;
@@ -1710,8 +1702,8 @@ public:
 	}
 
 	VkDevice get()const { return m_device; }
-	VkRenderPass getRenderpass()const { return m_framebuffer->resource().getRenderPass(); }
-	VkFramebuffer getFramebuffer()const { return m_framebuffer->resource().getFramebuffer(); }
+	VkRenderPass getRenderpass()const { return m_framebuffer->getRenderPass(); }
+	VkFramebuffer getFramebuffer()const { return m_framebuffer->getFramebuffer(); }
 	VkPipeline getPipeline()const { return m_pipeline->resource().getPipeline(); }
 	VkPipelineLayout getPipelineLayout()const { return m_pipeline->resource().getPipelineLayout(); }
 	const VkDescriptorSet* getDescriptorSet()const { return m_pipeline->resource().getDescriptorSet(); }
@@ -1825,22 +1817,18 @@ public:
 
 	bool createFramebuffers(VkFormat imageFormat, VkImageView imageView, int w, int h)
 	{
-		m_framebuffer=std::make_unique<FramebufferResource>();
-		//auto imageView = m_swapchain->resource().getView();
+		m_framebuffer=std::make_unique<FramebufferResource>(m_device);
 		auto imageSamples = m_depth->resource().getSamples();
+		m_framebuffer->attachColor(imageView, imageFormat, imageSamples);
 		auto depthView = m_depth->resource().getView();
 		auto depthSamples = m_depth->resource().getSamples();
 		auto depthFormat = m_depth->resource().getFormat();
-		if (!m_framebuffer->resource().configure(imageView, imageSamples, imageFormat, w, h
-			, depthView, depthSamples, depthFormat))
+		m_framebuffer->attachDepth(depthView, depthFormat, depthSamples);
+		m_framebuffer->pushSubpass(0, 1);
+		if (!m_framebuffer->create(w, h))
 		{
 			return false;
 		}
-
-		if (!m_framebuffer->create(m_device)) {
-			return false;
-		}
-
 		return true;
 	}
 
