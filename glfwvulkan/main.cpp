@@ -1759,7 +1759,6 @@ class DeviceManager
 	std::vector<const char*> m_device_extension_names;
 	VkDevice m_device;
 
-	std::unique_ptr<SwapchainResource> m_swapchain;
 	std::unique_ptr<DepthbufferResource> m_depth;
 	std::unique_ptr<FramebufferResource> m_framebuffer;
 	std::unique_ptr<VertexbufferResource> m_vertex_buffer;
@@ -1779,7 +1778,6 @@ public:
 		m_vertex_buffer.reset();
 		m_framebuffer.reset();
 		m_depth.reset();
-		m_swapchain.reset();
 		vkDestroyDevice(m_device, nullptr);
 	}
 
@@ -1793,8 +1791,6 @@ public:
 	VkBuffer getVertexBuffer()const { return m_vertex_buffer->resource().getBuffer(); }
 	VkImage getDepthImage()const { return m_depth->resource().getImage(); }
 	VkImageAspectFlags getDepthAspect()const { return m_depth->resource().getAspect(); }
-	VkImage getCurrentImage()const { return m_swapchain->resource().getImage(); }
-	VkSemaphore getSemaphore()const { return m_swapchain->resource().getSemaphore();  }
 
 	bool create(const std::shared_ptr<GpuManager> &gpu)
 	{
@@ -1833,16 +1829,6 @@ public:
 		, int w, int h
 		)
 	{
-		m_swapchain = std::make_unique<SwapchainResource>();
-		if (!m_swapchain->resource().configure(gpu, surface, w, h)) {
-			return false;
-		}
-		if (!m_swapchain->create(m_device)) {
-			return false;
-		}
-		if (!m_swapchain->resource().prepareImages(m_device, gpu->getPrimaryFormat())) {
-			return false;
-		}
 
 		return true;
 	}
@@ -1909,10 +1895,10 @@ public:
 		return true;
 	}
 
-	bool createFramebuffers(VkFormat imageFormat, int w, int h)
+	bool createFramebuffers(VkFormat imageFormat, VkImageView imageView, int w, int h)
 	{
 		m_framebuffer=std::make_unique<FramebufferResource>();
-		auto imageView = m_swapchain->resource().getView();
+		//auto imageView = m_swapchain->resource().getView();
 		auto imageSamples = m_depth->resource().getSamples();
 		auto depthView = m_depth->resource().getView();
 		auto depthSamples = m_depth->resource().getSamples();
@@ -1961,16 +1947,6 @@ public:
 		}
 
 		return true;
-	}
-
-	void update()
-	{
-		m_swapchain->resource().update(m_device);
-	}
-
-	void present()
-	{
-		m_swapchain->resource().present();
 	}
 };
 
@@ -2177,16 +2153,21 @@ int WINAPI WinMain(
         return 7;
     }
 
-	if (!device->createSwapchain(gpu
-		, surface
-		, w, h))
-	{
+	auto swapchain = std::make_unique<SwapchainResource>();
+	if (!swapchain->resource().configure(gpu, surface, w, h)) {
 		return 8;
 	}
+	if (!swapchain->create(device->get())) {
+		return 8;
+	}
+	if (!swapchain->resource().prepareImages(device->get(), gpu->getPrimaryFormat())) {
+		return 8;
+	}
+
 	if (!device->createDepthbuffer(gpu, w, h)) {
 		return 9;
 	}
-	if (!device->createFramebuffers(gpu->getPrimaryFormat(), w, h)) {
+	if (!device->createFramebuffers(gpu->getPrimaryFormat(), swapchain->resource().getView(), w, h)) {
 		return 10;
 	}
 
@@ -2220,7 +2201,7 @@ int WINAPI WinMain(
 
 	while (glfw.runLoop())
 	{
-		device->update();
+		swapchain->resource().update(device->get());
 
 		// start
 		if(cmd->resource().begin())
@@ -2232,7 +2213,7 @@ int WINAPI WinMain(
 			, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
 
-			cmd->resource().setImageLayout(device->getCurrentImage()
+			cmd->resource().setImageLayout(swapchain->resource().getImage()
 			, VK_IMAGE_ASPECT_COLOR_BIT
 			, VK_IMAGE_LAYOUT_UNDEFINED
 			, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -2263,11 +2244,11 @@ int WINAPI WinMain(
 			if (!cmd->resource().end()) {
 				return 16;
 			}
-			if (!cmd->resource().submit(device->get(), device->getSemaphore())) {
+			if (!cmd->resource().submit(device->get(), swapchain->resource().getSemaphore())) {
 				return 17;
 			}
 
-			device->present();
+			swapchain->resource().present();
 		}
 	}
 
