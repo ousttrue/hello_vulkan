@@ -486,54 +486,51 @@ public:
 };
 
 
-class Buffer : public IDeviceResource
+class BufferResource
 {
+	VkDevice m_device = nullptr;
+
 	VkBuffer m_buf = nullptr;
-	VkBufferCreateInfo m_buf_info = {};
 	VkDeviceMemory m_mem = nullptr;
 	VkDescriptorBufferInfo m_buffer_info = {};
 
 public:
+	BufferResource(VkDevice device)
+		: m_device(device)
+	{}
+
+	~BufferResource()
+	{
+		vkDestroyBuffer(m_device, m_buf, nullptr);
+		vkFreeMemory(m_device, m_mem, nullptr);
+	}
+
 	VkBuffer getBuffer()const { return m_buf; }
 	const VkDescriptorBufferInfo getDescInfo()const { return m_buffer_info; }
 
-	void onDestroy(VkDevice device)override
+	bool create(const std::shared_ptr<GpuManager> &gpu
+		, VkBufferUsageFlags usage, uint32_t dataSize)
 	{
-		vkDestroyBuffer(device, m_buf, nullptr);
-		vkFreeMemory(device, m_mem, nullptr);
-	}
+		// buffer
+		VkBufferCreateInfo buf_info = {};
+		buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buf_info.pNext = nullptr;
+		buf_info.flags = 0;
 
-	bool onCreate(VkDevice device)override
-	{
-		auto res = vkCreateBuffer(device, &m_buf_info, nullptr
+		buf_info.usage = usage;
+		buf_info.size = dataSize;
+		buf_info.queueFamilyIndexCount = 0;
+		buf_info.pQueueFamilyIndices = nullptr;
+		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		auto res = vkCreateBuffer(m_device, &buf_info, nullptr
 			, &m_buf);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
-
-		return true;
-	}
-
-	bool configure(uint32_t dataSize, VkBufferUsageFlags usage)
-	{
-		m_buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		m_buf_info.pNext = nullptr;
-		m_buf_info.flags = 0;
-
-		m_buf_info.usage = usage;
-		m_buf_info.size = dataSize;
-		m_buf_info.queueFamilyIndexCount = 0;
-		m_buf_info.pQueueFamilyIndices = nullptr;
-		m_buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		return true;
-	}
-
-	bool allocate(VkDevice device, const std::shared_ptr<GpuManager> &gpu)
-	{
 		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(device, m_buf, &mem_reqs);
+		vkGetBufferMemoryRequirements(m_device, m_buf, &mem_reqs);
 
+		// alloc
 		VkMemoryAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		alloc_info.pNext = nullptr;
@@ -546,20 +543,22 @@ public:
 			//assert(pass && "No mappable, coherent memory");
 			return false;
 		}
-		auto res = vkAllocateMemory(device, &alloc_info, nullptr, &m_mem);
+		res = vkAllocateMemory(m_device, &alloc_info, nullptr, &m_mem);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 
-		m_buffer_info.buffer = m_buf;
-		m_buffer_info.range = mem_reqs.size;
-		m_buffer_info.offset = 0;
-
-		res = vkBindBufferMemory(device, m_buf,
+		// bind
+		res = vkBindBufferMemory(m_device, m_buf,
 			m_mem, 0);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+
+		// desc
+		m_buffer_info.buffer = m_buf;
+		m_buffer_info.range = mem_reqs.size;
+		m_buffer_info.offset = 0;
 
 		return true;
 	}
@@ -580,57 +579,43 @@ public:
 		return true;
 	}
 };
-typedef DeviceResource<Buffer> BufferResource;
 
 
-class VertexbufferResource: public BufferResource
+class VertexbufferDesc
 {
 	VkVertexInputBindingDescription m_vi_binding = {};
 	std::vector<VkVertexInputAttributeDescription> m_vi_attribs;
-
 public:
+	VertexbufferDesc()
+	{
+		m_vi_binding.binding = 0;
+		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	}
 	const VkVertexInputBindingDescription& getBindingDesc()const {
 		return m_vi_binding;
 	}
-
 	const VkVertexInputAttributeDescription* getAttribs()const
 	{
 		return m_vi_attribs.empty() ? nullptr : m_vi_attribs.data();
 	}
-
-	bool configure(uint32_t dataSize, uint32_t dataStride)
+	void pushAttrib(VkFormat format= VK_FORMAT_R32G32B32A32_SFLOAT, uint32_t offset=16)
 	{
-		if (!resource().configure(dataSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) {
-			return false;
-		}
-
-		m_vi_binding.binding = 0;
-		m_vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-		m_vi_binding.stride = dataStride;
-
-		m_vi_attribs.resize(2);
-
-		m_vi_attribs[0].binding = 0;
-		m_vi_attribs[0].location = 0;
-		m_vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		m_vi_attribs[0].offset = 0;
-
-		m_vi_attribs[1].binding = 0;
-		m_vi_attribs[1].location = 1;
-		m_vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		m_vi_attribs[1].offset = 16;
-
-		return true;
+		uint32_t location=m_vi_attribs.size();
+		m_vi_attribs.push_back(VkVertexInputAttributeDescription());
+		auto &iadesc = m_vi_attribs.back();
+		iadesc.binding = 0;
+		iadesc.location = location;
+		iadesc.format = format;
+		iadesc.offset = m_vi_binding.stride;
+		m_vi_binding.stride += 16;
 	}
 };
 
 
-class UniformbufferResource: public BufferResource
+class UniformbufferDesc
 {
-	glm::mat4 m_MVP;
-
 public:
-	bool configure(int width, int height)
+	static glm::mat4 calcMVP(const int width, int height)
 	{
 		float fov = glm::radians(45.0f);
 		if (width > height) {
@@ -638,51 +623,24 @@ public:
 		}
 
 		auto Projection = glm::perspective(fov,
-		static_cast<float>(width) /
-		static_cast<float>(height), 0.1f, 100.0f);
+			static_cast<float>(width) /
+			static_cast<float>(height), 0.1f, 100.0f);
 
 		auto View = glm::lookAt(
-		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
-		glm::vec3(0, 0, 0),  // and looks at the origin
-		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
+			glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
+			glm::vec3(0, 0, 0),  // and looks at the origin
+			glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
 		);
 
 		auto Model = glm::mat4(1.0f);
 
 		// Vulkan clip space has inverted Y and half Z.
 		auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.5f, 0.0f,
-		0.0f, 0.0f, 0.5f, 1.0f);
+			0.0f, -1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 0.5f, 0.0f,
+			0.0f, 0.0f, 0.5f, 1.0f);
 
-		m_MVP = Clip * Projection * View * Model;
-		/*
-		m_MVP = glm::mat4(
-			1, 0, 0, 0,
-			0, 1, 0, 0,
-			0, 0, 1, 0,
-			0, 0, 0, 2
-			);
-			*/
-		if (!resource().configure(sizeof(m_MVP), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT))
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	bool map(VkDevice device)
-	{
-		auto callback = [&MVP=m_MVP](uint8_t *pData, uint32_t size)
-		{
-			// MAP
-			memcpy(pData, &MVP, sizeof(MVP));
-		};
-		if (!resource().map(device, callback)) {
-			return false;
-		}
-		return true;
+		return Clip * Projection * View * Model;
 	}
 };
 
@@ -1193,9 +1151,9 @@ public:
 
 	bool configure(const std::vector<unsigned int> &vertSpv
 		, const std::vector<unsigned int> &fragSpv
-		, const std::unique_ptr<VertexbufferResource> &vertexbuffer
+		, const std::unique_ptr<VertexbufferDesc> &vertexbuffer
 		, const std::unique_ptr<FramebufferResource> &framebuffer
-		, const std::unique_ptr<UniformbufferResource> &uniformbuffer
+		, const std::unique_ptr<BufferResource> &uniformbuffer
 	) 
 	{
 		// shader
@@ -1261,7 +1219,7 @@ public:
 		m_alloc_info[0].descriptorSetCount = NUM_DESCRIPTOR_SETS;
 		m_desc_set.resize(NUM_DESCRIPTOR_SETS);
 
-		m_uniform_buffer_info = uniformbuffer->resource().getDescInfo();
+		m_uniform_buffer_info = uniformbuffer->getDescInfo();
 
 		// Now use the descriptor layout to create a pipeline layout
 		m_pPipelineLayoutCreateInfo.sType =
@@ -1681,8 +1639,9 @@ class DeviceManager
 
 	std::unique_ptr<DepthbufferResource> m_depth;
 	std::unique_ptr<FramebufferResource> m_framebuffer;
-	std::unique_ptr<VertexbufferResource> m_vertex_buffer;
-	std::unique_ptr<UniformbufferResource> m_uniform_data;
+	std::unique_ptr<BufferResource> m_vertex_buffer;
+	std::unique_ptr<VertexbufferDesc> m_vertex_desc;
+	std::unique_ptr<BufferResource> m_uniform_buffer;
 	std::unique_ptr<PipelineResource> m_pipeline;
 
 public:
@@ -1694,7 +1653,7 @@ public:
 	~DeviceManager()
 	{
 		m_pipeline.reset();
-		m_uniform_data.reset();
+		m_uniform_buffer.reset();
 		m_vertex_buffer.reset();
 		m_framebuffer.reset();
 		m_depth.reset();
@@ -1708,7 +1667,7 @@ public:
 	VkPipelineLayout getPipelineLayout()const { return m_pipeline->resource().getPipelineLayout(); }
 	const VkDescriptorSet* getDescriptorSet()const { return m_pipeline->resource().getDescriptorSet(); }
 	uint32_t getDescriptorSetCount()const { return m_pipeline->resource().getDescriptorSetCount(); }
-	VkBuffer getVertexBuffer()const { return m_vertex_buffer->resource().getBuffer(); }
+	VkBuffer getVertexBuffer()const { return m_vertex_buffer->getBuffer(); }
 	VkImage getDepthImage()const { return m_depth->resource().getImage(); }
 	VkImageAspectFlags getDepthAspect()const { return m_depth->resource().getAspect(); }
 
@@ -1775,19 +1734,16 @@ public:
 
 	bool createUniformBuffer(const std::shared_ptr<GpuManager> &gpu, int w, int h)
 	{
-		m_uniform_data = std::make_unique<UniformbufferResource>();
-
-		if (!m_uniform_data->configure(w, h)) {
+		m_uniform_buffer = std::make_unique<BufferResource>(m_device);
+		if (!m_uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
 			return false;
 		}
-		if (!m_uniform_data->create(m_device)) {
+		auto m = UniformbufferDesc::calcMVP(w, h);
+		auto callback = [m](uint8_t *p, uint32_t size) {
+			memcpy(p, &m, size);
+		};
+		if (!m_uniform_buffer->map(m_device, callback)) {
 			return false;
-		}
-		if (!m_uniform_data->resource().allocate(m_device, gpu)) {
-			return false;
-		}
-		if (!m_uniform_data->map(m_device)) {
-				return false;
 		}
 		return true;
 	}
@@ -1796,20 +1752,18 @@ public:
 		, const void *vertexData
 		, uint32_t dataSize, uint32_t dataStride)
 	{
-		m_vertex_buffer = std::make_unique<VertexbufferResource>();
-		if (!m_vertex_buffer->configure(dataSize, dataStride)) {
-			return false;
-		}
-		if (!m_vertex_buffer->create(m_device)) {
-			return false;
-		}
-		if (!m_vertex_buffer->resource().allocate(m_device, gpu)) {
+		m_vertex_desc = std::make_unique<VertexbufferDesc>();
+		m_vertex_desc->pushAttrib();
+		m_vertex_desc->pushAttrib();
+
+		m_vertex_buffer = std::make_unique<BufferResource>(m_device);
+		if(!m_vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, dataSize)){
 			return false;
 		}
 		auto callback= [vertexData, dataSize](uint8_t *pData, uint32_t size) {
 			memcpy(pData, vertexData, dataSize);
 		};
-		if (!m_vertex_buffer->resource().map(m_device, callback)) {
+		if (!m_vertex_buffer->map(m_device, callback)) {
 			return false;
 		}
 		return true;
@@ -1854,7 +1808,7 @@ public:
 	{
 		m_pipeline = std::make_unique<PipelineResource>();
 		if (!m_pipeline->resource().configure(read(vertSpvPath), read(fragSpvPath)
-		, m_vertex_buffer, m_framebuffer, m_uniform_data))
+		, m_vertex_desc, m_framebuffer, m_uniform_buffer))
 		{
 			return false;
 		}
