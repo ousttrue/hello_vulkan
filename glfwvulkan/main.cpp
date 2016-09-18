@@ -1187,13 +1187,15 @@ class PipelineResource
 {
 	std::shared_ptr<DeviceManager> m_device;
 
-	struct shader_stage
+	struct shader_source
 	{
+		VkShaderStageFlagBits stage;
 		std::vector<unsigned int> spv;
+		std::string entryPoint;
 		VkShaderModuleCreateInfo m_moduleCreateInfo;
 	};
-	std::vector<shader_stage> m_shaderInfos;
-	VkPipelineShaderStageCreateInfo m_shaderStages[2];
+	std::vector<shader_source> m_shaderSources;
+	std::vector<VkPipelineShaderStageCreateInfo> m_shaderInfos;
 
 	VkDescriptorSetLayoutBinding m_layout_bindings[1];
 	VkDescriptorSetLayoutCreateInfo m_descriptor_layout = {};
@@ -1247,7 +1249,7 @@ public:
 		vkDestroyPipelineCache(m_device->get(), m_pipelineCache, nullptr);
 		vkDestroyDescriptorSetLayout(m_device->get(), m_desc_layout, nullptr);
 		vkDestroyPipelineLayout(m_device->get(), m_pipeline_layout, nullptr);
-		for (auto &stage : m_shaderStages)
+		for (auto &stage : m_shaderInfos)
 		{
 			vkDestroyShaderModule(m_device->get(), stage.module, nullptr);
 		}
@@ -1258,48 +1260,50 @@ public:
 	const VkDescriptorSet* getDescriptorSet()const { return m_desc_set.data(); }
 	uint32_t getDescriptorSetCount()const { return m_desc_set.size(); }
 
-	bool create(const std::vector<unsigned int> &vertSpv
-		, const std::vector<unsigned int> &fragSpv
-		, const VertexbufferDesc &vertexbuffer
+	void addShader(VkShaderStageFlagBits stage
+		, const std::vector<unsigned int> &spv
+		, const std::string &entryPoint)
+	{
+		m_shaderSources.push_back(shader_source());
+		auto &source = m_shaderSources.back();
+		source.stage = stage;
+		source.spv = spv;
+		source.entryPoint = entryPoint;
+		source.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		source.m_moduleCreateInfo.pNext = nullptr;
+		source.m_moduleCreateInfo.flags = 0;
+		source.m_moduleCreateInfo.codeSize = source.spv.size() * sizeof(unsigned int);
+		source.m_moduleCreateInfo.pCode = source.spv.data();
+	}
+
+	bool createShader()
+	{
+		m_shaderInfos.resize(m_shaderSources.size());
+		for (size_t i=0; i<m_shaderSources.size(); ++i)
+		{
+			auto &s = m_shaderSources[i];
+			auto &ci = m_shaderInfos[i];
+			ci.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			ci.pNext = nullptr;
+			ci.flags = 0;
+			ci.pSpecializationInfo = nullptr;
+			ci.stage = s.stage;
+			ci.pName = s.entryPoint.c_str();
+			auto res = vkCreateShaderModule(m_device->get()
+				, &s.m_moduleCreateInfo, nullptr
+				, &ci.module);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool create(const VertexbufferDesc &vertexbuffer
 		, VkRenderPass renderPass
 		, const VkDescriptorBufferInfo &uniformbuffer_info
 	) 
 	{
-		// shader
-		m_shaderInfos.resize(2);
-		{
-			auto &stage = m_shaderInfos[0];
-			stage.spv = vertSpv;
-			stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			stage.m_moduleCreateInfo.pNext = nullptr;
-			stage.m_moduleCreateInfo.flags = 0;
-			stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
-			stage.m_moduleCreateInfo.pCode = stage.spv.data();
-
-			m_shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			m_shaderStages[0].pNext = nullptr;
-			m_shaderStages[0].flags = 0;
-			m_shaderStages[0].pSpecializationInfo = nullptr;
-			m_shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-			m_shaderStages[0].pName = "main";
-		}
-		{
-			auto &stage = m_shaderInfos[1];
-			stage.spv = fragSpv;
-			stage.m_moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			stage.m_moduleCreateInfo.pNext = nullptr;
-			stage.m_moduleCreateInfo.flags = 0;
-			stage.m_moduleCreateInfo.codeSize = stage.spv.size() * sizeof(unsigned int);
-			stage.m_moduleCreateInfo.pCode = stage.spv.data();
-
-			m_shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			m_shaderStages[1].pNext = nullptr;
-			m_shaderStages[1].flags = 0;
-			m_shaderStages[1].pSpecializationInfo = nullptr;
-			m_shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			m_shaderStages[1].pName = "main";
-		}
-
 		// binding
 		m_layout_bindings[0].binding = 0;
 		m_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1453,21 +1457,13 @@ public:
 		pipeline.pViewportState = &vp;
 		pipeline.pDepthStencilState = &ds;
 
-		pipeline.stageCount = 2;
-		pipeline.pStages = m_shaderStages;
+		pipeline.stageCount = m_shaderInfos.size();
+		pipeline.pStages = m_shaderInfos.data();
 
 		pipeline.renderPass = renderPass;
 		pipeline.subpass = 0;
 
-		// shader
-		for (size_t i = 0; i<m_shaderInfos.size(); ++i)
-		{
-			auto res = vkCreateShaderModule(m_device->get(), &m_shaderInfos[i].m_moduleCreateInfo, nullptr,
-				&m_shaderStages[i].module);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
-		}
+
 
 		// descriptor
 		auto res = vkCreateDescriptorSetLayout(m_device->get(), &m_descriptor_layout, nullptr,
@@ -1934,8 +1930,12 @@ int WINAPI WinMain(
 	}
 
 	PipelineResource pipeline(device);
-	if (!pipeline.create(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
-		, vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo()))
+	pipeline.addShader(VK_SHADER_STAGE_VERTEX_BIT, read("../15-draw_cube.vert.spv"), "main");
+	pipeline.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, read("../15-draw_cube.frag.spv"), "main");
+	if (!pipeline.createShader()) {
+		return 13;
+	}
+	if (!pipeline.create(vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo()))
 	{
 		return 13;
 	}
