@@ -1209,7 +1209,6 @@ class PipelineResource
 	VkPipelineLayout m_pipeline_layout = nullptr;
 
 	VkPipelineCache m_pipelineCache = nullptr;
-	VkPipelineCacheCreateInfo m_pipelineCacheInfo = {};
 
 	VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE];
 	VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1368,18 +1367,29 @@ public:
 		return true;
 	}
 
+	bool createPipelineCache()
+	{
+		VkPipelineCacheCreateInfo pipelineCacheInfo = {};
+		pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		pipelineCacheInfo.pNext = nullptr;
+		pipelineCacheInfo.initialDataSize = 0;
+		pipelineCacheInfo.pInitialData = nullptr;
+		pipelineCacheInfo.flags = 0;
+		auto res = vkCreatePipelineCache(m_device->get(), &pipelineCacheInfo, nullptr,
+			&m_pipelineCache);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+		return true;
+	}
+
 	bool create(const VertexbufferDesc &vertexbuffer
 	, VkRenderPass renderPass
 	, const VkDescriptorBufferInfo &uniformbuffer_info
 	)
 	{
 		m_uniform_buffer_info = uniformbuffer_info;
-
-		m_pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-		m_pipelineCacheInfo.pNext = nullptr;
-		m_pipelineCacheInfo.initialDataSize = 0;
-		m_pipelineCacheInfo.pInitialData = nullptr;
-		m_pipelineCacheInfo.flags = 0;
 
 		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamicState.pNext = nullptr;
@@ -1510,15 +1520,7 @@ public:
 		writes[0].dstBinding = 0;
 		vkUpdateDescriptorSets(m_device->get(), 1, writes, 0, NULL);
 
-		// pipeline cache
-		auto res = vkCreatePipelineCache(m_device->get(), &m_pipelineCacheInfo, nullptr,
-			&m_pipelineCache);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		res = vkCreateGraphicsPipelines(m_device->get(), m_pipelineCache, 1,
+		auto res = vkCreateGraphicsPipelines(m_device->get(), m_pipelineCache, 1,
 			&pipeline, nullptr, &m_pipeline);
 		if (res != VK_SUCCESS)
 		{
@@ -1944,6 +1946,9 @@ int WINAPI WinMain(
 		return 13;
 	}
 	if (!pipeline.createPipelineLayout()) {
+		return 13;
+	}
+	if (!pipeline.createPipelineCache()) {
 		return 13;
 	}
 	if (!pipeline.create(vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo())){
