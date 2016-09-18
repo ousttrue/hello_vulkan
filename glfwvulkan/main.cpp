@@ -689,12 +689,73 @@ public:
 };
 
 
+class DeviceMemoryResource
+{
+	std::shared_ptr<DeviceManager> m_device;
+	VkDeviceMemory m_mem = nullptr;
+	uint32_t m_size = 0;
+
+public:
+	DeviceMemoryResource(const std::shared_ptr<DeviceManager> &device)
+		: m_device(device)
+	{}
+
+	~DeviceMemoryResource()
+	{
+		vkFreeMemory(m_device->get(), m_mem, nullptr);
+	}
+
+	VkDeviceMemory get()const {
+		return m_mem;
+	}
+
+	bool allocate(const std::shared_ptr<GpuManager> &gpu
+		, const VkMemoryRequirements &mem_reqs)
+	{
+		VkMemoryAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc_info.pNext = nullptr;
+		alloc_info.memoryTypeIndex = 0;
+		alloc_info.allocationSize = mem_reqs.size;
+		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&alloc_info.memoryTypeIndex)) {
+			//assert(pass && "No mappable, coherent memory");
+			return false;
+		}
+		auto res = vkAllocateMemory(m_device->get(), &alloc_info, nullptr, &m_mem);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+		m_size = mem_reqs.size;
+		return true;
+	}
+
+	bool map(const std::function<void(uint8_t*, uint32_t)> &mapCallback)
+	{
+		uint8_t *pData;
+		auto res = vkMapMemory(m_device->get(), m_mem, 0, m_size, 0
+			, (void **)&pData);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		mapCallback(pData, m_size);
+
+		vkUnmapMemory(m_device->get(), m_mem);
+
+		return true;
+	}
+};
+
+
 class BufferResource
 {
 	std::shared_ptr<DeviceManager> m_device;
 
 	VkBuffer m_buf = nullptr;
-	VkDeviceMemory m_mem = nullptr;
+	VkMemoryRequirements m_mem_reqs = {};
 	VkDescriptorBufferInfo m_buffer_info = {};
 
 public:
@@ -705,11 +766,17 @@ public:
 	~BufferResource()
 	{
 		vkDestroyBuffer(m_device->get(), m_buf, nullptr);
-		vkFreeMemory(m_device->get(), m_mem, nullptr);
 	}
 
 	VkBuffer getBuffer()const { return m_buf; }
-	const VkDescriptorBufferInfo getDescInfo()const { return m_buffer_info; }
+	VkDescriptorBufferInfo getDescInfo()const 
+	{ 
+		return m_buffer_info; 
+	}
+	VkMemoryRequirements getMemoryRequirements()const
+	{
+		return m_mem_reqs;
+	}
 
 	bool create(const std::shared_ptr<GpuManager> &gpu
 		, VkBufferUsageFlags usage, uint32_t dataSize)
@@ -730,55 +797,22 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
-		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(m_device->get(), m_buf, &mem_reqs);
 
-		// alloc
-		VkMemoryAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc_info.pNext = nullptr;
-		alloc_info.memoryTypeIndex = 0;
-		alloc_info.allocationSize = mem_reqs.size;
-		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&alloc_info.memoryTypeIndex)) {
-			//assert(pass && "No mappable, coherent memory");
-			return false;
-		}
-		res = vkAllocateMemory(m_device->get(), &alloc_info, nullptr, &m_mem);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		// bind
-		res = vkBindBufferMemory(m_device->get(), m_buf,
-			m_mem, 0);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
+		vkGetBufferMemoryRequirements(m_device->get(), m_buf, &m_mem_reqs);
 		// desc
 		m_buffer_info.buffer = m_buf;
-		m_buffer_info.range = mem_reqs.size;
+		m_buffer_info.range = m_mem_reqs.size;
 		m_buffer_info.offset = 0;
 
 		return true;
 	}
 
-	bool map(const std::function<void(uint8_t*, uint32_t)> &mapCallback)
+	bool bind(VkDeviceMemory mem)
 	{
-		uint8_t *pData;
-		auto res = vkMapMemory(m_device->get(), m_mem, 0, m_buffer_info.range, 0
-			, (void **)&pData);
+		auto res = vkBindBufferMemory(m_device->get(), m_buf, mem, 0);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
-
-		mapCallback(pData, m_buffer_info.range);
-
-		vkUnmapMemory(m_device->get(), m_mem);
-
 		return true;
 	}
 };
@@ -1861,11 +1895,18 @@ int WINAPI WinMain(
 	if (!vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(g_vb_solid_face_colors_Data))) {
 		return 11;
 	}
+	auto vertex_memory = std::make_unique<DeviceMemoryResource>(device);
+	if (!vertex_memory->allocate(gpu, vertex_buffer->getMemoryRequirements())) {
+		return 11;
+	}
 	{
 		auto callback = [vertexData = g_vb_solid_face_colors_Data](uint8_t *pData, uint32_t size) {
 			memcpy(pData, vertexData, size);
 		};
-		if (!vertex_buffer->map(callback)) {
+		if (!vertex_memory->map(callback)) {
+			return 11;
+		}
+		if (!vertex_buffer->bind(vertex_memory->get())) {
 			return 11;
 		}
 	}
@@ -1874,12 +1915,19 @@ int WINAPI WinMain(
 	if (!uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
 		return 12;
 	}
+	auto uniform_memory = std::make_unique<DeviceMemoryResource>(device);
+	if (!uniform_memory->allocate(gpu, uniform_buffer->getMemoryRequirements())) {
+		return 12;
+	}
 	{
 		auto m = calcMVP(w, h);
 		auto callback = [m](uint8_t *p, uint32_t size) {
 			memcpy(p, &m, size);
 		};
-		if (!uniform_buffer->map(callback)) {
+		if (!uniform_memory->map(callback)) {
+			return 12;
+		}
+		if (!uniform_buffer->bind(uniform_memory->get())) {
 			return 12;
 		}
 	}
