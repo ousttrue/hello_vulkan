@@ -1,4 +1,5 @@
 #include "glfwmanager.h"
+#include "cube_vertices.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -371,12 +372,14 @@ public:
 
 class DeviceManager
 {
+	std::shared_ptr<InstanceManager> m_inst;
 	std::vector<const char*> m_device_extension_names;
 	std::vector<const char*> m_device_layer_names;
 	VkDevice m_device;
 
 public:
-	DeviceManager()
+	DeviceManager(const std::shared_ptr<InstanceManager> &inst)
+		: m_inst(inst)
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 #ifndef NDEBUG
@@ -1730,11 +1733,6 @@ public:
 		VkImageLayout old_image_layout,
 		VkImageLayout new_image_layout)
 	{
-		/* DEPENDS on info.cmd and info.queue initialized */
-
-		//assert(info.cmd != VK_NULL_HANDLE);
-		//assert(info.graphics_queue != VK_NULL_HANDLE);
-
 		VkImageMemoryBarrier image_memory_barrier = {};
 		image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		image_memory_barrier.pNext = nullptr;
@@ -1795,9 +1793,6 @@ public:
 };
 
 
-#include "cube_vertices.h"
-
-
 int WINAPI WinMain(
 	HINSTANCE hInstance,      // 現在のインスタンスのハンドル
 	HINSTANCE hPrevInstance,  // 以前のインスタンスのハンドル
@@ -1843,7 +1838,7 @@ int WINAPI WinMain(
 	}
 
 	// device
-	auto device = std::make_shared<DeviceManager>();
+	auto device = std::make_shared<DeviceManager>(instance);
 	if(!device->create(gpu)){
         return 7;
     }
