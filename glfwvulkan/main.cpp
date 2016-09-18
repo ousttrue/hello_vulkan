@@ -1026,31 +1026,28 @@ public:
 	VkSemaphore getSemaphore()const { return m_imageAcquiredSemaphore; }
 
 	bool create(const std::shared_ptr<GpuManager> &gpu
-		, const std::shared_ptr<SurfaceManager> &surface
+		, const SurfaceManager &surface
 		, int w, int h
 		, VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
 	{
 		// swapchain
-		if (!surface->getCapabilityFor(gpu->get())) {
-			return false;
-		}
 		m_present_queue_family_index = gpu->get_present_queue_family_index();
 
-		auto swapchainExtent = surface->getExtent(w, h);
+		auto swapchainExtent = surface.getExtent(w, h);
 
 		VkSwapchainCreateInfoKHR swapchain_ci = {};
 		swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		swapchain_ci.pNext = nullptr;
-		swapchain_ci.surface = surface->get();
-		swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
+		swapchain_ci.surface = surface.get();
+		swapchain_ci.minImageCount = surface.getDesiredNumberOfSwapchainImages();
 		swapchain_ci.imageFormat = gpu->getPrimaryFormat();
 		swapchain_ci.imageExtent.width = swapchainExtent.width;
 		swapchain_ci.imageExtent.height = swapchainExtent.height;
-		swapchain_ci.preTransform = surface->getPreTransform();
+		swapchain_ci.preTransform = surface.getPreTransform();
 		swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		swapchain_ci.imageArrayLayers = 1;
-		swapchain_ci.presentMode = surface->getSwapchainPresentMode();
+		swapchain_ci.presentMode = surface.getSwapchainPresentMode();
 		swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
 		swapchain_ci.clipped = true;
 		swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
@@ -1264,8 +1261,8 @@ public:
 	bool create(const std::vector<unsigned int> &vertSpv
 		, const std::vector<unsigned int> &fragSpv
 		, const VertexbufferDesc &vertexbuffer
-		, const std::unique_ptr<FramebufferResource> &framebuffer
-		, const std::unique_ptr<BufferResource> &uniformbuffer
+		, VkRenderPass renderPass
+		, const VkDescriptorBufferInfo &uniformbuffer_info
 	) 
 	{
 		// shader
@@ -1331,7 +1328,7 @@ public:
 		m_alloc_info[0].descriptorSetCount = NUM_DESCRIPTOR_SETS;
 		m_desc_set.resize(NUM_DESCRIPTOR_SETS);
 
-		m_uniform_buffer_info = uniformbuffer->getDescInfo();
+		m_uniform_buffer_info = uniformbuffer_info;
 
 		// Now use the descriptor layout to create a pipeline layout
 		m_pPipelineLayoutCreateInfo.sType =
@@ -1459,7 +1456,7 @@ public:
 		pipeline.stageCount = 2;
 		pipeline.pStages = m_shaderStages;
 
-		pipeline.renderPass = framebuffer->getRenderPass();
+		pipeline.renderPass = renderPass;
 		pipeline.subpass = 0;
 
 		// shader
@@ -1831,12 +1828,15 @@ int WINAPI WinMain(
 	auto gpu = gpus.front();
 
 	// surface
-	auto surface = std::make_shared<SurfaceManager>(instance);
-	if (!surface->create(hInstance, glfw.getWindow()))
+	SurfaceManager surface(instance);
+	if (!surface.create(hInstance, glfw.getWindow()))
 	{
 		return 6;
 	}
-	if (!gpu->prepare(surface->get())) {
+	if (!gpu->prepare(surface.get())) {
+		return 6;
+	}
+	if (!surface.getCapabilityFor(gpu->get())) {
 		return 6;
 	}
 
@@ -1846,42 +1846,42 @@ int WINAPI WinMain(
         return 7;
     }
 
-	auto swapchain = std::make_unique<SwapchainResource>(device);
-	if (!swapchain->create(gpu, surface, w, h)) {
+	SwapchainResource swapchain(device);
+	if (!swapchain.create(gpu, surface, w, h)) {
 		return 8;
 	}
-	if (!swapchain->prepareImages(gpu->getPrimaryFormat())) {
+	if (!swapchain.prepareImages(gpu->getPrimaryFormat())) {
 		return 8;
 	}
 
-	auto depth = std::make_unique<DepthbufferResource>(device);
-	if (!depth->create(gpu, w, h)) {
+	DepthbufferResource depth(device);
+	if (!depth.create(gpu, w, h)) {
 		return 9;
 	}
-	auto depth_memory = std::make_unique<DeviceMemoryResource>(device);
-	if (!depth_memory->allocate(gpu, depth->getMemoryRquirements(), 0)) {
+	DeviceMemoryResource depth_memory(device);
+	if (!depth_memory.allocate(gpu, depth.getMemoryRquirements(), 0)) {
 		return 9;
 	}
-	if (!depth->bind(depth_memory->get())) {
+	if (!depth.bind(depth_memory.get())) {
 		return 9;
 	}
-	if (!depth->createView()) {
+	if (!depth.createView()) {
 		return 9;
 	}
 
-	auto framebuffer = std::make_unique<FramebufferResource>(device);
+	FramebufferResource framebuffer(device);
 	{
-		auto imageSamples = depth->getSamples();
-		framebuffer->attachColor(swapchain->getView(), gpu->getPrimaryFormat(), depth->getSamples());
+		auto imageSamples = depth.getSamples();
+		framebuffer.attachColor(swapchain.getView(), gpu->getPrimaryFormat(), depth.getSamples());
 	}
 	{
-		auto depthView = depth->getView();
-		auto depthSamples = depth->getSamples();
-		auto depthFormat = depth->getFormat();
-		framebuffer->attachDepth(depthView, depthFormat, depthSamples);
+		auto depthView = depth.getView();
+		auto depthSamples = depth.getSamples();
+		auto depthFormat = depth.getFormat();
+		framebuffer.attachDepth(depthView, depthFormat, depthSamples);
 	}
-	framebuffer->pushSubpass(0, 1);
-	if (!framebuffer->create(w, h))
+	framebuffer.pushSubpass(0, 1);
+	if (!framebuffer.create(w, h))
 	{
 		return 10;
 	}
@@ -1890,12 +1890,12 @@ int WINAPI WinMain(
 	vertex_desc.pushAttrib();
 	vertex_desc.pushAttrib();
 
-	auto vertex_buffer = std::make_unique<BufferResource>(device);
-	if (!vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(g_vb_solid_face_colors_Data))) {
+	BufferResource vertex_buffer(device);
+	if (!vertex_buffer.create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(g_vb_solid_face_colors_Data))) {
 		return 11;
 	}
-	auto vertex_memory = std::make_unique<DeviceMemoryResource>(device);
-	if (!vertex_memory->allocate(gpu, vertex_buffer->getMemoryRequirements()
+	DeviceMemoryResource vertex_memory(device);
+	if (!vertex_memory.allocate(gpu, vertex_buffer.getMemoryRequirements()
 	, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
 		return 11;
 	}
@@ -1903,20 +1903,20 @@ int WINAPI WinMain(
 		auto callback = [vertexData = g_vb_solid_face_colors_Data](uint8_t *pData, uint32_t size) {
 			memcpy(pData, vertexData, size);
 		};
-		if (!vertex_memory->map(callback)) {
+		if (!vertex_memory.map(callback)) {
 			return 11;
 		}
-		if (!vertex_buffer->bind(vertex_memory->get())) {
+		if (!vertex_buffer.bind(vertex_memory.get())) {
 			return 11;
 		}
 	}
 
-	auto uniform_buffer = std::make_unique<BufferResource>(device);
-	if (!uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
+	BufferResource uniform_buffer(device);
+	if (!uniform_buffer.create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
 		return 12;
 	}
-	auto uniform_memory = std::make_unique<DeviceMemoryResource>(device);
-	if (!uniform_memory->allocate(gpu, uniform_buffer->getMemoryRequirements()
+	DeviceMemoryResource uniform_memory(device);
+	if (!uniform_memory.allocate(gpu, uniform_buffer.getMemoryRequirements()
 	, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
 		return 12;
 	}
@@ -1925,43 +1925,43 @@ int WINAPI WinMain(
 		auto callback = [m](uint8_t *p, uint32_t size) {
 			memcpy(p, &m, size);
 		};
-		if (!uniform_memory->map(callback)) {
+		if (!uniform_memory.map(callback)) {
 			return 12;
 		}
-		if (!uniform_buffer->bind(uniform_memory->get())) {
+		if (!uniform_buffer.bind(uniform_memory.get())) {
 			return 12;
 		}
 	}
 
-	auto pipeline = std::make_unique<PipelineResource>(device);
-	if (!pipeline->create(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
-		, vertex_desc, framebuffer, uniform_buffer))
+	PipelineResource pipeline(device);
+	if (!pipeline.create(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
+		, vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo()))
 	{
 		return 13;
 	}
 
-	auto cmd = std::make_unique<CommandBufferResource>(device);
-	if (!cmd->create(gpu->get_graphics_queue_family_index())) {
+	CommandBufferResource cmd(device);
+	if (!cmd.create(gpu->get_graphics_queue_family_index())) {
 		return 14;
 	}
 
 	while (glfw.runLoop())
 	{
-		swapchain->update();
+		swapchain.update();
 
 		// start
-		if (cmd->begin())
+		if (cmd.begin())
 		{
 			// Set the image layout to depth stencil optimal
-			cmd->setImageLayout(
-				depth->getImage()
-				, depth->getAspect() //m_view_info.subresourceRange.aspectMask
+			cmd.setImageLayout(
+				depth.getImage()
+				, depth.getAspect() //m_view_info.subresourceRange.aspectMask
 				, VK_IMAGE_LAYOUT_UNDEFINED
 				, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
 
-			cmd->setImageLayout(
-				swapchain->getImage()
+			cmd.setImageLayout(
+				swapchain.getImage()
 				, VK_IMAGE_ASPECT_COLOR_BIT
 				, VK_IMAGE_LAYOUT_UNDEFINED
 				, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -1970,33 +1970,33 @@ int WINAPI WinMain(
 			VkRect2D rect = {
 				0, 0, w, h
 			};
-			cmd->beginRenderPass(
-				framebuffer->getRenderPass()
-				, framebuffer->getFramebuffer()
+			cmd.beginRenderPass(
+				framebuffer.getRenderPass()
+				, framebuffer.getFramebuffer()
 				, rect);
 			{
-				cmd->bindPipeline(
-					pipeline->getPipeline(), pipeline->getPipelineLayout()
-					, pipeline->getDescriptorSet(), pipeline->getDescriptorSetCount()
+				cmd.bindPipeline(
+					pipeline.getPipeline(), pipeline.getPipelineLayout()
+					, pipeline.getDescriptorSet(), pipeline.getDescriptorSetCount()
 				);
 
-				cmd->bindVertexbuffer(
-					vertex_buffer->getBuffer());
+				cmd.bindVertexbuffer(
+					vertex_buffer.getBuffer());
 
-				cmd->initViewports(w, h);
+				cmd.initViewports(w, h);
 
-				cmd->draw();
+				cmd.draw();
 			}
-			cmd->endRenderPass();
+			cmd.endRenderPass();
 
-			if (!cmd->end()) {
+			if (!cmd.end()) {
 				return 16;
 			}
-			if (!cmd->submit(device->get(), swapchain->getSemaphore())) {
+			if (!cmd.submit(device->get(), swapchain.getSemaphore())) {
 				return 17;
 			}
 
-			swapchain->present();
+			swapchain.present();
 		}
 	}
 
