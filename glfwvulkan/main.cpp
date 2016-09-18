@@ -566,45 +566,6 @@ public:
 };
 
 
-template<class T>
-class DeviceResource
-{
-	VkDevice m_device=nullptr;
-
-	// avoid copy
-	DeviceResource(const DeviceResource &) = delete;
-	DeviceResource& operator=(const DeviceResource &) = delete;
-
-	T m_t;
-
-public:
-	DeviceResource()
-	{
-	}
-
-	virtual ~DeviceResource()
-	{
-		m_t.onDestroy(m_device);
-	}
-
-	bool create(VkDevice device)
-	{
-		m_device = device;
-		return m_t.onCreate(m_device);
-	}
-
-	T &resource() { return m_t; }
-	const T &resource()const { return m_t; }
-};
-
-
-struct IDeviceResource
-{
-	virtual void onDestroy(VkDevice device) = 0;
-	virtual bool onCreate(VkDevice device) = 0;
-};
-
-
 class FramebufferResource
 {
 	std::shared_ptr<DeviceManager> m_device;
@@ -1547,8 +1508,10 @@ public:
 };
 
 
-class CommandBuffer: IDeviceResource
+class CommandBufferResource
 {
+	std::shared_ptr<DeviceManager> m_device;
+
 	VkCommandPoolCreateInfo m_cmd_pool_info = {};
 	VkCommandPool m_cmd_pool;
 	VkCommandBufferAllocateInfo m_cmdInfo = {};
@@ -1568,7 +1531,8 @@ class CommandBuffer: IDeviceResource
 	const int NUM_SCISSORS = NUM_VIEWPORTS;
 
 public:
-	CommandBuffer()
+	CommandBufferResource(const std::shared_ptr<DeviceManager> &device)
+		: m_device(device)
 	{
 		m_clear_values[0].color.float32[0] = 0.2f;
 		m_clear_values[0].color.float32[1] = 0.2f;
@@ -1578,42 +1542,35 @@ public:
 		m_clear_values[1].depthStencil.stencil = 0;
 	}
 
-	void onDestroy(VkDevice device)
+	~CommandBufferResource()
 	{
-		vkFreeCommandBuffers(device, m_cmd_pool, _countof(m_cmd_bufs), m_cmd_bufs);
-		vkDestroyCommandPool(device, m_cmd_pool, nullptr);
+		vkFreeCommandBuffers(m_device->get(), m_cmd_pool, _countof(m_cmd_bufs), m_cmd_bufs);
+		vkDestroyCommandPool(m_device->get(), m_cmd_pool, nullptr);
 	}
 
-	bool onCreate(VkDevice device)
-	{
-		auto res =
-			vkCreateCommandPool(device, &m_cmd_pool_info, nullptr, &m_cmd_pool);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		m_cmdInfo.commandPool = m_cmd_pool;
-		res = vkAllocateCommandBuffers(device, &m_cmdInfo, m_cmd_bufs);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		vkGetDeviceQueue(device, m_graphics_queue_family_index, 0, &m_graphics_queue);
-
-		return true;
-	}
-
-	bool configure(int graphics_queue_family_index) 
+	bool create(int graphics_queue_family_index) 
 	{
 		m_cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		m_cmd_pool_info.pNext = nullptr;
 		m_cmd_pool_info.queueFamilyIndex = graphics_queue_family_index;
 		m_cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		auto res =
+			vkCreateCommandPool(m_device->get(), &m_cmd_pool_info, nullptr, &m_cmd_pool);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
 
 		m_cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		m_cmdInfo.pNext = nullptr;
 		m_cmdInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		m_cmdInfo.commandBufferCount = _countof(m_cmd_bufs);
+		m_cmdInfo.commandPool = m_cmd_pool;
+		res = vkAllocateCommandBuffers(m_device->get(), &m_cmdInfo, m_cmd_bufs);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		vkGetDeviceQueue(m_device->get(), m_graphics_queue_family_index, 0, &m_graphics_queue);
 
 		return true;
 	}
@@ -1820,7 +1777,6 @@ public:
 			1, &image_memory_barrier);
 	}
 };
-typedef DeviceResource<CommandBuffer> CommandBufferResource;
 
 
 #include "cube_vertices.h"
@@ -1941,11 +1897,8 @@ int WINAPI WinMain(
 		return 13;
 	}
 
-	auto cmd = std::make_unique<CommandBufferResource>();
-	if (!cmd->resource().configure(gpu->get_graphics_queue_family_index())) {
-		return 14;
-	}
-	if (!cmd->create(device->get())) {
+	auto cmd = std::make_unique<CommandBufferResource>(device);
+	if (!cmd->create(gpu->get_graphics_queue_family_index())) {
 		return 14;
 	}
 
@@ -1954,17 +1907,17 @@ int WINAPI WinMain(
 		swapchain->update();
 
 		// start
-		if (cmd->resource().begin())
+		if (cmd->begin())
 		{
 			// Set the image layout to depth stencil optimal
-			cmd->resource().setImageLayout(
+			cmd->setImageLayout(
 				depth->getImage()
 				, depth->getAspect() //m_view_info.subresourceRange.aspectMask
 				, VK_IMAGE_LAYOUT_UNDEFINED
 				, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
 
-			cmd->resource().setImageLayout(
+			cmd->setImageLayout(
 				swapchain->getImage()
 				, VK_IMAGE_ASPECT_COLOR_BIT
 				, VK_IMAGE_LAYOUT_UNDEFINED
@@ -1974,29 +1927,29 @@ int WINAPI WinMain(
 			VkRect2D rect = {
 				0, 0, w, h
 			};
-			cmd->resource().beginRenderPass(
+			cmd->beginRenderPass(
 				framebuffer->getRenderPass()
 				, framebuffer->getFramebuffer()
 				, rect);
 			{
-				cmd->resource().bindPipeline(
+				cmd->bindPipeline(
 					pipeline->getPipeline(), pipeline->getPipelineLayout()
 					, pipeline->getDescriptorSet(), pipeline->getDescriptorSetCount()
 				);
 
-				cmd->resource().bindVertexbuffer(
+				cmd->bindVertexbuffer(
 					vertex_buffer->getBuffer());
 
-				cmd->resource().initViewports(w, h);
+				cmd->initViewports(w, h);
 
-				cmd->resource().draw();
+				cmd->draw();
 			}
-			cmd->resource().endRenderPass();
+			cmd->endRenderPass();
 
-			if (!cmd->resource().end()) {
+			if (!cmd->end()) {
 				return 16;
 			}
-			if (!cmd->resource().submit(device->get(), swapchain->getSemaphore())) {
+			if (!cmd->submit(device->get(), swapchain->getSemaphore())) {
 				return 17;
 			}
 
