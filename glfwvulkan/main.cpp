@@ -36,6 +36,35 @@ static std::vector<unsigned int> read(const std::string &path)
 }
 
 
+static glm::mat4 calcMVP(const int width, int height)
+{
+	float fov = glm::radians(45.0f);
+	if (width > height) {
+		fov *= static_cast<float>(height) / static_cast<float>(width);
+	}
+
+	auto Projection = glm::perspective(fov,
+		static_cast<float>(width) /
+		static_cast<float>(height), 0.1f, 100.0f);
+
+	auto View = glm::lookAt(
+		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
+		glm::vec3(0, 0, 0),  // and looks at the origin
+		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
+	);
+
+	auto Model = glm::mat4(1.0f);
+
+	// Vulkan clip space has inverted Y and half Z.
+	auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.5f, 0.0f,
+		0.0f, 0.0f, 0.5f, 1.0f);
+
+	return Clip * Projection * View * Model;
+}
+
+
 VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
 	VkDebugReportFlagsEXT       flags,
 	VkDebugReportObjectTypeEXT  objectType,
@@ -52,6 +81,116 @@ VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
 }
 
 
+class InstanceManager
+{
+	VkInstance m_inst = nullptr;
+	VkDebugReportCallbackEXT m_callback;
+	PFN_vkCreateDebugReportCallbackEXT g_vkCreateDebugReportCallbackEXT = nullptr;
+	PFN_vkDebugReportMessageEXT g_vkDebugReportMessageEXT = nullptr;
+	PFN_vkDestroyDebugReportCallbackEXT g_vkDestroyDebugReportCallbackEXT = nullptr;
+
+	InstanceManager(VkInstance inst)
+		: m_inst(inst)
+	{}
+
+public:
+	~InstanceManager()
+	{
+#ifndef NDEBUG
+		g_vkDestroyDebugReportCallbackEXT(m_inst, m_callback, nullptr);
+#endif
+		vkDestroyInstance(m_inst, nullptr);
+	}
+
+	VkInstance get()const { return m_inst; }
+
+	bool setupDebugCallback()
+	{
+		// Load VK_EXT_debug_report entry points in debug builds
+		g_vkCreateDebugReportCallbackEXT =
+			reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkCreateDebugReportCallbackEXT"));
+		g_vkDebugReportMessageEXT =
+			reinterpret_cast<PFN_vkDebugReportMessageEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkDebugReportMessageEXT"));
+		g_vkDestroyDebugReportCallbackEXT =
+			reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>
+			(vkGetInstanceProcAddr(m_inst, "vkDestroyDebugReportCallbackEXT"));
+
+		// Setup callback creation information
+		VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
+		callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
+		callbackCreateInfo.pNext = nullptr;
+		callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
+			VK_DEBUG_REPORT_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+		callbackCreateInfo.pfnCallback = &MyDebugReportCallback;
+		callbackCreateInfo.pUserData = nullptr;
+
+		// Register the callback
+		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
+		if (result != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
+
+	static std::shared_ptr<InstanceManager> create(const std::string &app_name
+		, const std::string &engine_name)
+	{
+		std::vector<const char *> m_instance_layer_names;
+		std::vector<const char *> m_instance_extension_names;
+		m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+		m_instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#ifndef NDEBUG
+		// Enable validation layers in debug builds 
+		// to detect validation errors
+		m_instance_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
+		// Enable debug report extension in debug builds 
+		// to be able to consume validation errors 
+		m_instance_extension_names.push_back("VK_EXT_debug_report");
+#endif
+
+		VkApplicationInfo app_info = {};
+		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		app_info.pNext = nullptr;
+		app_info.pApplicationName = app_name.c_str();
+		app_info.applicationVersion = 1;
+		app_info.pEngineName = engine_name.c_str();
+		app_info.engineVersion = 1;
+		app_info.apiVersion = VK_API_VERSION_1_0;
+
+		VkInstanceCreateInfo inst_info = {};
+		inst_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		inst_info.pNext = nullptr;
+		inst_info.flags = 0;
+		inst_info.pApplicationInfo = &app_info;
+		// layers
+		inst_info.enabledLayerCount = m_instance_layer_names.size();
+		inst_info.ppEnabledLayerNames = data_or_null(m_instance_layer_names);
+		// extensions
+		inst_info.enabledExtensionCount = m_instance_extension_names.size();
+		inst_info.ppEnabledExtensionNames = data_or_null(m_instance_extension_names);
+
+		VkInstance inst;
+		VkResult res = vkCreateInstance(&inst_info, nullptr, &inst);
+		if (res != VK_SUCCESS) {
+			return nullptr;
+		}
+		auto instanceManager = std::shared_ptr<InstanceManager>(new InstanceManager(inst));
+
+#ifndef NDEBUG
+		if (!instanceManager->setupDebugCallback()) {
+			return nullptr;
+		}
+#endif
+
+		return instanceManager;
+	}
+};
+
+
 class GpuManager
 {
 	VkPhysicalDevice m_gpu;
@@ -64,11 +203,34 @@ class GpuManager
 
 	VkFormat m_format = VK_FORMAT_UNDEFINED;
 
-public:
 	GpuManager(VkPhysicalDevice gpu)
 		: m_gpu(gpu)
 	{
 	}
+public:
+
+	static std::vector<std::shared_ptr<GpuManager>> enumerate_gpu(VkInstance inst)
+	{
+		std::vector<std::shared_ptr<GpuManager>> gpus;
+		uint32_t pdevice_count = 0;
+		VkResult res = vkEnumeratePhysicalDevices(inst, &pdevice_count, nullptr);
+		if (pdevice_count > 0) {
+			std::vector<VkPhysicalDevice> pdevices(pdevice_count);
+			res = vkEnumeratePhysicalDevices(inst, &pdevice_count, pdevices.data());
+			if (res == VK_SUCCESS) {
+				for (auto pdevice : pdevices)
+				{
+					auto gpuManager = std::shared_ptr<GpuManager>(new GpuManager(pdevice));
+					if (!gpuManager->initialize()) {
+						break;
+					}
+					gpus.push_back(gpuManager);
+				}
+			}
+		}
+		return gpus;
+	}
+
 
 	VkPhysicalDevice get()const { return m_gpu; }
 	VkFormat getPrimaryFormat()const { return m_format; }
@@ -83,7 +245,7 @@ public:
 	/*
 	const VkPhysicalDeviceMemoryProperties& get_memory_properties()const
 	{
-		return m_memory_properties;
+	return m_memory_properties;
 	}
 	*/
 	bool memory_type_from_properties(
@@ -203,7 +365,69 @@ public:
 		}
 
 		return true;
-    }
+	}
+};
+
+
+class DeviceManager
+{
+	std::vector<const char*> m_device_extension_names;
+	std::vector<const char*> m_device_layer_names;
+	VkDevice m_device;
+
+public:
+	DeviceManager()
+	{
+		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#ifndef NDEBUG
+		// Enable validation layers in debug builds to detect validation errors
+		m_device_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
+#endif
+	}
+
+	~DeviceManager()
+	{
+		vkDestroyDevice(m_device, nullptr);
+	}
+
+	VkDevice get()const { return m_device; }
+
+	bool create(const std::shared_ptr<GpuManager> &gpu)
+	{
+		int graphics_queue_family_index = gpu->get_graphics_queue_family_index();
+		if (graphics_queue_family_index < 0) {
+			return false;
+		}
+
+		VkDeviceQueueCreateInfo queue_info = {};
+		float queue_priorities[1] = { 0.0 };
+		queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_info.pNext = nullptr;
+		queue_info.queueCount = 1;
+		queue_info.pQueuePriorities = queue_priorities;
+		queue_info.queueFamilyIndex = graphics_queue_family_index;
+
+		VkDeviceCreateInfo device_info = {};
+		device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		device_info.pNext = nullptr;
+		device_info.queueCreateInfoCount = 1;
+		device_info.pQueueCreateInfos = &queue_info;
+
+		device_info.enabledExtensionCount = m_device_extension_names.size();
+		device_info.ppEnabledExtensionNames = data_or_null(m_device_extension_names);
+
+		device_info.enabledLayerCount = m_device_layer_names.size();
+		device_info.ppEnabledLayerNames = data_or_null(m_device_layer_names);
+
+		device_info.pEnabledFeatures = nullptr;
+
+		auto res = vkCreateDevice(gpu->get(), &device_info, nullptr, &m_device);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		return true;
+	}
 };
 
 
@@ -629,52 +853,28 @@ public:
 };
 
 
-static glm::mat4 calcMVP(const int width, int height)
+class DepthbufferResource
 {
-	float fov = glm::radians(45.0f);
-	if (width > height) {
-		fov *= static_cast<float>(height) / static_cast<float>(width);
-	}
+	std::shared_ptr<DeviceManager> m_device;
 
-	auto Projection = glm::perspective(fov,
-		static_cast<float>(width) /
-		static_cast<float>(height), 0.1f, 100.0f);
-
-	auto View = glm::lookAt(
-		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
-		glm::vec3(0, 0, 0),  // and looks at the origin
-		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
-	);
-
-	auto Model = glm::mat4(1.0f);
-
-	// Vulkan clip space has inverted Y and half Z.
-	auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, -1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.5f, 0.0f,
-		0.0f, 0.0f, 0.5f, 1.0f);
-
-	return Clip * Projection * View * Model;
-}
-
-
-class Depthbuffer : IDeviceResource
-{
 	VkSampleCountFlagBits m_depth_samples = VK_SAMPLE_COUNT_1_BIT;
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 
-	VkImageCreateInfo m_image_info = {};
 	VkImage m_image = nullptr;
 	VkDeviceMemory m_mem = nullptr;
 	VkImageView m_view = nullptr;
 	VkImageViewCreateInfo m_view_info = {};
 
 public:
-	void onDestroy(VkDevice device)override
+	DepthbufferResource(const std::shared_ptr<DeviceManager> &device)
+		:m_device(device)
+	{}
+
+	~DepthbufferResource()
 	{
-		vkDestroyImageView(device, m_view, nullptr);
-		vkDestroyImage(device, m_image, nullptr);
-		vkFreeMemory(device, m_mem, nullptr);
+		vkDestroyImageView(m_device->get(), m_view, nullptr);
+		vkDestroyImage(m_device->get(), m_image, nullptr);
+		vkFreeMemory(m_device->get(), m_mem, nullptr);
 	}
 
 	VkSampleCountFlagBits getSamples()const { return m_depth_samples; }
@@ -683,58 +883,52 @@ public:
 	VkImage getImage()const { return m_image; }
 	VkImageAspectFlags getAspect()const { return m_view_info.subresourceRange.aspectMask; }
 
-	bool onCreate(VkDevice device)override
-	{
-		auto res = vkCreateImage(device, &m_image_info, nullptr, &m_image);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-		return true;
-	}
-
-	bool configure(const std::shared_ptr<GpuManager> &gpu
+	bool create(const std::shared_ptr<GpuManager> &gpu
 		, int w, int h
 	)
 	{
+		// image
 		VkFormatProperties props;
 		vkGetPhysicalDeviceFormatProperties(gpu->get(), m_depth_format, &props);
 
+		VkImageCreateInfo image_info = {};
 		if (props.linearTilingFeatures &
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			m_image_info.tiling = VK_IMAGE_TILING_LINEAR;
+			image_info.tiling = VK_IMAGE_TILING_LINEAR;
 		}
 		else if (props.optimalTilingFeatures &
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-			m_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+			image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 		}
 		else {
 			/* Try other depth formats? */
 			//std::cout << "depth_format " << depth_format << " Unsupported.\n";
 			return false;
 		}
-		m_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		m_image_info.pNext = nullptr;
-		m_image_info.imageType = VK_IMAGE_TYPE_2D;
-		m_image_info.format = m_depth_format;
-		m_image_info.extent.width = w;
-		m_image_info.extent.height = h;
-		m_image_info.extent.depth = 1;
-		m_image_info.mipLevels = 1;
-		m_image_info.arrayLayers = 1;
-		m_image_info.samples = m_depth_samples;
-		m_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		m_image_info.queueFamilyIndexCount = 0;
-		m_image_info.pQueueFamilyIndices = nullptr;
-		m_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		m_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		m_image_info.flags = 0;
-		return true;
-	}
+		image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image_info.pNext = nullptr;
+		image_info.imageType = VK_IMAGE_TYPE_2D;
+		image_info.format = m_depth_format;
+		image_info.extent.width = w;
+		image_info.extent.height = h;
+		image_info.extent.depth = 1;
+		image_info.mipLevels = 1;
+		image_info.arrayLayers = 1;
+		image_info.samples = m_depth_samples;
+		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image_info.queueFamilyIndexCount = 0;
+		image_info.pQueueFamilyIndices = nullptr;
+		image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		image_info.flags = 0;
+		auto res = vkCreateImage(m_device->get(), &image_info, nullptr, &m_image);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
 
-	bool allocate(VkDevice device, const std::shared_ptr<GpuManager> &gpu)
-	{
+		// allocate
 		VkMemoryRequirements mem_reqs;
-		vkGetImageMemoryRequirements(device, m_image, &mem_reqs);
+		vkGetImageMemoryRequirements(m_device->get(), m_image, &mem_reqs);
 
 		VkMemoryAllocateInfo mem_alloc = {};
 		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -751,22 +945,17 @@ public:
 		}
 
 		// Allocate memory
-		auto res = vkAllocateMemory(device, &mem_alloc, nullptr, &m_mem);
+		res = vkAllocateMemory(m_device->get(), &mem_alloc, nullptr, &m_mem);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 
 		// Bind memory
-		res = vkBindImageMemory(device, m_image, m_mem, 0);
+		res = vkBindImageMemory(m_device->get(), m_image, m_mem, 0);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 
-		return true;
-	}
-
-	bool createView(VkDevice device)
-	{
 		m_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		m_view_info.pNext = nullptr;
 		m_view_info.image = VK_NULL_HANDLE;
@@ -789,7 +978,7 @@ public:
 		}
 		// Create image view
 		m_view_info.image = m_image;
-		auto res = vkCreateImageView(device, &m_view_info, nullptr, &m_view);
+		res = vkCreateImageView(m_device->get(), &m_view_info, nullptr, &m_view);
 		if (res != VK_SUCCESS)
 		{
 			return false;
@@ -798,7 +987,6 @@ public:
 		return true;
 	}
 };
-typedef DeviceResource<Depthbuffer> DepthbufferResource;
 
 
 class Swapchain : public IDeviceResource
@@ -1645,200 +1833,6 @@ public:
 typedef DeviceResource<CommandBuffer> CommandBufferResource;
 
 
-class DeviceManager
-{
-	std::vector<const char*> m_device_extension_names;
-	std::vector<const char*> m_device_layer_names;
-	VkDevice m_device;
-
-public:
-	DeviceManager()
-	{
-		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-#ifndef NDEBUG
-		// Enable validation layers in debug builds to detect validation errors
-		m_device_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
-#endif
-	}
-
-	~DeviceManager()
-	{
-		vkDestroyDevice(m_device, nullptr);
-	}
-
-	VkDevice get()const { return m_device; }
-
-	bool create(const std::shared_ptr<GpuManager> &gpu)
-	{
-		int graphics_queue_family_index = gpu->get_graphics_queue_family_index();
-		if (graphics_queue_family_index < 0) {
-			return false;
-		}
-
-		VkDeviceQueueCreateInfo queue_info = {};
-		float queue_priorities[1] = { 0.0 };
-		queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_info.pNext = nullptr;
-		queue_info.queueCount = 1;
-		queue_info.pQueuePriorities = queue_priorities;
-		queue_info.queueFamilyIndex = graphics_queue_family_index;
-
-		VkDeviceCreateInfo device_info = {};
-		device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		device_info.pNext = nullptr;
-		device_info.queueCreateInfoCount = 1;
-		device_info.pQueueCreateInfos = &queue_info;
-
-		device_info.enabledExtensionCount = m_device_extension_names.size();
-		device_info.ppEnabledExtensionNames = data_or_null(m_device_extension_names);
-
-		device_info.enabledLayerCount = m_device_layer_names.size();
-		device_info.ppEnabledLayerNames = data_or_null(m_device_layer_names);
-
-		device_info.pEnabledFeatures = nullptr;
-
-		auto res = vkCreateDevice(gpu->get(), &device_info, nullptr, &m_device);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		return true;
-	}
-};
-
-
-class InstanceManager
-{
-	VkInstance m_inst = nullptr;
-	VkDebugReportCallbackEXT m_callback;
-	PFN_vkCreateDebugReportCallbackEXT g_vkCreateDebugReportCallbackEXT = nullptr;
-	PFN_vkDebugReportMessageEXT g_vkDebugReportMessageEXT = nullptr;
-	PFN_vkDestroyDebugReportCallbackEXT g_vkDestroyDebugReportCallbackEXT = nullptr;
-
-	InstanceManager(VkInstance inst)
-		: m_inst(inst)
-	{}
-
-public:
-	~InstanceManager()
-	{
-#ifndef NDEBUG
-		g_vkDestroyDebugReportCallbackEXT(m_inst, m_callback, nullptr);
-#endif
-		vkDestroyInstance(m_inst, nullptr);
-	}
-
-	VkInstance get()const { return m_inst; }
-
-	bool setupDebugCallback()
-	{
-		// Load VK_EXT_debug_report entry points in debug builds
-		g_vkCreateDebugReportCallbackEXT =
-			reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>
-			(vkGetInstanceProcAddr(m_inst, "vkCreateDebugReportCallbackEXT"));
-		g_vkDebugReportMessageEXT =
-			reinterpret_cast<PFN_vkDebugReportMessageEXT>
-			(vkGetInstanceProcAddr(m_inst, "vkDebugReportMessageEXT"));
-		g_vkDestroyDebugReportCallbackEXT =
-			reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>
-			(vkGetInstanceProcAddr(m_inst, "vkDestroyDebugReportCallbackEXT"));
-
-		// Setup callback creation information
-		VkDebugReportCallbackCreateInfoEXT callbackCreateInfo;
-		callbackCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-		callbackCreateInfo.pNext = nullptr;
-		callbackCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
-			VK_DEBUG_REPORT_WARNING_BIT_EXT |
-			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-		callbackCreateInfo.pfnCallback = &MyDebugReportCallback;
-		callbackCreateInfo.pUserData = nullptr;
-
-		// Register the callback
-		VkResult result = g_vkCreateDebugReportCallbackEXT(m_inst, &callbackCreateInfo, nullptr, &m_callback);
-		if (result != VK_SUCCESS) {
-			return false;
-		}
-
-		return true;
-	}
-
-	static std::shared_ptr<InstanceManager> create(const std::string &app_name
-	, const std::string &engine_name)
-	{
-		std::vector<const char *> m_instance_layer_names;
-		std::vector<const char *> m_instance_extension_names;
-		m_instance_extension_names.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-		m_instance_extension_names.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#ifndef NDEBUG
-		// Enable validation layers in debug builds 
-		// to detect validation errors
-		m_instance_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
-		// Enable debug report extension in debug builds 
-		// to be able to consume validation errors 
-		m_instance_extension_names.push_back("VK_EXT_debug_report");
-#endif
-
-		VkApplicationInfo app_info = {};
-		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		app_info.pNext = nullptr;
-		app_info.pApplicationName = app_name.c_str();
-		app_info.applicationVersion = 1;
-		app_info.pEngineName = engine_name.c_str();
-		app_info.engineVersion = 1;
-		app_info.apiVersion = VK_API_VERSION_1_0;
-
-		VkInstanceCreateInfo inst_info = {};
-		inst_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		inst_info.pNext = nullptr;
-		inst_info.flags = 0;
-		inst_info.pApplicationInfo = &app_info;
-		// layers
-		inst_info.enabledLayerCount = m_instance_layer_names.size();
-		inst_info.ppEnabledLayerNames = data_or_null(m_instance_layer_names);
-		// extensions
-		inst_info.enabledExtensionCount = m_instance_extension_names.size();
-		inst_info.ppEnabledExtensionNames = data_or_null(m_instance_extension_names);
-
-		VkInstance inst;
-		VkResult res = vkCreateInstance(&inst_info, nullptr, &inst);
-		if (res != VK_SUCCESS) {
-			return nullptr;
-		}
-		auto instanceManager = std::shared_ptr<InstanceManager>(new InstanceManager(inst));
-
-#ifndef NDEBUG
-		if (!instanceManager->setupDebugCallback()) {
-			return nullptr;
-		}
-#endif
-
-		return instanceManager;
-	}
-
-    std::vector<std::shared_ptr<GpuManager>> enumerate_gpu() 
-    {
-		std::vector<std::shared_ptr<GpuManager>> gpus;
-        uint32_t pdevice_count=0;
-        VkResult res = vkEnumeratePhysicalDevices(m_inst, &pdevice_count, nullptr);
-		if (pdevice_count > 0) {
-			std::vector<VkPhysicalDevice> pdevices(pdevice_count);
-			res = vkEnumeratePhysicalDevices(m_inst, &pdevice_count, pdevices.data());
-			if (res == VK_SUCCESS) {
-				for (auto pdevice : pdevices)
-				{
-					auto gpuManager = std::make_shared<GpuManager>(pdevice);
-					if (!gpuManager->initialize()) {
-						break;
-					}
-					gpus.push_back(gpuManager);
-				}
-			}
-		}
-        return gpus;
-    }
-};
-
-
 #include "cube_vertices.h"
 
 
@@ -1867,7 +1861,7 @@ int WINAPI WinMain(
 	}
 
 	// gpu
-	auto gpus = instance->enumerate_gpu();
+	auto gpus = GpuManager::enumerate_gpu(instance->get());
     if(gpus.empty()){
         return 4;
     }
@@ -1900,29 +1894,20 @@ int WINAPI WinMain(
 		return 8;
 	}
 
-	auto depth = std::make_unique<DepthbufferResource>();
-	if (!depth->resource().configure(gpu, w, h)) {
-		return 9;
-	}
-	if (!depth->create(device->get())) {
-		return 9;
-	}
-	if (!depth->resource().allocate(device->get(), gpu)) {
-		return 9;
-	}
-	if (!depth->resource().createView(device->get())) {
+	auto depth = std::make_unique<DepthbufferResource>(device);
+	if (!depth->create(gpu, w, h)) {
 		return 9;
 	}
 
 	auto framebuffer = std::make_unique<FramebufferResource>(device->get());
 	{
-		auto imageSamples = depth->resource().getSamples();
-		framebuffer->attachColor(swapchain->resource().getView(), gpu->getPrimaryFormat(), depth->resource().getSamples());
+		auto imageSamples = depth->getSamples();
+		framebuffer->attachColor(swapchain->resource().getView(), gpu->getPrimaryFormat(), depth->getSamples());
 	}
 	{
-		auto depthView = depth->resource().getView();
-		auto depthSamples = depth->resource().getSamples();
-		auto depthFormat = depth->resource().getFormat();
+		auto depthView = depth->getView();
+		auto depthSamples = depth->getSamples();
+		auto depthFormat = depth->getFormat();
 		framebuffer->attachDepth(depthView, depthFormat, depthSamples);
 	}
 	framebuffer->pushSubpass(0, 1);
@@ -1985,19 +1970,20 @@ int WINAPI WinMain(
 		swapchain->resource().update(device->get());
 
 		// start
-		if(cmd->resource().begin())
+		if (cmd->resource().begin())
 		{
 			// Set the image layout to depth stencil optimal
-			cmd->resource().setImageLayout(depth->resource().getImage()
-			, depth->resource().getAspect() //m_view_info.subresourceRange.aspectMask
-			, VK_IMAGE_LAYOUT_UNDEFINED
-			, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			cmd->resource().setImageLayout(
+				depth->getImage()
+				, depth->getAspect() //m_view_info.subresourceRange.aspectMask
+				, VK_IMAGE_LAYOUT_UNDEFINED
+				, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
 
 			cmd->resource().setImageLayout(swapchain->resource().getImage()
-			, VK_IMAGE_ASPECT_COLOR_BIT
-			, VK_IMAGE_LAYOUT_UNDEFINED
-			, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+				, VK_IMAGE_ASPECT_COLOR_BIT
+				, VK_IMAGE_LAYOUT_UNDEFINED
+				, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 			);
 
 			VkRect2D rect = {
