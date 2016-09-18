@@ -41,4 +41,5 @@ filter {}
 
 include "glfwvulkan"
 dofile "glfw.lua"
+dofile "glslang.lua"
 

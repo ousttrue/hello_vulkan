@@ -1,5 +1,6 @@
 #include "glfwmanager.h"
 #include "cube_vertices.h"
+#include "util.hpp"
 #include <string>
 #include <vector>
 #include <memory>
@@ -11,6 +12,40 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+
+// For this sample, we'll start with GLSL so the shader function is plain
+// and then use the glslang GLSLtoSPV utility to convert it to SPIR-V for
+// the driver.  We do this for clarity rather than using pre-compiled
+// SPIR-V
+
+auto vertShaderText =
+"#version 400\n"
+"#extension GL_ARB_separate_shader_objects : enable\n"
+"#extension GL_ARB_shading_language_420pack : enable\n"
+"layout (std140, binding = 0) uniform bufferVals {\n"
+"    mat4 mvp;\n"
+"} myBufferVals;\n"
+"layout (location = 0) in vec4 pos;\n"
+"layout (location = 1) in vec4 inColor;\n"
+"layout (location = 0) out vec4 outColor;\n"
+"out gl_PerVertex { \n"
+"    vec4 gl_Position;\n"
+"};\n"
+"void main() {\n"
+"   outColor = inColor;\n"
+"   gl_Position = myBufferVals.mvp * pos;\n"
+"}\n";
+
+auto fragShaderText =
+"#version 400\n"
+"#extension GL_ARB_separate_shader_objects : enable\n"
+"#extension GL_ARB_shading_language_420pack : enable\n"
+"layout (location = 0) in vec4 color;\n"
+"layout (location = 0) out vec4 outColor;\n"
+"void main() {\n"
+"   outColor = color;\n"
+"}\n";
 
 
 template<typename T>
@@ -34,6 +69,14 @@ static std::vector<unsigned int> read(const std::string &path)
 		}
 	}
 	return buf;
+}
+
+
+std::vector<uint32_t> GL2SPV(VkShaderStageFlagBits stage, const char *src)
+{
+	std::vector<uint32_t> spv;
+	auto retVal = GLSLtoSPV(stage, src, spv);
+	return spv;
 }
 
 
@@ -1931,8 +1974,14 @@ int WINAPI WinMain(
 	}
 
 	PipelineResource pipeline(device);
-	pipeline.addShader(VK_SHADER_STAGE_VERTEX_BIT, read("../15-draw_cube.vert.spv"), "main");
-	pipeline.addShader(VK_SHADER_STAGE_FRAGMENT_BIT, read("../15-draw_cube.frag.spv"), "main");
+
+	init_glslang();
+	pipeline.addShader(VK_SHADER_STAGE_VERTEX_BIT
+		, GL2SPV(VK_SHADER_STAGE_VERTEX_BIT, vertShaderText), "main");
+	pipeline.addShader(VK_SHADER_STAGE_FRAGMENT_BIT
+		, GL2SPV(VK_SHADER_STAGE_FRAGMENT_BIT, fragShaderText), "main");
+	finalize_glslang();
+
 	if (!pipeline.createShader()) {
 		return 13;
 	}

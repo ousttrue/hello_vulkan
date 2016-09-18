@@ -17,11 +17,13 @@ flags{
 files {
     "*.cpp",
     "*.h",
+    "*.hpp",
 }
 includedirs { 
     "../glfw/include",
     "../glm/include",
     "C:/VulkanSDK/1.0.26.0/Include",
+    "../glslang",
 }
 defines { 
     "WIN32",
@@ -36,5 +38,6 @@ libdirs {
 links { 
     "glfw3",
     "vulkan-1",
+    "glslang",
 }
 
