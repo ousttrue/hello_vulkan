@@ -1187,6 +1187,7 @@ class PipelineResource
 {
 	std::shared_ptr<DeviceManager> m_device;
 
+	// shader
 	struct shader_source
 	{
 		VkShaderStageFlagBits stage;
@@ -1197,19 +1198,14 @@ class PipelineResource
 	std::vector<shader_source> m_shaderSources;
 	std::vector<VkPipelineShaderStageCreateInfo> m_shaderInfos;
 
-	VkDescriptorSetLayoutBinding m_layout_bindings[1];
-	VkDescriptorSetLayoutCreateInfo m_descriptor_layout = {};
+	// descriptor
 	VkDescriptorSetLayout m_desc_layout = nullptr;
-
-	const int NUM_DESCRIPTOR_SETS = 1;
-	VkDescriptorSetAllocateInfo m_alloc_info[1];
 	std::vector<VkDescriptorSet> m_desc_set;
-	VkDescriptorPoolSize type_count[2];
-	VkDescriptorPoolCreateInfo descriptor_pool = {};
 	VkDescriptorPool m_desc_pool = nullptr;
+
+	// pipeline
 	VkDescriptorBufferInfo m_uniform_buffer_info;
 
-	VkPipelineLayoutCreateInfo m_pPipelineLayoutCreateInfo = {};
 	VkPipelineLayout m_pipeline_layout = nullptr;
 
 	VkPipelineCache m_pipelineCache = nullptr;
@@ -1299,48 +1295,85 @@ public:
 		return true;
 	}
 
-	bool create(const VertexbufferDesc &vertexbuffer
-		, VkRenderPass renderPass
-		, const VkDescriptorBufferInfo &uniformbuffer_info
-	) 
+	bool createUniformBufferDescriptor()
 	{
-		// binding
-		m_layout_bindings[0].binding = 0;
-		m_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		m_layout_bindings[0].descriptorCount = 1;
-		m_layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-		m_layout_bindings[0].pImmutableSamplers = nullptr;
-		// Next take layout bindings and use them to create a descriptor set layout
-		m_descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		m_descriptor_layout.pNext = nullptr;
-		m_descriptor_layout.bindingCount = 1;
-		m_descriptor_layout.pBindings = m_layout_bindings;
-
-		// desc_pool
+		// pool
+		std::array<VkDescriptorPoolSize, 1> type_count;
 		type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		type_count[0].descriptorCount = 1;
-
+		VkDescriptorPoolCreateInfo descriptor_pool = {};
 		descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		descriptor_pool.pNext = NULL;
 		descriptor_pool.maxSets = 1;
-		descriptor_pool.poolSizeCount = 1;
-		descriptor_pool.pPoolSizes = type_count;
+		descriptor_pool.poolSizeCount = type_count.size();
+		descriptor_pool.pPoolSizes = type_count.data();
+		auto res = vkCreateDescriptorPool(m_device->get(), &descriptor_pool, NULL,
+			&m_desc_pool);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		// descriptor
+		std::array<VkDescriptorSetLayoutBinding, 1> layout_bindings;
+		layout_bindings[0].binding = 0;
+		layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		layout_bindings[0].descriptorCount = 1;
+		layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		layout_bindings[0].pImmutableSamplers = nullptr;
+		VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
+		descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		descriptor_layout.pNext = nullptr;
+		descriptor_layout.bindingCount = layout_bindings.size();
+		descriptor_layout.pBindings = layout_bindings.data();
+		res = vkCreateDescriptorSetLayout(m_device->get(), &descriptor_layout, nullptr,
+			&m_desc_layout);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
 
 		// descriptor set
-		m_alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		m_alloc_info[0].pNext = NULL;
-		m_alloc_info[0].descriptorSetCount = NUM_DESCRIPTOR_SETS;
+		const int NUM_DESCRIPTOR_SETS = 1;
+		VkDescriptorSetAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info.pNext = NULL;
+		alloc_info.descriptorSetCount = NUM_DESCRIPTOR_SETS;
+		alloc_info.descriptorPool = m_desc_pool;
+		alloc_info.pSetLayouts = &m_desc_layout;
 		m_desc_set.resize(NUM_DESCRIPTOR_SETS);
+		res = vkAllocateDescriptorSets(m_device->get(), &alloc_info, m_desc_set.data());
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+		return true;
+	}
 
-		m_uniform_buffer_info = uniformbuffer_info;
-
-		// Now use the descriptor layout to create a pipeline layout
-		m_pPipelineLayoutCreateInfo.sType =
+	bool createPipelineLayout()
+	{
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+		pipelineLayoutCreateInfo.sType =
 			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		m_pPipelineLayoutCreateInfo.pNext = nullptr;
-		m_pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-		m_pPipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
-		m_pPipelineLayoutCreateInfo.setLayoutCount = 1;
+		pipelineLayoutCreateInfo.pNext = nullptr;
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+		pipelineLayoutCreateInfo.pPushConstantRanges = nullptr;
+		pipelineLayoutCreateInfo.setLayoutCount = 1;
+		pipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
+		auto res = vkCreatePipelineLayout(m_device->get(), &pipelineLayoutCreateInfo, nullptr,
+			&m_pipeline_layout);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+		return true;
+	}
+
+	bool create(const VertexbufferDesc &vertexbuffer
+	, VkRenderPass renderPass
+	, const VkDescriptorBufferInfo &uniformbuffer_info
+	)
+	{
+		m_uniform_buffer_info = uniformbuffer_info;
 
 		m_pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 		m_pipelineCacheInfo.pNext = nullptr;
@@ -1463,34 +1496,6 @@ public:
 		pipeline.renderPass = renderPass;
 		pipeline.subpass = 0;
 
-
-
-		// descriptor
-		auto res = vkCreateDescriptorSetLayout(m_device->get(), &m_descriptor_layout, nullptr,
-			&m_desc_layout);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		res = vkCreateDescriptorPool(m_device->get(), &descriptor_pool, NULL,
-			&m_desc_pool);
-		assert(res == VK_SUCCESS);
-
-		m_alloc_info[0].descriptorPool = m_desc_pool;
-		m_alloc_info[0].pSetLayouts = &m_desc_layout;
-		res = vkAllocateDescriptorSets(m_device->get(), m_alloc_info, m_desc_set.data());
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		m_pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
-		res = vkCreatePipelineLayout(m_device->get(), &m_pPipelineLayoutCreateInfo, nullptr,
-			&m_pipeline_layout);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
 		pipeline.layout = m_pipeline_layout;
 
 		VkWriteDescriptorSet writes[1];
@@ -1506,7 +1511,7 @@ public:
 		vkUpdateDescriptorSets(m_device->get(), 1, writes, 0, NULL);
 
 		// pipeline cache
-		res = vkCreatePipelineCache(m_device->get(), &m_pipelineCacheInfo, nullptr,
+		auto res = vkCreatePipelineCache(m_device->get(), &m_pipelineCacheInfo, nullptr,
 			&m_pipelineCache);
 		if (res != VK_SUCCESS)
 		{
@@ -1935,8 +1940,13 @@ int WINAPI WinMain(
 	if (!pipeline.createShader()) {
 		return 13;
 	}
-	if (!pipeline.create(vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo()))
-	{
+	if (!pipeline.createUniformBufferDescriptor()) {
+		return 13;
+	}
+	if (!pipeline.createPipelineLayout()) {
+		return 13;
+	}
+	if (!pipeline.create(vertex_desc, framebuffer.getRenderPass(), uniform_buffer.getDescInfo())){
 		return 13;
 	}
 
