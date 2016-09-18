@@ -19,6 +19,23 @@ const T* data_or_null(const std::vector<T> &v)
 }
 
 
+static std::vector<unsigned int> read(const std::string &path)
+{
+	std::vector<unsigned int> buf;
+	std::ifstream ifs(path.c_str(), std::ios::binary);
+	if (ifs) {
+		ifs.seekg(0, std::ios::end);
+		auto len = ifs.tellg();
+		if (len > 0 && len % 4 == 0) {
+			buf.resize(len / 4);
+			ifs.seekg(0, std::ios::beg);
+			ifs.read((char*)&buf[0], len);
+		}
+	}
+	return buf;
+}
+
+
 VKAPI_ATTR VkBool32 VKAPI_CALL MyDebugReportCallback(
 	VkDebugReportFlagsEXT       flags,
 	VkDebugReportObjectTypeEXT  objectType,
@@ -612,37 +629,33 @@ public:
 };
 
 
-class UniformbufferDesc
+static glm::mat4 calcMVP(const int width, int height)
 {
-public:
-	static glm::mat4 calcMVP(const int width, int height)
-	{
-		float fov = glm::radians(45.0f);
-		if (width > height) {
-			fov *= static_cast<float>(height) / static_cast<float>(width);
-		}
-
-		auto Projection = glm::perspective(fov,
-			static_cast<float>(width) /
-			static_cast<float>(height), 0.1f, 100.0f);
-
-		auto View = glm::lookAt(
-			glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
-			glm::vec3(0, 0, 0),  // and looks at the origin
-			glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
-		);
-
-		auto Model = glm::mat4(1.0f);
-
-		// Vulkan clip space has inverted Y and half Z.
-		auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, -1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 0.5f, 0.0f,
-			0.0f, 0.0f, 0.5f, 1.0f);
-
-		return Clip * Projection * View * Model;
+	float fov = glm::radians(45.0f);
+	if (width > height) {
+		fov *= static_cast<float>(height) / static_cast<float>(width);
 	}
-};
+
+	auto Projection = glm::perspective(fov,
+		static_cast<float>(width) /
+		static_cast<float>(height), 0.1f, 100.0f);
+
+	auto View = glm::lookAt(
+		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
+		glm::vec3(0, 0, 0),  // and looks at the origin
+		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
+	);
+
+	auto Model = glm::mat4(1.0f);
+
+	// Vulkan clip space has inverted Y and half Z.
+	auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 0.5f, 0.0f,
+		0.0f, 0.0f, 0.5f, 1.0f);
+
+	return Clip * Projection * View * Model;
+}
 
 
 class Depthbuffer : IDeviceResource
@@ -1151,7 +1164,7 @@ public:
 
 	bool configure(const std::vector<unsigned int> &vertSpv
 		, const std::vector<unsigned int> &fragSpv
-		, const std::unique_ptr<VertexbufferDesc> &vertexbuffer
+		, const VertexbufferDesc &vertexbuffer
 		, const std::unique_ptr<FramebufferResource> &framebuffer
 		, const std::unique_ptr<BufferResource> &uniformbuffer
 	) 
@@ -1244,9 +1257,9 @@ public:
 		vi.pNext = nullptr;
 		vi.flags = 0;
 		vi.vertexBindingDescriptionCount = 1;
-		vi.pVertexBindingDescriptions = &vertexbuffer->getBindingDesc();
+		vi.pVertexBindingDescriptions = &vertexbuffer.getBindingDesc();
 		vi.vertexAttributeDescriptionCount = 2;
-		vi.pVertexAttributeDescriptions = vertexbuffer->getAttribs();
+		vi.pVertexAttributeDescriptions = vertexbuffer.getAttribs();
 
 		ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 		ia.pNext = nullptr;
@@ -1635,41 +1648,25 @@ typedef DeviceResource<CommandBuffer> CommandBufferResource;
 class DeviceManager
 {
 	std::vector<const char*> m_device_extension_names;
+	std::vector<const char*> m_device_layer_names;
 	VkDevice m_device;
-
-	std::unique_ptr<DepthbufferResource> m_depth;
-	std::unique_ptr<FramebufferResource> m_framebuffer;
-	std::unique_ptr<BufferResource> m_vertex_buffer;
-	std::unique_ptr<VertexbufferDesc> m_vertex_desc;
-	std::unique_ptr<BufferResource> m_uniform_buffer;
-	std::unique_ptr<PipelineResource> m_pipeline;
 
 public:
 	DeviceManager()
 	{
 		m_device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#ifndef NDEBUG
+		// Enable validation layers in debug builds to detect validation errors
+		m_device_layer_names.push_back("VK_LAYER_LUNARG_standard_validation");
+#endif
 	}
 
 	~DeviceManager()
 	{
-		m_pipeline.reset();
-		m_uniform_buffer.reset();
-		m_vertex_buffer.reset();
-		m_framebuffer.reset();
-		m_depth.reset();
 		vkDestroyDevice(m_device, nullptr);
 	}
 
 	VkDevice get()const { return m_device; }
-	VkRenderPass getRenderpass()const { return m_framebuffer->getRenderPass(); }
-	VkFramebuffer getFramebuffer()const { return m_framebuffer->getFramebuffer(); }
-	VkPipeline getPipeline()const { return m_pipeline->resource().getPipeline(); }
-	VkPipelineLayout getPipelineLayout()const { return m_pipeline->resource().getPipelineLayout(); }
-	const VkDescriptorSet* getDescriptorSet()const { return m_pipeline->resource().getDescriptorSet(); }
-	uint32_t getDescriptorSetCount()const { return m_pipeline->resource().getDescriptorSetCount(); }
-	VkBuffer getVertexBuffer()const { return m_vertex_buffer->getBuffer(); }
-	VkImage getDepthImage()const { return m_depth->resource().getImage(); }
-	VkImageAspectFlags getDepthAspect()const { return m_depth->resource().getAspect(); }
 
 	bool create(const std::shared_ptr<GpuManager> &gpu)
 	{
@@ -1691,128 +1688,17 @@ public:
 		device_info.pNext = nullptr;
 		device_info.queueCreateInfoCount = 1;
 		device_info.pQueueCreateInfos = &queue_info;
+
 		device_info.enabledExtensionCount = m_device_extension_names.size();
 		device_info.ppEnabledExtensionNames = data_or_null(m_device_extension_names);
+
+		device_info.enabledLayerCount = m_device_layer_names.size();
+		device_info.ppEnabledLayerNames = data_or_null(m_device_layer_names);
+
 		device_info.pEnabledFeatures = nullptr;
 
 		auto res = vkCreateDevice(gpu->get(), &device_info, nullptr, &m_device);
 		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		return true;
-	}
-
-	bool createSwapchain(const std::shared_ptr<GpuManager> &gpu
-		, const std::shared_ptr<SurfaceManager> &surface
-		, int w, int h
-		)
-	{
-
-		return true;
-	}
-
-	bool createDepthbuffer(const std::shared_ptr<GpuManager> &gpu
-		, int w, int h)
-	{
-		m_depth = std::make_unique<DepthbufferResource>();
-		if (!m_depth->resource().configure(gpu, w, h)) {
-			return false;
-		}
-		if (!m_depth->create(m_device)) {
-			return false;
-		}
-		if (!m_depth->resource().allocate(m_device, gpu)) {
-			return false;
-		}
-		if (!m_depth->resource().createView(m_device)) {
-			return false;
-		}
-
-		return true;
-	}
-
-	bool createUniformBuffer(const std::shared_ptr<GpuManager> &gpu, int w, int h)
-	{
-		m_uniform_buffer = std::make_unique<BufferResource>(m_device);
-		if (!m_uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
-			return false;
-		}
-		auto m = UniformbufferDesc::calcMVP(w, h);
-		auto callback = [m](uint8_t *p, uint32_t size) {
-			memcpy(p, &m, size);
-		};
-		if (!m_uniform_buffer->map(m_device, callback)) {
-			return false;
-		}
-		return true;
-	}
-	
-	bool createVertexBuffer(const std::shared_ptr<GpuManager> &gpu
-		, const void *vertexData
-		, uint32_t dataSize, uint32_t dataStride)
-	{
-		m_vertex_desc = std::make_unique<VertexbufferDesc>();
-		m_vertex_desc->pushAttrib();
-		m_vertex_desc->pushAttrib();
-
-		m_vertex_buffer = std::make_unique<BufferResource>(m_device);
-		if(!m_vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, dataSize)){
-			return false;
-		}
-		auto callback= [vertexData, dataSize](uint8_t *pData, uint32_t size) {
-			memcpy(pData, vertexData, dataSize);
-		};
-		if (!m_vertex_buffer->map(m_device, callback)) {
-			return false;
-		}
-		return true;
-	}
-
-	bool createFramebuffers(VkFormat imageFormat, VkImageView imageView, int w, int h)
-	{
-		m_framebuffer=std::make_unique<FramebufferResource>(m_device);
-		auto imageSamples = m_depth->resource().getSamples();
-		m_framebuffer->attachColor(imageView, imageFormat, imageSamples);
-		auto depthView = m_depth->resource().getView();
-		auto depthSamples = m_depth->resource().getSamples();
-		auto depthFormat = m_depth->resource().getFormat();
-		m_framebuffer->attachDepth(depthView, depthFormat, depthSamples);
-		m_framebuffer->pushSubpass(0, 1);
-		if (!m_framebuffer->create(w, h))
-		{
-			return false;
-		}
-		return true;
-	}
-
-	std::vector<unsigned int> read(const std::string &path)
-	{
-		std::vector<unsigned int> buf;
-		std::ifstream ifs(path.c_str(), std::ios::binary);
-		if (ifs) {
-			ifs.seekg(0, std::ios::end);
-			auto len = ifs.tellg();
-			if (len > 0 && len % 4 == 0) {
-				buf.resize(len / 4);
-				ifs.seekg(0, std::ios::beg);
-				ifs.read((char*)&buf[0], len);
-			}
-		}
-		return buf;
-	}
-
-	bool createPipeline(const std::string &vertSpvPath
-		, const std::string &fragSpvPath
-	)
-	{
-		m_pipeline = std::make_unique<PipelineResource>();
-		if (!m_pipeline->resource().configure(read(vertSpvPath), read(fragSpvPath)
-		, m_vertex_desc, m_framebuffer, m_uniform_buffer))
-		{
-			return false;
-		}
-		if (!m_pipeline->create(m_device)) {
 			return false;
 		}
 
@@ -1980,12 +1866,14 @@ int WINAPI WinMain(
 		return 3;
 	}
 
+	// gpu
 	auto gpus = instance->enumerate_gpu();
     if(gpus.empty()){
         return 4;
     }
 	auto gpu = gpus.front();
 
+	// surface
 	auto surface = std::make_shared<SurfaceManager>();
 	if (!surface->initialize(instance->get(), hInstance, glfw.getWindow()))
 	{
@@ -1995,6 +1883,7 @@ int WINAPI WinMain(
 		return 6;
 	}
 
+	// device
 	auto device = std::make_shared<DeviceManager>();
 	if(!device->create(gpu)){
         return 7;
@@ -2011,31 +1900,76 @@ int WINAPI WinMain(
 		return 8;
 	}
 
-	if (!device->createDepthbuffer(gpu, w, h)) {
+	auto depth = std::make_unique<DepthbufferResource>();
+	if (!depth->resource().configure(gpu, w, h)) {
 		return 9;
 	}
-	if (!device->createFramebuffers(gpu->getPrimaryFormat(), swapchain->resource().getView(), w, h)) {
+	if (!depth->create(device->get())) {
+		return 9;
+	}
+	if (!depth->resource().allocate(device->get(), gpu)) {
+		return 9;
+	}
+	if (!depth->resource().createView(device->get())) {
+		return 9;
+	}
+
+	auto framebuffer = std::make_unique<FramebufferResource>(device->get());
+	{
+		auto imageSamples = depth->resource().getSamples();
+		framebuffer->attachColor(swapchain->resource().getView(), gpu->getPrimaryFormat(), depth->resource().getSamples());
+	}
+	{
+		auto depthView = depth->resource().getView();
+		auto depthSamples = depth->resource().getSamples();
+		auto depthFormat = depth->resource().getFormat();
+		framebuffer->attachDepth(depthView, depthFormat, depthSamples);
+	}
+	framebuffer->pushSubpass(0, 1);
+	if (!framebuffer->create(w, h))
+	{
 		return 10;
 	}
 
-	if (!device->createVertexBuffer(gpu
-			, g_vb_solid_face_colors_Data
-			, sizeof(g_vb_solid_face_colors_Data)
-			, sizeof(g_vb_solid_face_colors_Data[0])))
-	{
+	VertexbufferDesc vertex_desc;
+	vertex_desc.pushAttrib();
+	vertex_desc.pushAttrib();
+
+	auto vertex_buffer = std::make_unique<BufferResource>(device->get());
+	if (!vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(g_vb_solid_face_colors_Data))) {
 		return 11;
 	}
-
-	if (!device->createUniformBuffer(gpu, w, h)) {
-		return 13;
+	{
+		auto callback = [vertexData = g_vb_solid_face_colors_Data](uint8_t *pData, uint32_t size) {
+			memcpy(pData, vertexData, size);
+		};
+		if (!vertex_buffer->map(device->get(), callback)) {
+			return 11;
+		}
 	}
 
-	if (!device->createPipeline(
-		"../15-draw_cube.vert.spv"
-		, "../15-draw_cube.frag.spv"
-		
-		)) {
+	auto uniform_buffer = std::make_unique<BufferResource>(device->get());
+	if (!uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
 		return 12;
+	}
+	{
+		auto m = calcMVP(w, h);
+		auto callback = [m](uint8_t *p, uint32_t size) {
+			memcpy(p, &m, size);
+		};
+		if (!uniform_buffer->map(device->get(), callback)) {
+			return 12;
+		}
+	}
+
+	auto pipeline = std::make_unique<PipelineResource>();
+	if (!pipeline->resource().configure(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
+		, vertex_desc, framebuffer, uniform_buffer))
+	{
+		return 13;
+	}
+	if (!pipeline->create(device->get())) {
+		return 13;
 	}
 
 	auto cmd = std::make_unique<CommandBufferResource>();
@@ -2043,7 +1977,7 @@ int WINAPI WinMain(
 		return 14;
 	}
 	if (!cmd->create(device->get())) {
-		return 15;
+		return 14;
 	}
 
 	while (glfw.runLoop())
@@ -2054,8 +1988,8 @@ int WINAPI WinMain(
 		if(cmd->resource().begin())
 		{
 			// Set the image layout to depth stencil optimal
-			cmd->resource().setImageLayout(device->getDepthImage()
-			, device->getDepthAspect() //m_view_info.subresourceRange.aspectMask
+			cmd->resource().setImageLayout(depth->resource().getImage()
+			, depth->resource().getAspect() //m_view_info.subresourceRange.aspectMask
 			, VK_IMAGE_LAYOUT_UNDEFINED
 			, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
@@ -2070,17 +2004,17 @@ int WINAPI WinMain(
 				0, 0, w, h
 			};
 			cmd->resource().beginRenderPass(
-				device->getRenderpass()
-				, device->getFramebuffer()
+				framebuffer->getRenderPass()
+				, framebuffer->getFramebuffer()
 				, rect);
 			{
 				cmd->resource().bindPipeline(
-					device->getPipeline(), device->getPipelineLayout()
-					, device->getDescriptorSet(), device->getDescriptorSetCount()
+					pipeline->resource().getPipeline(), pipeline->resource().getPipelineLayout()
+					, pipeline->resource().getDescriptorSet(), pipeline->resource().getDescriptorSetCount()
 				);
 
 				cmd->resource().bindVertexbuffer(
-					device->getVertexBuffer());
+					vertex_buffer->getBuffer());
 
 				cmd->resource().initViewports(w, h);
 
