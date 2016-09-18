@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include <fstream>
+#include <array>
 #include <functional>
 #include <Windows.h>
 
@@ -1512,23 +1513,12 @@ class CommandBufferResource
 {
 	std::shared_ptr<DeviceManager> m_device;
 
-	VkCommandPoolCreateInfo m_cmd_pool_info = {};
-	VkCommandPool m_cmd_pool;
-	VkCommandBufferAllocateInfo m_cmdInfo = {};
-	VkCommandBuffer m_cmd_bufs[1];
-	VkClearValue m_clear_values[2];
+	VkCommandPool m_cmd_pool=nullptr;
+	std::array<VkCommandBuffer, 1> m_cmd_bufs;
+	std::array<VkClearValue, 2> m_clear_values;
 
 	uint32_t m_graphics_queue_family_index = 0;
-	VkQueue m_graphics_queue;
-
-	// Amount of time, in nanoseconds, to wait for a command buffer to complete
-	const int FENCE_TIMEOUT = 100000000;
-
-	/* Number of viewports and number of scissors have to be the same */
-	/* at pipeline creation and in any call to set them dynamically   */
-	/* They also have to be the same as each other                    */
-	const int NUM_VIEWPORTS=1;
-	const int NUM_SCISSORS = NUM_VIEWPORTS;
+	VkQueue m_graphics_queue=nullptr;
 
 public:
 	CommandBufferResource(const std::shared_ptr<DeviceManager> &device)
@@ -1544,12 +1534,13 @@ public:
 
 	~CommandBufferResource()
 	{
-		vkFreeCommandBuffers(m_device->get(), m_cmd_pool, _countof(m_cmd_bufs), m_cmd_bufs);
+		vkFreeCommandBuffers(m_device->get(), m_cmd_pool, m_cmd_bufs.size(), m_cmd_bufs.data());
 		vkDestroyCommandPool(m_device->get(), m_cmd_pool, nullptr);
 	}
 
 	bool create(int graphics_queue_family_index) 
 	{
+		VkCommandPoolCreateInfo m_cmd_pool_info = {};
 		m_cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		m_cmd_pool_info.pNext = nullptr;
 		m_cmd_pool_info.queueFamilyIndex = graphics_queue_family_index;
@@ -1560,12 +1551,13 @@ public:
 			return false;
 		}
 
+		VkCommandBufferAllocateInfo m_cmdInfo = {};
 		m_cmdInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		m_cmdInfo.pNext = nullptr;
 		m_cmdInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		m_cmdInfo.commandBufferCount = _countof(m_cmd_bufs);
+		m_cmdInfo.commandBufferCount = m_cmd_bufs.size();
 		m_cmdInfo.commandPool = m_cmd_pool;
-		res = vkAllocateCommandBuffers(m_device->get(), &m_cmdInfo, m_cmd_bufs);
+		res = vkAllocateCommandBuffers(m_device->get(), &m_cmdInfo, m_cmd_bufs.data());
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -1601,7 +1593,9 @@ public:
 		return true;
 	}
 
-	bool submit(VkDevice device, VkSemaphore semaphore)
+	bool submit(VkDevice device, VkSemaphore semaphore
+		// Amount of time, in nanoseconds, to wait for a command buffer to complete
+		, uint64_t timeout= 100000000)
 	{
 		VkFenceCreateInfo fenceInfo;
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -1624,8 +1618,8 @@ public:
 		submit_info[0].waitSemaphoreCount = 1;
 		submit_info[0].pWaitSemaphores = &semaphore;
 		submit_info[0].pWaitDstStageMask = &pipe_stage_flags;
-		submit_info[0].commandBufferCount = _countof(m_cmd_bufs);
-		submit_info[0].pCommandBuffers = m_cmd_bufs;
+		submit_info[0].commandBufferCount = m_cmd_bufs.size();
+		submit_info[0].pCommandBuffers = m_cmd_bufs.data();
 		submit_info[0].signalSemaphoreCount = 0;
 		submit_info[0].pSignalSemaphores = nullptr;
 
@@ -1636,7 +1630,7 @@ public:
 
 		do {
 			res =
-				vkWaitForFences(device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
+				vkWaitForFences(device, 1, &drawFence, VK_TRUE, timeout);
 		} while (res == VK_TIMEOUT);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -1656,8 +1650,8 @@ public:
 		rp_begin.renderPass = render_pass;
 		rp_begin.framebuffer = framebuffer;
 		rp_begin.renderArea = rect;
-		rp_begin.clearValueCount = _countof(m_clear_values);
-		rp_begin.pClearValues = m_clear_values;
+		rp_begin.clearValueCount = m_clear_values.size();
+		rp_begin.pClearValues = m_clear_values.data();
 		vkCmdBeginRenderPass(m_cmd_bufs[0], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
@@ -1693,14 +1687,14 @@ public:
 		viewport.maxDepth = (float)1.0f;
 		viewport.x = 0;
 		viewport.y = 0;
-		vkCmdSetViewport(m_cmd_bufs[0], 0, NUM_VIEWPORTS, &viewport);
+		vkCmdSetViewport(m_cmd_bufs[0], 0, 1, &viewport);
 
 		VkRect2D scissor;
 		scissor.extent.width = width;
 		scissor.extent.height = height;
 		scissor.offset.x = 0;
 		scissor.offset.y = 0;
-		vkCmdSetScissor(m_cmd_bufs[0], 0, NUM_SCISSORS, &scissor);
+		vkCmdSetScissor(m_cmd_bufs[0], 0, 1, &scissor);
 	}
 
 	void draw()
