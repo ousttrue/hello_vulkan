@@ -710,17 +710,19 @@ public:
 	}
 
 	bool allocate(const std::shared_ptr<GpuManager> &gpu
-		, const VkMemoryRequirements &mem_reqs)
+		, const VkMemoryRequirements &mem_reqs
+		, VkFlags flags)
+		//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		//0, // No requirements
 	{
 		VkMemoryAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		alloc_info.pNext = nullptr;
 		alloc_info.memoryTypeIndex = 0;
 		alloc_info.allocationSize = mem_reqs.size;
-		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			&alloc_info.memoryTypeIndex)) {
+		if (!gpu->memory_type_from_properties(mem_reqs.memoryTypeBits
+			, flags
+			, &alloc_info.memoryTypeIndex)) {
 			//assert(pass && "No mappable, coherent memory");
 			return false;
 		}
@@ -857,7 +859,8 @@ class DepthbufferResource
 	VkFormat m_depth_format = VK_FORMAT_D16_UNORM;
 
 	VkImage m_image = nullptr;
-	VkDeviceMemory m_mem = nullptr;
+	VkMemoryRequirements m_mem_reqs = {};
+
 	VkImageView m_view = nullptr;
 	VkImageViewCreateInfo m_view_info = {};
 
@@ -870,7 +873,6 @@ public:
 	{
 		vkDestroyImageView(m_device->get(), m_view, nullptr);
 		vkDestroyImage(m_device->get(), m_image, nullptr);
-		vkFreeMemory(m_device->get(), m_mem, nullptr);
 	}
 
 	VkSampleCountFlagBits getSamples()const { return m_depth_samples; }
@@ -878,6 +880,7 @@ public:
 	VkImageView getView()const { return m_view; }
 	VkImage getImage()const { return m_image; }
 	VkImageAspectFlags getAspect()const { return m_view_info.subresourceRange.aspectMask; }
+	VkMemoryRequirements getMemoryRquirements()const { return m_mem_reqs; }
 
 	bool create(const std::shared_ptr<GpuManager> &gpu
 		, int w, int h
@@ -921,37 +924,23 @@ public:
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+		// mem
+		vkGetImageMemoryRequirements(m_device->get(), m_image, &m_mem_reqs);
+		return true;
+	}
 
-		// allocate
-		VkMemoryRequirements mem_reqs;
-		vkGetImageMemoryRequirements(m_device->get(), m_image, &mem_reqs);
-
-		VkMemoryAllocateInfo mem_alloc = {};
-		mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		mem_alloc.pNext = nullptr;
-		mem_alloc.allocationSize = 0;
-		mem_alloc.memoryTypeIndex = 0;
-		mem_alloc.allocationSize = mem_reqs.size;
-		// Use the memory properties to determine the type of memory required
-		auto pass = gpu->memory_type_from_properties(mem_reqs.memoryTypeBits,
-			0, // No requirements
-			&mem_alloc.memoryTypeIndex);
-		if (!pass) {
-			return false;
-		}
-
-		// Allocate memory
-		res = vkAllocateMemory(m_device->get(), &mem_alloc, nullptr, &m_mem);
+	bool bind(VkDeviceMemory mem)
+	{
+		auto res = vkBindImageMemory(m_device->get(), m_image, mem, 0);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
+		return true;
+	}
 
-		// Bind memory
-		res = vkBindImageMemory(m_device->get(), m_image, m_mem, 0);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
+	// must call after vkBindImageMemory
+	bool createView()
+	{
 		m_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		m_view_info.pNext = nullptr;
 		m_view_info.image = VK_NULL_HANDLE;
@@ -967,14 +956,14 @@ public:
 		m_view_info.subresourceRange.layerCount = 1;
 		m_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		m_view_info.flags = 0;
+		m_view_info.image = m_image;
 		if (m_depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
 			m_depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
 			m_depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
 			m_view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
-		// Create image view
-		m_view_info.image = m_image;
-		res = vkCreateImageView(m_device->get(), &m_view_info, nullptr, &m_view);
+
+		auto res = vkCreateImageView(m_device->get(), &m_view_info, nullptr, &m_view);
 		if (res != VK_SUCCESS)
 		{
 			return false;
@@ -1869,6 +1858,16 @@ int WINAPI WinMain(
 	if (!depth->create(gpu, w, h)) {
 		return 9;
 	}
+	auto depth_memory = std::make_unique<DeviceMemoryResource>(device);
+	if (!depth_memory->allocate(gpu, depth->getMemoryRquirements(), 0)) {
+		return 9;
+	}
+	if (!depth->bind(depth_memory->get())) {
+		return 9;
+	}
+	if (!depth->createView()) {
+		return 9;
+	}
 
 	auto framebuffer = std::make_unique<FramebufferResource>(device);
 	{
@@ -1896,7 +1895,8 @@ int WINAPI WinMain(
 		return 11;
 	}
 	auto vertex_memory = std::make_unique<DeviceMemoryResource>(device);
-	if (!vertex_memory->allocate(gpu, vertex_buffer->getMemoryRequirements())) {
+	if (!vertex_memory->allocate(gpu, vertex_buffer->getMemoryRequirements()
+	, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
 		return 11;
 	}
 	{
@@ -1916,7 +1916,8 @@ int WINAPI WinMain(
 		return 12;
 	}
 	auto uniform_memory = std::make_unique<DeviceMemoryResource>(device);
-	if (!uniform_memory->allocate(gpu, uniform_buffer->getMemoryRequirements())) {
+	if (!uniform_memory->allocate(gpu, uniform_buffer->getMemoryRequirements()
+	, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
 		return 12;
 	}
 	{
