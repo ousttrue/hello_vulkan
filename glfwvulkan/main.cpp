@@ -291,7 +291,7 @@ public:
 		return true;
 	}
 
-	bool prepared(VkSurfaceKHR surface)
+	bool prepare(VkSurfaceKHR surface)
 	{
 		// Iterate over each queue to learn whether it supports presenting:
 		std::vector<VkBool32> pSupportsPresent(m_queue_props.size());
@@ -433,35 +433,35 @@ public:
 
 class SurfaceManager
 {
-	VkInstance m_inst = nullptr;
+	std::shared_ptr<InstanceManager> m_inst;
 	VkSurfaceKHR m_surface = nullptr;
 
 	VkSurfaceCapabilitiesKHR m_surfCapabilities = {};
 	std::vector<VkPresentModeKHR> m_presentModes;
 
 public:
-	SurfaceManager()
+	SurfaceManager(const std::shared_ptr<InstanceManager> &inst)
+		: m_inst(inst)
 	{
 
 	}
 
 	~SurfaceManager()
 	{
-		vkDestroySurfaceKHR(m_inst, m_surface, nullptr);
+		vkDestroySurfaceKHR(m_inst->get(), m_surface, nullptr);
 	}
 
 	VkSurfaceKHR get()const { return m_surface; }
 
-	bool initialize(VkInstance inst, HINSTANCE hInstance, HWND hWnd)
+	bool create(HINSTANCE hInstance, HWND hWnd)
 	{
 		VkWin32SurfaceCreateInfoKHR createInfo = {};
 		createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 		createInfo.pNext = nullptr;
 		createInfo.hinstance = hInstance;
 		createInfo.hwnd = hWnd;
-		auto res = vkCreateWin32SurfaceKHR(inst, &createInfo,
+		auto res = vkCreateWin32SurfaceKHR(m_inst->get(), &createInfo,
 			nullptr, &m_surface);
-		m_inst = inst;
 		return true;
 	}
 
@@ -608,7 +608,8 @@ struct IDeviceResource
 
 class FramebufferResource
 {
-	VkDevice m_device=nullptr;
+	std::shared_ptr<DeviceManager> m_device;
+
 	VkRenderPass m_renderpass = nullptr;
 	VkFramebuffer m_framebuffer = nullptr;
 
@@ -619,18 +620,18 @@ class FramebufferResource
 	std::vector<VkImageView> m_views;
 
 public:
-	VkRenderPass getRenderPass()const { return m_renderpass; }
-	VkFramebuffer getFramebuffer()const { return m_framebuffer; }
-
-	FramebufferResource(VkDevice device)
+	FramebufferResource(const std::shared_ptr<DeviceManager> &device)
 		: m_device(device)
 	{}
 
 	~FramebufferResource()
 	{
-		vkDestroyFramebuffer(m_device, m_framebuffer, nullptr);
-		vkDestroyRenderPass(m_device, m_renderpass, nullptr);
+		vkDestroyFramebuffer(m_device->get(), m_framebuffer, nullptr);
+		vkDestroyRenderPass(m_device->get(), m_renderpass, nullptr);
 	}
+
+	VkRenderPass getRenderPass()const { return m_renderpass; }
+	VkFramebuffer getFramebuffer()const { return m_framebuffer; }
 
 	bool create(int w, int h)
 	{
@@ -644,7 +645,7 @@ public:
 		rp_info.pSubpasses = m_subpasses.data();
 		rp_info.dependencyCount = 0;
 		rp_info.pDependencies = nullptr;
-		auto res = vkCreateRenderPass(m_device, &rp_info, nullptr, &m_renderpass);
+		auto res = vkCreateRenderPass(m_device->get(), &rp_info, nullptr, &m_renderpass);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
@@ -659,7 +660,7 @@ public:
 		fb_info.width = w;
 		fb_info.height = h;
 		fb_info.layers = 1;
-		res = vkCreateFramebuffer(m_device, &fb_info, nullptr,
+		res = vkCreateFramebuffer(m_device->get(), &fb_info, nullptr,
 			&m_framebuffer);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -729,21 +730,21 @@ public:
 
 class BufferResource
 {
-	VkDevice m_device = nullptr;
+	std::shared_ptr<DeviceManager> m_device;
 
 	VkBuffer m_buf = nullptr;
 	VkDeviceMemory m_mem = nullptr;
 	VkDescriptorBufferInfo m_buffer_info = {};
 
 public:
-	BufferResource(VkDevice device)
+	BufferResource(const std::shared_ptr<DeviceManager> &device)
 		: m_device(device)
 	{}
 
 	~BufferResource()
 	{
-		vkDestroyBuffer(m_device, m_buf, nullptr);
-		vkFreeMemory(m_device, m_mem, nullptr);
+		vkDestroyBuffer(m_device->get(), m_buf, nullptr);
+		vkFreeMemory(m_device->get(), m_mem, nullptr);
 	}
 
 	VkBuffer getBuffer()const { return m_buf; }
@@ -763,13 +764,13 @@ public:
 		buf_info.queueFamilyIndexCount = 0;
 		buf_info.pQueueFamilyIndices = nullptr;
 		buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		auto res = vkCreateBuffer(m_device, &buf_info, nullptr
+		auto res = vkCreateBuffer(m_device->get(), &buf_info, nullptr
 			, &m_buf);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 		VkMemoryRequirements mem_reqs;
-		vkGetBufferMemoryRequirements(m_device, m_buf, &mem_reqs);
+		vkGetBufferMemoryRequirements(m_device->get(), m_buf, &mem_reqs);
 
 		// alloc
 		VkMemoryAllocateInfo alloc_info = {};
@@ -784,13 +785,13 @@ public:
 			//assert(pass && "No mappable, coherent memory");
 			return false;
 		}
-		res = vkAllocateMemory(m_device, &alloc_info, nullptr, &m_mem);
+		res = vkAllocateMemory(m_device->get(), &alloc_info, nullptr, &m_mem);
 		if (res != VK_SUCCESS) {
 			return false;
 		}
 
 		// bind
-		res = vkBindBufferMemory(m_device, m_buf,
+		res = vkBindBufferMemory(m_device->get(), m_buf,
 			m_mem, 0);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -804,10 +805,10 @@ public:
 		return true;
 	}
 
-	bool map(VkDevice device, const std::function<void(uint8_t*, uint32_t)> &mapCallback)
+	bool map(const std::function<void(uint8_t*, uint32_t)> &mapCallback)
 	{
 		uint8_t *pData;
-		auto res = vkMapMemory(device, m_mem, 0, m_buffer_info.range, 0
+		auto res = vkMapMemory(m_device->get(), m_mem, 0, m_buffer_info.range, 0
 			, (void **)&pData);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -815,7 +816,7 @@ public:
 
 		mapCallback(pData, m_buffer_info.range);
 
-		vkUnmapMemory(device, m_mem);
+		vkUnmapMemory(m_device->get(), m_mem);
 
 		return true;
 	}
@@ -989,15 +990,11 @@ public:
 };
 
 
-class Swapchain : public IDeviceResource
+class SwapchainResource
 {
-	VkSwapchainCreateInfoKHR m_swapchain_ci = {};
+	std::shared_ptr<DeviceManager> m_device;
 	VkSwapchainKHR m_swapchain = nullptr;
 
-	/*
-	* Keep each of our swap chain buffers' image, command buffer and view in one
-	* spot
-	*/
 	struct swap_chain_buffer
 	{
 		VkImage image = nullptr;
@@ -1018,82 +1015,65 @@ class Swapchain : public IDeviceResource
 	VkQueue m_present_queue = nullptr;
 
 public:
+	SwapchainResource(const std::shared_ptr<DeviceManager> &device)
+		: m_device(device)
+	{
+		m_imageAcquiredSemaphoreCreateInfo.sType =
+			VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		m_imageAcquiredSemaphoreCreateInfo.pNext = nullptr;
+		m_imageAcquiredSemaphoreCreateInfo.flags = 0;
+	}
+
+	~SwapchainResource()
+	{
+		vkDestroySemaphore(m_device->get(), m_imageAcquiredSemaphore, nullptr);
+		for (auto &b : m_buffers)
+		{
+			b->destroy(m_device->get());
+		}
+		m_buffers.clear();
+		vkDestroySwapchainKHR(m_device->get(), m_swapchain, nullptr);
+	}
+
 	uint32_t getImageCount()const { return m_buffers.size(); }
 	VkImageView getView()const { return m_buffers[m_current_buffer]->view; }
 	VkImage getImage()const { return m_buffers[m_current_buffer]->image; }
 	VkSwapchainKHR getSwapchain()const { return m_swapchain; }
 	VkSemaphore getSemaphore()const { return m_imageAcquiredSemaphore; }
 
-	void onDestroy(VkDevice device)override
-	{
-		vkDestroySemaphore(device, m_imageAcquiredSemaphore, nullptr);
-
-		for (auto &b : m_buffers)
-		{
-			b->destroy(device);
-		}
-		m_buffers.clear();
-		vkDestroySwapchainKHR(device, m_swapchain, nullptr);
-	}
-
-	bool onCreate(VkDevice device)override
-	{
-		auto res = vkCreateSwapchainKHR(device, &m_swapchain_ci, nullptr,
-			&m_swapchain);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		res = vkCreateSemaphore(device, &m_imageAcquiredSemaphoreCreateInfo,
-			nullptr, &m_imageAcquiredSemaphore);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		vkGetDeviceQueue(device, m_present_queue_family_index, 0, &m_present_queue);
-
-		return true;
-	}
-
-	bool configure(const std::shared_ptr<GpuManager> &gpu
+	bool create(const std::shared_ptr<GpuManager> &gpu
 		, const std::shared_ptr<SurfaceManager> &surface
 		, int w, int h
 		, VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
 	{
-		m_imageAcquiredSemaphoreCreateInfo.sType =
-			VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		m_imageAcquiredSemaphoreCreateInfo.pNext = nullptr;
-		m_imageAcquiredSemaphoreCreateInfo.flags = 0;
-
-		m_present_queue_family_index = gpu->get_present_queue_family_index();
-
+		// swapchain
 		if (!surface->getCapabilityFor(gpu->get())) {
 			return false;
 		}
+		m_present_queue_family_index = gpu->get_present_queue_family_index();
 
 		auto swapchainExtent = surface->getExtent(w, h);
 
-		m_swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		m_swapchain_ci.pNext = nullptr;
-		m_swapchain_ci.surface = surface->get();
-		m_swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
-		m_swapchain_ci.imageFormat = gpu->getPrimaryFormat();
-		m_swapchain_ci.imageExtent.width = swapchainExtent.width;
-		m_swapchain_ci.imageExtent.height = swapchainExtent.height;
-		m_swapchain_ci.preTransform = surface->getPreTransform();
-		m_swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		m_swapchain_ci.imageArrayLayers = 1;
-		m_swapchain_ci.presentMode = surface->getSwapchainPresentMode();
-		m_swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
-		m_swapchain_ci.clipped = true;
-
-		m_swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-		m_swapchain_ci.imageUsage = usageFlags;
-		m_swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		m_swapchain_ci.queueFamilyIndexCount = 0;
-		m_swapchain_ci.pQueueFamilyIndices = nullptr;
-
+		VkSwapchainCreateInfoKHR swapchain_ci = {};
+		swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		swapchain_ci.pNext = nullptr;
+		swapchain_ci.surface = surface->get();
+		swapchain_ci.minImageCount = surface->getDesiredNumberOfSwapchainImages();
+		swapchain_ci.imageFormat = gpu->getPrimaryFormat();
+		swapchain_ci.imageExtent.width = swapchainExtent.width;
+		swapchain_ci.imageExtent.height = swapchainExtent.height;
+		swapchain_ci.preTransform = surface->getPreTransform();
+		swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		swapchain_ci.imageArrayLayers = 1;
+		swapchain_ci.presentMode = surface->getSwapchainPresentMode();
+		swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
+		swapchain_ci.clipped = true;
+		swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+		swapchain_ci.imageUsage = usageFlags;
+		swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		swapchain_ci.queueFamilyIndexCount = 0;
+		swapchain_ci.pQueueFamilyIndices = nullptr;
 		if (gpu->get_graphics_queue_family_index() != gpu->get_present_queue_family_index()) {
 			// If the graphics and present queues are from different queue families,
 			// we either have to explicitly transfer ownership of images between the
@@ -1103,17 +1083,33 @@ public:
 				gpu->get_graphics_queue_family_index(),
 				gpu->get_present_queue_family_index(),
 			};
-			m_swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-			m_swapchain_ci.queueFamilyIndexCount = 2;
-			m_swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
+			swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			swapchain_ci.queueFamilyIndexCount = 2;
+			swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
 		}
+		auto res = vkCreateSwapchainKHR(m_device->get(), &swapchain_ci, nullptr,
+			&m_swapchain);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		// semaphore
+		res = vkCreateSemaphore(m_device->get(), &m_imageAcquiredSemaphoreCreateInfo,
+			nullptr, &m_imageAcquiredSemaphore);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		// present queue
+		vkGetDeviceQueue(m_device->get(), m_present_queue_family_index, 0, &m_present_queue);
+
 		return true;
 	}
 
-	bool prepareImages(VkDevice device, VkFormat format)
+	bool prepareImages(VkFormat format)
 	{
 		uint32_t swapchainImageCount;
-		auto res = vkGetSwapchainImagesKHR(device, m_swapchain,
+		auto res = vkGetSwapchainImagesKHR(m_device->get(), m_swapchain,
 			&swapchainImageCount, nullptr);
 		if (res != VK_SUCCESS) {
 			return false;
@@ -1123,7 +1119,7 @@ public:
 		}
 
 		std::vector<VkImage> swapchainImages(swapchainImageCount);
-		res = vkGetSwapchainImagesKHR(device, m_swapchain,
+		res = vkGetSwapchainImagesKHR(m_device->get(), m_swapchain,
 			&swapchainImageCount, swapchainImages.data());
 		if (res != VK_SUCCESS) {
 			return false;
@@ -1149,7 +1145,7 @@ public:
 			color_image_view.image = swapchainImages[i];
 
 			auto sc_buffer = std::make_unique<swap_chain_buffer>();
-			res = vkCreateImageView(device, &color_image_view, nullptr,
+			res = vkCreateImageView(m_device->get(), &color_image_view, nullptr,
 				&sc_buffer->view);
 			if (res != VK_SUCCESS) {
 				return false;
@@ -1165,10 +1161,10 @@ public:
 	/// get current buffer
 	/// set image layout to current buffer
 	///
-	bool update(VkDevice device)
+	bool update()
 	{
 		// Get the index of the next available swapchain image:
-		auto res = vkAcquireNextImageKHR(device
+		auto res = vkAcquireNextImageKHR(m_device->get()
 			, m_swapchain
 			, UINT64_MAX
 			, m_imageAcquiredSemaphore
@@ -1204,7 +1200,6 @@ public:
 		return true;
 	}
 };
-typedef DeviceResource<Swapchain>  SwapchainResource;
 
 
 class Pipeline: IDeviceResource
@@ -1868,12 +1863,12 @@ int WINAPI WinMain(
 	auto gpu = gpus.front();
 
 	// surface
-	auto surface = std::make_shared<SurfaceManager>();
-	if (!surface->initialize(instance->get(), hInstance, glfw.getWindow()))
+	auto surface = std::make_shared<SurfaceManager>(instance);
+	if (!surface->create(hInstance, glfw.getWindow()))
 	{
 		return 6;
 	}
-	if (!gpu->prepared(surface->get())) {
+	if (!gpu->prepare(surface->get())) {
 		return 6;
 	}
 
@@ -1883,14 +1878,11 @@ int WINAPI WinMain(
         return 7;
     }
 
-	auto swapchain = std::make_unique<SwapchainResource>();
-	if (!swapchain->resource().configure(gpu, surface, w, h)) {
+	auto swapchain = std::make_unique<SwapchainResource>(device);
+	if (!swapchain->create(gpu, surface, w, h)) {
 		return 8;
 	}
-	if (!swapchain->create(device->get())) {
-		return 8;
-	}
-	if (!swapchain->resource().prepareImages(device->get(), gpu->getPrimaryFormat())) {
+	if (!swapchain->prepareImages(gpu->getPrimaryFormat())) {
 		return 8;
 	}
 
@@ -1899,10 +1891,10 @@ int WINAPI WinMain(
 		return 9;
 	}
 
-	auto framebuffer = std::make_unique<FramebufferResource>(device->get());
+	auto framebuffer = std::make_unique<FramebufferResource>(device);
 	{
 		auto imageSamples = depth->getSamples();
-		framebuffer->attachColor(swapchain->resource().getView(), gpu->getPrimaryFormat(), depth->getSamples());
+		framebuffer->attachColor(swapchain->getView(), gpu->getPrimaryFormat(), depth->getSamples());
 	}
 	{
 		auto depthView = depth->getView();
@@ -1920,7 +1912,7 @@ int WINAPI WinMain(
 	vertex_desc.pushAttrib();
 	vertex_desc.pushAttrib();
 
-	auto vertex_buffer = std::make_unique<BufferResource>(device->get());
+	auto vertex_buffer = std::make_unique<BufferResource>(device);
 	if (!vertex_buffer->create(gpu, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(g_vb_solid_face_colors_Data))) {
 		return 11;
 	}
@@ -1928,12 +1920,12 @@ int WINAPI WinMain(
 		auto callback = [vertexData = g_vb_solid_face_colors_Data](uint8_t *pData, uint32_t size) {
 			memcpy(pData, vertexData, size);
 		};
-		if (!vertex_buffer->map(device->get(), callback)) {
+		if (!vertex_buffer->map(callback)) {
 			return 11;
 		}
 	}
 
-	auto uniform_buffer = std::make_unique<BufferResource>(device->get());
+	auto uniform_buffer = std::make_unique<BufferResource>(device);
 	if (!uniform_buffer->create(gpu, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(glm::mat4))) {
 		return 12;
 	}
@@ -1942,7 +1934,7 @@ int WINAPI WinMain(
 		auto callback = [m](uint8_t *p, uint32_t size) {
 			memcpy(p, &m, size);
 		};
-		if (!uniform_buffer->map(device->get(), callback)) {
+		if (!uniform_buffer->map(callback)) {
 			return 12;
 		}
 	}
@@ -1967,7 +1959,7 @@ int WINAPI WinMain(
 
 	while (glfw.runLoop())
 	{
-		swapchain->resource().update(device->get());
+		swapchain->update();
 
 		// start
 		if (cmd->resource().begin())
@@ -1980,7 +1972,8 @@ int WINAPI WinMain(
 				, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 			);
 
-			cmd->resource().setImageLayout(swapchain->resource().getImage()
+			cmd->resource().setImageLayout(
+				swapchain->getImage()
 				, VK_IMAGE_ASPECT_COLOR_BIT
 				, VK_IMAGE_LAYOUT_UNDEFINED
 				, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -2011,11 +2004,11 @@ int WINAPI WinMain(
 			if (!cmd->resource().end()) {
 				return 16;
 			}
-			if (!cmd->resource().submit(device->get(), swapchain->resource().getSemaphore())) {
+			if (!cmd->resource().submit(device->get(), swapchain->getSemaphore())) {
 				return 17;
 			}
 
-			swapchain->resource().present();
+			swapchain->present();
 		}
 	}
 
