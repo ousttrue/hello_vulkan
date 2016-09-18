@@ -11,7 +11,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 
-
 template<typename T>
 const T* data_or_null(const std::vector<T> &v)
 {
@@ -1202,8 +1201,10 @@ public:
 };
 
 
-class Pipeline: IDeviceResource
+class PipelineResource
 {
+	std::shared_ptr<DeviceManager> m_device;
+
 	struct shader_stage
 	{
 		std::vector<unsigned int> spv;
@@ -1251,9 +1252,23 @@ class Pipeline: IDeviceResource
 	VkSampleCountFlagBits NUM_SAMPLES = VK_SAMPLE_COUNT_1_BIT;
 
 public:
-	Pipeline()
+	PipelineResource(const std::shared_ptr<DeviceManager> &device)
+		: m_device(device)
 	{
 		memset(dynamicStateEnables, 0, sizeof dynamicStateEnables);
+	}
+
+	~PipelineResource()
+	{
+		vkDestroyDescriptorPool(m_device->get(), m_desc_pool, nullptr);
+		vkDestroyPipeline(m_device->get(), m_pipeline, nullptr);
+		vkDestroyPipelineCache(m_device->get(), m_pipelineCache, nullptr);
+		vkDestroyDescriptorSetLayout(m_device->get(), m_desc_layout, nullptr);
+		vkDestroyPipelineLayout(m_device->get(), m_pipeline_layout, nullptr);
+		for (auto &stage : m_shaderStages)
+		{
+			vkDestroyShaderModule(m_device->get(), stage.module, nullptr);
+		}
 	}
 
 	VkPipeline getPipeline()const { return m_pipeline; }
@@ -1261,91 +1276,7 @@ public:
 	const VkDescriptorSet* getDescriptorSet()const { return m_desc_set.data(); }
 	uint32_t getDescriptorSetCount()const { return m_desc_set.size(); }
 
-	void onDestroy(VkDevice device)override
-	{
-		vkDestroyDescriptorPool(device, m_desc_pool, nullptr);
-		vkDestroyPipeline(device, m_pipeline, nullptr);
-		vkDestroyPipelineCache(device, m_pipelineCache, nullptr);
-		vkDestroyDescriptorSetLayout(device, m_desc_layout, nullptr);
-		vkDestroyPipelineLayout(device, m_pipeline_layout, nullptr);
-
-		for (auto &stage : m_shaderStages)
-		{
-			vkDestroyShaderModule(device, stage.module, nullptr);
-		}
-	}
-
-	bool onCreate(VkDevice device)override
-	{
-		// shader
-		for (size_t i=0; i<m_shaderInfos.size(); ++i)
-		{
-			auto res = vkCreateShaderModule(device, &m_shaderInfos[i].m_moduleCreateInfo, nullptr,
-				&m_shaderStages[i].module);
-			if (res != VK_SUCCESS) {
-				return false;
-			}
-		}
-
-		// descriptor
-		auto res = vkCreateDescriptorSetLayout(device, &m_descriptor_layout, nullptr,
-			&m_desc_layout);
-		if (res != VK_SUCCESS) {
-			return false;
-		}
-
-		res = vkCreateDescriptorPool(device, &descriptor_pool, NULL,
-			&m_desc_pool);
-		assert(res == VK_SUCCESS);
-
-		m_alloc_info[0].descriptorPool = m_desc_pool;
-		m_alloc_info[0].pSetLayouts = &m_desc_layout;
-		res = vkAllocateDescriptorSets(device, m_alloc_info, m_desc_set.data());
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		m_pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
-		res = vkCreatePipelineLayout(device, &m_pPipelineLayoutCreateInfo, nullptr,
-			&m_pipeline_layout);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-		pipeline.layout = m_pipeline_layout;
-
-		VkWriteDescriptorSet writes[1];
-		writes[0] = {};
-		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		writes[0].pNext = NULL;
-		writes[0].dstSet = m_desc_set[0];
-		writes[0].descriptorCount = 1;
-		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		writes[0].pBufferInfo = &m_uniform_buffer_info;
-		writes[0].dstArrayElement = 0;
-		writes[0].dstBinding = 0;
-		vkUpdateDescriptorSets(device, 1, writes, 0, NULL);
-
-		// pipeline cache
-		res = vkCreatePipelineCache(device, &m_pipelineCacheInfo, nullptr,
-			&m_pipelineCache);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		res = vkCreateGraphicsPipelines(device, m_pipelineCache, 1,
-			&pipeline, nullptr, &m_pipeline);
-		if (res != VK_SUCCESS)
-		{
-			return false;
-		}
-
-		return true;
-	}
-
-	bool configure(const std::vector<unsigned int> &vertSpv
+	bool create(const std::vector<unsigned int> &vertSpv
 		, const std::vector<unsigned int> &fragSpv
 		, const VertexbufferDesc &vertexbuffer
 		, const std::unique_ptr<FramebufferResource> &framebuffer
@@ -1546,10 +1477,74 @@ public:
 		pipeline.renderPass = framebuffer->getRenderPass();
 		pipeline.subpass = 0;
 
+		// shader
+		for (size_t i = 0; i<m_shaderInfos.size(); ++i)
+		{
+			auto res = vkCreateShaderModule(m_device->get(), &m_shaderInfos[i].m_moduleCreateInfo, nullptr,
+				&m_shaderStages[i].module);
+			if (res != VK_SUCCESS) {
+				return false;
+			}
+		}
+
+		// descriptor
+		auto res = vkCreateDescriptorSetLayout(m_device->get(), &m_descriptor_layout, nullptr,
+			&m_desc_layout);
+		if (res != VK_SUCCESS) {
+			return false;
+		}
+
+		res = vkCreateDescriptorPool(m_device->get(), &descriptor_pool, NULL,
+			&m_desc_pool);
+		assert(res == VK_SUCCESS);
+
+		m_alloc_info[0].descriptorPool = m_desc_pool;
+		m_alloc_info[0].pSetLayouts = &m_desc_layout;
+		res = vkAllocateDescriptorSets(m_device->get(), m_alloc_info, m_desc_set.data());
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		m_pPipelineLayoutCreateInfo.pSetLayouts = &m_desc_layout;
+		res = vkCreatePipelineLayout(m_device->get(), &m_pPipelineLayoutCreateInfo, nullptr,
+			&m_pipeline_layout);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+		pipeline.layout = m_pipeline_layout;
+
+		VkWriteDescriptorSet writes[1];
+		writes[0] = {};
+		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[0].pNext = NULL;
+		writes[0].dstSet = m_desc_set[0];
+		writes[0].descriptorCount = 1;
+		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writes[0].pBufferInfo = &m_uniform_buffer_info;
+		writes[0].dstArrayElement = 0;
+		writes[0].dstBinding = 0;
+		vkUpdateDescriptorSets(m_device->get(), 1, writes, 0, NULL);
+
+		// pipeline cache
+		res = vkCreatePipelineCache(m_device->get(), &m_pipelineCacheInfo, nullptr,
+			&m_pipelineCache);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
+		res = vkCreateGraphicsPipelines(m_device->get(), m_pipelineCache, 1,
+			&pipeline, nullptr, &m_pipeline);
+		if (res != VK_SUCCESS)
+		{
+			return false;
+		}
+
 		return true;
 	}
 };
-typedef DeviceResource<Pipeline> PipelineResource;
 
 
 class CommandBuffer: IDeviceResource
@@ -1939,13 +1934,10 @@ int WINAPI WinMain(
 		}
 	}
 
-	auto pipeline = std::make_unique<PipelineResource>();
-	if (!pipeline->resource().configure(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
+	auto pipeline = std::make_unique<PipelineResource>(device);
+	if (!pipeline->create(read("../15-draw_cube.vert.spv"), read("../15-draw_cube.frag.spv")
 		, vertex_desc, framebuffer, uniform_buffer))
 	{
-		return 13;
-	}
-	if (!pipeline->create(device->get())) {
 		return 13;
 	}
 
@@ -1988,8 +1980,8 @@ int WINAPI WinMain(
 				, rect);
 			{
 				cmd->resource().bindPipeline(
-					pipeline->resource().getPipeline(), pipeline->resource().getPipelineLayout()
-					, pipeline->resource().getDescriptorSet(), pipeline->resource().getDescriptorSetCount()
+					pipeline->getPipeline(), pipeline->getPipelineLayout()
+					, pipeline->getDescriptorSet(), pipeline->getDescriptorSetCount()
 				);
 
 				cmd->resource().bindVertexbuffer(
