@@ -1,25 +1,15 @@
----
-# https://vitepress.dev/reference/default-theme-home-page
-layout: home
+# vulkan
 
-hero:
-  name: "hello_vulkan"
-  text: "vulan on windows and android"
-  tagline: My great project tagline
-  actions:
-    - theme: brand
-      text: Markdown Examples
-      link: /markdown-examples
-    - theme: alt
-      text: API Examples
-      link: /api-examples
+基点にするサンプルプログラム。
 
-features:
-  - title: Feature A
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature B
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
-  - title: Feature C
-    details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
----
+## windows
 
+https://github.com/Overv/VulkanTutorial/blob/main/code/16_frames_in_flight.cpp
+
+Windows11 で動作成功。
+
+## android
+
+https://github.com/ARM-software/vulkan-sdk/tree/master/samples/hellotriangle
+
+Pixel3 で動作成功。
