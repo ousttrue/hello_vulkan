@@ -1,5 +1,11 @@
 set(TARGET_NAME vulkan_tutorial)
 
+FetchContent_Declare(
+  glfw
+  URL https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
+)
+FetchContent_MakeAvailable(glfw)
+
 function(add_shader TARGET SHADER)
   find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Include/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})
