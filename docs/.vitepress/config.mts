@@ -13,12 +13,23 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: 'Examples',
+        text: 'build',
         items: [
-          { text: 'Markdown Examples', link: '/markdown-examples' },
-          { text: 'Runtime API Examples', link: '/api-examples' }
+          { text: 'build', link: '/cmake' },
+          { text: 'android apk', link: '/apk' }
         ]
-      }
+      },
+      {
+        text: 'vulkan',
+        items: [
+          { text: 'instance', link: '/vulkan/instance' },
+          { text: 'device', link: '/vulkan/instance' },
+          { text: 'swapchain', link: '/vulkan/swapchain' },
+          { text: 'command', link: '/vulkan/command' },
+          { text: 'spv', link: '/vulkan/spv' },
+          { text: 'pipeline', link: '/vulkan/pipeline' },
+        ]
+      },
     ],
 
     socialLinks: [

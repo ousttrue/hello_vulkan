@@ -20,7 +20,7 @@ function(add_shader TARGET SHADER)
   target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_shader)
 
-SET(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_CXX_STANDARD 20)
 add_executable(${TARGET_NAME}
   main.cpp
 )
