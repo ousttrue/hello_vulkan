@@ -1,38 +1,6 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "platform_win32.h"
 
 #include <iostream>
-#include <vector>
-
-class Glfw {
-  GLFWwindow *_window = nullptr;
-
-public:
-  Glfw() { glfwInit(); }
-
-  void createWindow(int width, int height, const char *title) {
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    _window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-  }
-
-  ~Glfw() {
-    if (_window) {
-      glfwDestroyWindow(_window);
-    }
-    glfwTerminate();
-  }
-
-  void addRequiredExtensions(std::vector<const char *> &extensions) {
-    uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-    for (uint32_t i = 0; i < glfwExtensionCount; ++i) {
-      extensions.push_back(glfwExtensions[i]);
-    }
-  }
-};
 
 static bool
 checkValidationLayerSupport(const std::vector<const char *> &validationLayers) {
@@ -206,6 +174,7 @@ int main(int argc, char **argv) {
     std::cout << "failed" << std::endl;
     return 1;
   }
+  std::cout << "ok" << std::endl;
 
   return 0;
 }
