@@ -24,19 +24,13 @@ public:
     glfwTerminate();
   }
 
-  std::vector<const char *> getRequiredExtensions(bool enableValidationLayers) {
+  void addRequiredExtensions(std::vector<const char *> &extensions) {
     uint32_t glfwExtensionCount = 0;
     const char **glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    std::vector<const char *> extensions(glfwExtensions,
-                                         glfwExtensions + glfwExtensionCount);
-
-    if (enableValidationLayers) {
-      extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    for (uint32_t i = 0; i < glfwExtensionCount; ++i) {
+      extensions.push_back(glfwExtensions[i]);
     }
-
-    return extensions;
   }
 };
 
@@ -192,17 +186,20 @@ private:
 
 int main(int argc, char **argv) {
 
-  std::vector<const char *> validationLayers = {};
+  std::vector<const char *> validationLayers;
+  std::vector<const char *> extensions;
   VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+
 #ifndef NDEBUG
   std::cout << "[debug build]" << std::endl;
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");
   populateDebugMessengerCreateInfo(debugCreateInfo);
+  extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
   Glfw glfw;
   glfw.createWindow(640, 480, "vulfwk");
-  auto extensions = glfw.getRequiredExtensions(validationLayers.size() > 0);
+  glfw.addRequiredExtensions(extensions);
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
   if (!vulfwk.initialize(validationLayers, &debugCreateInfo, extensions)) {
