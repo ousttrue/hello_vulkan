@@ -22,6 +22,8 @@ if(${PLATFORM} MATCHES "android")
 else()
   subdirs(
     vulkan_tutorial
+    deps_win32
   )
 endif()
 
+subdirs(vulfwk)
