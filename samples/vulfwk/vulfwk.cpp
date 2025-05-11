@@ -255,6 +255,7 @@ VulkanFramework::VulkanFramework(const char *appName, const char *engineName) {
 
 VulkanFramework::~VulkanFramework() {
   LOGI("*** VulkanFramewor::~VulkanFramework ***");
+  vkDeviceWaitIdle(Device);
   cleanup();
 }
 
@@ -844,5 +845,115 @@ bool VulkanFramework::createSyncObjects() {
       return false;
     }
   }
+  return true;
+}
+
+bool VulkanFramework::drawFrame() {
+  vkWaitForFences(Device, 1, &InFlightFences[CurrentFrame], VK_TRUE,
+                  UINT64_MAX);
+  vkResetFences(Device, 1, &InFlightFences[CurrentFrame]);
+
+  uint32_t imageIndex;
+  vkAcquireNextImageKHR(Device, Swapchain, UINT64_MAX,
+                        ImageAvailableSemaphores[CurrentFrame], VK_NULL_HANDLE,
+                        &imageIndex);
+
+  vkResetCommandBuffer(CommandBuffers[CurrentFrame],
+                       /*VkCommandBufferResetFlagBits*/ 0);
+  if (!recordCommandBuffer(CommandBuffers[CurrentFrame], imageIndex)) {
+    return false;
+  }
+
+  VkSubmitInfo submitInfo{};
+  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+  VkSemaphore waitSemaphores[] = {ImageAvailableSemaphores[CurrentFrame]};
+  VkPipelineStageFlags waitStages[] = {
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+  submitInfo.waitSemaphoreCount = 1;
+  submitInfo.pWaitSemaphores = waitSemaphores;
+  submitInfo.pWaitDstStageMask = waitStages;
+
+  submitInfo.commandBufferCount = 1;
+  submitInfo.pCommandBuffers = &CommandBuffers[CurrentFrame];
+
+  VkSemaphore signalSemaphores[] = {RenderFinishedSemaphores[CurrentFrame]};
+  submitInfo.signalSemaphoreCount = 1;
+  submitInfo.pSignalSemaphores = signalSemaphores;
+
+  if (vkQueueSubmit(GraphicsQueue, 1, &submitInfo,
+                    InFlightFences[CurrentFrame]) != VK_SUCCESS) {
+    LOGE("failed to submit draw command buffer!");
+    return false;
+  }
+
+  VkPresentInfoKHR presentInfo{};
+  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+  presentInfo.waitSemaphoreCount = 1;
+  presentInfo.pWaitSemaphores = signalSemaphores;
+
+  VkSwapchainKHR swapChains[] = {Swapchain};
+  presentInfo.swapchainCount = 1;
+  presentInfo.pSwapchains = swapChains;
+
+  presentInfo.pImageIndices = &imageIndex;
+
+  vkQueuePresentKHR(PresentQueue, &presentInfo);
+
+  CurrentFrame = (CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+  return true;
+}
+
+bool VulkanFramework::recordCommandBuffer(VkCommandBuffer commandBuffer,
+                                          uint32_t imageIndex) {
+  VkCommandBufferBeginInfo beginInfo{};
+  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    throw std::runtime_error("failed to begin recording command buffer!");
+  }
+
+  VkRenderPassBeginInfo renderPassInfo{};
+  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  renderPassInfo.renderPass = RenderPass;
+  renderPassInfo.framebuffer = SwapchainFramebuffers[imageIndex];
+  renderPassInfo.renderArea.offset = {0, 0};
+  renderPassInfo.renderArea.extent = SwapchainExtent;
+
+  VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+  renderPassInfo.clearValueCount = 1;
+  renderPassInfo.pClearValues = &clearColor;
+
+  vkCmdBeginRenderPass(commandBuffer, &renderPassInfo,
+                       VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    GraphicsPipeline);
+
+  VkViewport viewport{};
+  viewport.x = 0.0f;
+  viewport.y = 0.0f;
+  viewport.width = (float)SwapchainExtent.width;
+  viewport.height = (float)SwapchainExtent.height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+  VkRect2D scissor{};
+  scissor.offset = {0, 0};
+  scissor.extent = SwapchainExtent;
+  vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+  vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+  vkCmdEndRenderPass(commandBuffer);
+
+  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    LOGE("failed to record command buffer!");
+    return false;
+  }
+
   return true;
 }

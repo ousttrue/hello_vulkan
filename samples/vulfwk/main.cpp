@@ -123,8 +123,7 @@ int main(int argc, char **argv) {
 
     vulfwk.createSwapChain(
         {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
-
-    // vulfwk.drawFrame();
+    vulfwk.drawFrame();
     glfw.flush();
   }
 

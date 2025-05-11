@@ -45,7 +45,9 @@ public:
   bool createSurfaceWin32(void *hInstance, void *hWnd);
   bool initializeDevice(const std::vector<const char *> &layerNames,
                         const std::vector<const char *> &deviceExtensionNames);
+
   bool createSwapChain(VkExtent2D imageExtent);
+  bool drawFrame();
 
 private:
   bool createInstance(const std::vector<const char *> &layerNames,
@@ -62,4 +64,7 @@ private:
   bool createCommandPool();
   bool createCommandBuffers();
   bool createSyncObjects();
+
+private:
+  bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 };
