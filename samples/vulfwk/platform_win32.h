@@ -10,7 +10,7 @@ class Glfw {
 public:
   Glfw();
   ~Glfw();
-  void createWindow(int width, int height, const char *title);
+  void *createWindow(int width, int height, const char *title);
   void addRequiredExtensions(std::vector<const char *> &extensions);
   bool nextFrame(int *width, int *height);
   void flush();

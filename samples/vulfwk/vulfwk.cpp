@@ -1,3 +1,4 @@
+
 #include "vulfwk.h"
 #include "logger.h"
 
@@ -91,12 +92,29 @@ bool VulkanFramework::initialize(
 }
 
 void VulkanFramework::cleanup() {
+  if (Surface) {
+    vkDestroySurfaceKHR(Instance, Surface, nullptr);
+  }
   if (DebugUtilsMessengerEXT) {
     DestroyDebugUtilsMessengerEXT(Instance, DebugUtilsMessengerEXT, nullptr);
   }
   if (Instance != VK_NULL_HANDLE) {
     vkDestroyInstance(Instance, nullptr);
   }
+}
+
+bool VulkanFramework::createSurfaceWin32(void *hInstance, void *hWnd) {
+  VkWin32SurfaceCreateInfoKHR createInfo{
+      .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+      .hinstance = reinterpret_cast<HINSTANCE>(hInstance),
+      .hwnd = reinterpret_cast<HWND>(hWnd),
+  };
+  if (vkCreateWin32SurfaceKHR(Instance, &createInfo, nullptr, &Surface) !=
+      VK_SUCCESS) {
+    LOGE("failed to create window surface!");
+    return false;
+  }
+  return true;
 }
 
 bool VulkanFramework::createInstance(

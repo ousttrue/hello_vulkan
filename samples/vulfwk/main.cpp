@@ -96,13 +96,18 @@ int main(int argc, char **argv) {
 #endif
 
   Glfw glfw;
-  glfw.createWindow(640, 480, "vulfwk");
+  auto hwnd = glfw.createWindow(640, 480, "vulfwk");
   glfw.addRequiredExtensions(instanceExtensions);
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
   if (!vulfwk.initialize(validationLayers, instanceExtensions)) {
-    LOGE("failed");
+    LOGE("vulfwk.initialize: failed");
     return 1;
+  }
+
+  if (!vulfwk.createSurfaceWin32(hwnd, GetModuleHandle(nullptr))) {
+    LOGE("vulfwk.createSurfaceWin32: failed");
+    return 2;
   }
 
   while (true) {
