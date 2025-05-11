@@ -259,12 +259,14 @@ pub const ZipFile = struct {
     file: std.Build.LazyPath,
 };
 
+pub const CopyFile = struct {
+    src: std.Build.LazyPath,
+    dst: []const u8,
+};
+
 pub const EntryPoint = union(enum) {
     artifact: *std.Build.Step.Compile,
-    bin: struct {
-        src: std.Build.LazyPath,
-        dst: []const u8,
-    },
+    bin: CopyFile,
 };
 
 // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
@@ -274,6 +276,7 @@ pub fn makeZipfile(
     android_manifest_file: std.Build.LazyPath,
     entrypoint: EntryPoint,
     resource_directory: ?std.Build.LazyPath,
+    appends: ?[]const CopyFile,
 ) ZipFile {
     const builder = ApkBuilder.create(
         b,
@@ -289,6 +292,12 @@ pub fn makeZipfile(
         .bin => |so| {
             builder.copy(so.src, so.dst);
         },
+    }
+
+    if (appends) |_copies| {
+        for (_copies) |copy| {
+            builder.copy(copy.src, copy.dst);
+        }
     }
 
     // Create zip via "jar" as it's cross-platform and aapt2 can't zip *.so or *.dex files.

@@ -3,12 +3,84 @@
 
 #ifdef ANDROID
 #include <android_native_app_glue.h>
+
+template <typename T> struct UserData {
+  struct android_app *pApp = nullptr;
+  T *impl = nullptr;
+  bool active = false;
+};
+
+static void engineHandleCmd(android_app *pApp, int32_t cmd) {
+  auto userData = static_cast<UserData<VulkanFramework> *>(pApp->userData);
+
+  switch (cmd) {
+  case APP_CMD_RESUME: {
+    LOGI("Resuming swapchain!\n");
+    userData->active = true;
+    break;
+  }
+
+  case APP_CMD_PAUSE: {
+    LOGI("Pausing swapchain!\n");
+    userData->active = false;
+    break;
+  }
+
+  case APP_CMD_INIT_WINDOW:
+    LOGI("Initializing platform!\n");
+    // userData->impl->onInitWindow(pApp->window);
+    break;
+
+  case APP_CMD_TERM_WINDOW:
+    LOGI("Terminating application!\n");
+    // userData->impl->onTerminateWindow();
+    break;
+  }
+}
+
 void android_main(android_app *state) {
+  std::vector<const char *> validationLayers;
+  std::vector<const char *> instanceExtensions;
 #ifdef NDEBUG
   LOGI("[release]Entering android_main()!\n");
 #else
   LOGI("[debug]Entering android_main()!\n");
+  validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+  instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
+
+  VulkanFramework vulfwk("vulfwk", "No Engine");
+  if (!vulfwk.initialize(validationLayers, instanceExtensions)) {
+    LOGE("failed");
+    return;
+  }
+
+  UserData<VulkanFramework> userData = {
+      .pApp = state,
+      .impl = &vulfwk,
+  };
+  state->userData = &userData;
+  state->onAppCmd = engineHandleCmd;
+
+  for (;;) {
+    struct android_poll_source *source;
+    int ident;
+    int events;
+
+    while ((ident = ALooper_pollOnce(userData.active ? 0 : -1, nullptr, &events,
+                                     (void **)&source)) >= 0) {
+      if (source)
+        source->process(state, source);
+
+      if (state->destroyRequested)
+        return;
+    }
+
+    // renderFrame
+
+    if (userData.active) {
+    }
+  }
 }
 
 #else
@@ -17,7 +89,6 @@ void android_main(android_app *state) {
 int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
   std::vector<const char *> instanceExtensions;
-
 #ifndef NDEBUG
   LOGI("[debug build]");
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");

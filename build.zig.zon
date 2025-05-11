@@ -11,6 +11,10 @@
             .url = "git+https://github.com/silbinarywolf/zig-android-sdk.git#17aa6475b12bea73cd7d07480b433d2f2d9d7c1c",
             .hash = "android-0.1.0-7iz7QoSaAQCGbFl_CMg5mPgHq4_vogPxzxlhWpr5rM88",
         },
+        .@"vulkan-validationlayers" = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.313.0/android-binaries-1.4.313.0.zip",
+            .hash = "N-V-__8AAJw0VwVoIyuzLrXYjWtwDckHLzY_k7CQRovnUYsO",
+        },
     },
 
     .paths = .{

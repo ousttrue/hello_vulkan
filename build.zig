@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
     //
     // build apk zip archive
     //
+    const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
     const zip_file = ndk_build.makeZipfile(
         b,
         tools,
@@ -40,6 +41,10 @@ pub fn build(b: *std.Build) void {
             .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
         } },
         null,
+        &.{.{
+            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+        }},
     );
     zip_file.step.dependOn(so.step);
 
