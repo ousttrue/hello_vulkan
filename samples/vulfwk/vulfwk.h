@@ -17,11 +17,23 @@ class VulkanFramework {
   VkQueue PresentQueue = VK_NULL_HANDLE;
 
   VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
-  std::vector<VkImage> SwapChainImages;
+  std::vector<VkImage> SwapchainImages;
   VkFormat SwapchainImageFormat = {};
   VkExtent2D SwapchainExtent = {0, 0};
   std::vector<VkImageView> SwapchainImageViews;
   std::vector<VkFramebuffer> SwapchainFramebuffers;
+
+  VkRenderPass RenderPass = VK_NULL_HANDLE;
+  VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
+  VkPipeline GraphicsPipeline = VK_NULL_HANDLE;
+  //
+  // VkCommandPool commandPool;
+  // std::vector<VkCommandBuffer> commandBuffers;
+  //
+  // std::vector<VkSemaphore> imageAvailableSemaphores;
+  // std::vector<VkSemaphore> renderFinishedSemaphores;
+  // std::vector<VkFence> inFlightFences;
+  // uint32_t currentFrame = 0;
 
 public:
   VulkanFramework(const char *appName, const char *engineName);
@@ -43,4 +55,7 @@ private:
   bool
   createLogicalDevice(const std::vector<const char *> &layerNames,
                       const std::vector<const char *> &deviceExtensionNames);
+  bool createImageViews();
+  bool createRenderPass();
+  bool createGraphicsPipeline();
 };
