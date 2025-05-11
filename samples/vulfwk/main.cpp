@@ -50,8 +50,7 @@ void android_main(android_app *state) {
 #endif
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
-  if (!vulfwk.initialize(validationLayers, instanceExtensions)) {
-    LOGE("failed");
+  if (!vulfwk.initializeInstance(validationLayers, instanceExtensions)) {
     return;
   }
 
@@ -100,14 +99,16 @@ int main(int argc, char **argv) {
   glfw.addRequiredExtensions(instanceExtensions);
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
-  if (!vulfwk.initialize(validationLayers, instanceExtensions)) {
-    LOGE("vulfwk.initialize: failed");
+  if (!vulfwk.initializeInstance(validationLayers, instanceExtensions)) {
     return 1;
   }
 
   if (!vulfwk.createSurfaceWin32(hwnd, GetModuleHandle(nullptr))) {
-    LOGE("vulfwk.createSurfaceWin32: failed");
     return 2;
+  }
+
+  if (!vulfwk.initializeDevice()) {
+    return 3;
   }
 
   while (true) {
