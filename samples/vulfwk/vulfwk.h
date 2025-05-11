@@ -26,14 +26,14 @@ class VulkanFramework {
   VkRenderPass RenderPass = VK_NULL_HANDLE;
   VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
   VkPipeline GraphicsPipeline = VK_NULL_HANDLE;
-  //
-  // VkCommandPool commandPool;
-  // std::vector<VkCommandBuffer> commandBuffers;
-  //
-  // std::vector<VkSemaphore> imageAvailableSemaphores;
-  // std::vector<VkSemaphore> renderFinishedSemaphores;
-  // std::vector<VkFence> inFlightFences;
-  // uint32_t currentFrame = 0;
+
+  VkCommandPool CommandPool;
+  std::vector<VkCommandBuffer> CommandBuffers;
+
+  std::vector<VkSemaphore> ImageAvailableSemaphores;
+  std::vector<VkSemaphore> RenderFinishedSemaphores;
+  std::vector<VkFence> InFlightFences;
+  uint32_t CurrentFrame = 0;
 
 public:
   VulkanFramework(const char *appName, const char *engineName);
@@ -58,4 +58,8 @@ private:
   bool createImageViews();
   bool createRenderPass();
   bool createGraphicsPipeline();
+  bool createFramebuffers();
+  bool createCommandPool();
+  bool createCommandBuffers();
+  bool createSyncObjects();
 };

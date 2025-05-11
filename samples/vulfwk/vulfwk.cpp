@@ -7,6 +7,8 @@
 #include <set>
 #include <string>
 
+const int MAX_FRAMES_IN_FLIGHT = 2;
+
 static std::vector<char> readFile(const std::string &filename) {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -276,18 +278,14 @@ bool VulkanFramework::initializeInstance(
 }
 
 void VulkanFramework::cleanup() {
-  // for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-  //   vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
-  //   vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
-  //   vkDestroyFence(device, inFlightFences[i], nullptr);
-  // }
-  //
-  // vkDestroyCommandPool(device, commandPool, nullptr);
-  //
-  // for (auto framebuffer : swapChainFramebuffers) {
-  //   vkDestroyFramebuffer(device, framebuffer, nullptr);
-  // }
-
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    vkDestroySemaphore(Device, RenderFinishedSemaphores[i], nullptr);
+    vkDestroySemaphore(Device, ImageAvailableSemaphores[i], nullptr);
+    vkDestroyFence(Device, InFlightFences[i], nullptr);
+  }
+  if (CommandPool) {
+    vkDestroyCommandPool(Device, CommandPool, nullptr);
+  }
   if (GraphicsPipeline) {
     vkDestroyPipeline(Device, GraphicsPipeline, nullptr);
   }
@@ -296,6 +294,9 @@ void VulkanFramework::cleanup() {
   }
   if (RenderPass) {
     vkDestroyRenderPass(Device, RenderPass, nullptr);
+  }
+  for (auto framebuffer : SwapchainFramebuffers) {
+    vkDestroyFramebuffer(Device, framebuffer, nullptr);
   }
   for (auto imageView : SwapchainImageViews) {
     vkDestroyImageView(Device, imageView, nullptr);
@@ -358,7 +359,15 @@ bool VulkanFramework::initializeDevice(
   if (!createGraphicsPipeline()) {
     return false;
   }
-
+  if (!createCommandPool()) {
+    return false;
+  }
+  if (!createCommandBuffers()) {
+    return false;
+  }
+  if (!createSyncObjects()) {
+    return false;
+  }
   return true;
 }
 
@@ -429,7 +438,9 @@ bool VulkanFramework::createSwapChain(VkExtent2D imageExtent) {
   if (!createImageViews()) {
     return false;
   }
-
+  if (!createFramebuffers()) {
+    return false;
+  }
   return true;
 }
 
@@ -750,5 +761,88 @@ bool VulkanFramework::createGraphicsPipeline() {
 
   vkDestroyShaderModule(Device, fragShaderModule, nullptr);
   vkDestroyShaderModule(Device, vertShaderModule, nullptr);
+  return true;
+}
+
+bool VulkanFramework::createFramebuffers() {
+  SwapchainFramebuffers.resize(SwapchainImageViews.size());
+  for (size_t i = 0; i < SwapchainImageViews.size(); i++) {
+    VkImageView attachments[] = {SwapchainImageViews[i]};
+
+    VkFramebufferCreateInfo framebufferInfo{};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = RenderPass;
+    framebufferInfo.attachmentCount = 1;
+    framebufferInfo.pAttachments = attachments;
+    framebufferInfo.width = SwapchainExtent.width;
+    framebufferInfo.height = SwapchainExtent.height;
+    framebufferInfo.layers = 1;
+
+    if (vkCreateFramebuffer(Device, &framebufferInfo, nullptr,
+                            &SwapchainFramebuffers[i]) != VK_SUCCESS) {
+      LOGE("failed to create framebuffer!");
+      return false;
+    }
+  }
+  return true;
+}
+
+bool VulkanFramework::createCommandPool() {
+  QueueFamilyIndices queueFamilyIndices =
+      findQueueFamilies(PhysicalDevice, Surface);
+
+  VkCommandPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+  if (vkCreateCommandPool(Device, &poolInfo, nullptr, &CommandPool) !=
+      VK_SUCCESS) {
+    LOGE("failed to create command pool!");
+    return false;
+  }
+  return true;
+}
+
+bool VulkanFramework::createCommandBuffers() {
+  CommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+  VkCommandBufferAllocateInfo allocInfo{};
+  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocInfo.commandPool = CommandPool;
+  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocInfo.commandBufferCount = (uint32_t)CommandBuffers.size();
+
+  if (vkAllocateCommandBuffers(Device, &allocInfo, CommandBuffers.data()) !=
+      VK_SUCCESS) {
+    LOGE("failed to allocate command buffers!");
+    return false;
+  }
+  return true;
+}
+
+bool VulkanFramework::createSyncObjects() {
+  ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+  VkSemaphoreCreateInfo semaphoreInfo{};
+  semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+  VkFenceCreateInfo fenceInfo{};
+  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    if (vkCreateSemaphore(Device, &semaphoreInfo, nullptr,
+                          &ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+        vkCreateSemaphore(Device, &semaphoreInfo, nullptr,
+                          &RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+        vkCreateFence(Device, &fenceInfo, nullptr, &InFlightFences[i]) !=
+            VK_SUCCESS) {
+      LOGE("failed to create synchronization objects for a frame!");
+      return false;
+    }
+  }
   return true;
 }
