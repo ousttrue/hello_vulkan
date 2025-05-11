@@ -106,19 +106,24 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (!vulfwk.createSurfaceWin32(hwnd, GetModuleHandle(nullptr))) {
+  if (!vulfwk.createSurfaceWin32(GetModuleHandle(nullptr), hwnd)) {
     return 2;
   }
 
   if (!vulfwk.initializeDevice(validationLayers, deviceExtensions)) {
     return 3;
   }
+  // VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
   while (true) {
     int width, height;
     if (!glfw.nextFrame(&width, &height)) {
       break;
     }
+
+    vulfwk.createSwapChain(
+        {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
+
     // vulfwk.drawFrame();
     glfw.flush();
   }

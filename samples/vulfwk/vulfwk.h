@@ -16,6 +16,13 @@ class VulkanFramework {
   VkQueue GraphicsQueue = VK_NULL_HANDLE;
   VkQueue PresentQueue = VK_NULL_HANDLE;
 
+  VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
+  std::vector<VkImage> SwapChainImages;
+  VkFormat SwapchainImageFormat = {};
+  VkExtent2D SwapchainExtent = {0, 0};
+  std::vector<VkImageView> SwapchainImageViews;
+  std::vector<VkFramebuffer> SwapchainFramebuffers;
+
 public:
   VulkanFramework(const char *appName, const char *engineName);
   ~VulkanFramework();
@@ -26,6 +33,7 @@ public:
   bool createSurfaceWin32(void *hInstance, void *hWnd);
   bool initializeDevice(const std::vector<const char *> &layerNames,
                         const std::vector<const char *> &deviceExtensionNames);
+  bool createSwapChain(VkExtent2D imageExtent);
 
 private:
   bool createInstance(const std::vector<const char *> &layerNames,
