@@ -108,10 +108,9 @@ static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
   return indices;
 }
 
-const std::vector<const char *> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-static bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+static bool
+checkDeviceExtensionSupport(VkPhysicalDevice device,
+                            const std::vector<const char *> &deviceExtensions) {
   uint32_t extensionCount;
   vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
                                        nullptr);
@@ -165,10 +164,13 @@ static SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device,
   return details;
 }
 
-static bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
+static bool
+isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface,
+                 const std::vector<const char *> &deviceExtensions) {
   QueueFamilyIndices indices = findQueueFamilies(device, surface);
 
-  bool extensionsSupported = checkDeviceExtensionSupport(device);
+  bool extensionsSupported =
+      checkDeviceExtensionSupport(device, deviceExtensions);
 
   bool swapChainAdequate = false;
   if (extensionsSupported) {
@@ -212,6 +214,9 @@ bool VulkanFramework::initializeInstance(
 }
 
 void VulkanFramework::cleanup() {
+  if (Device) {
+    vkDestroyDevice(Device, nullptr);
+  }
   if (Surface) {
     vkDestroySurfaceKHR(Instance, Surface, nullptr);
   }
@@ -237,8 +242,13 @@ bool VulkanFramework::createSurfaceWin32(void *hInstance, void *hWnd) {
   return true;
 }
 
-bool VulkanFramework::initializeDevice() {
-  if (!pickPhysicalDevice()) {
+bool VulkanFramework::initializeDevice(
+    const std::vector<const char *> &layerNames,
+    const std::vector<const char *> &deviceExtensionNames) {
+  if (!pickPhysicalDevice(deviceExtensionNames)) {
+    return false;
+  }
+  if (!createLogicalDevice(layerNames, deviceExtensionNames)) {
     return false;
   }
   return true;
@@ -295,7 +305,8 @@ bool VulkanFramework::createInstance(
   return true;
 }
 
-bool VulkanFramework::pickPhysicalDevice() {
+bool VulkanFramework::pickPhysicalDevice(
+    const std::vector<const char *> &deviceExtensionNames) {
   uint32_t deviceCount = 0;
   vkEnumeratePhysicalDevices(Instance, &deviceCount, nullptr);
   if (deviceCount == 0) {
@@ -307,7 +318,7 @@ bool VulkanFramework::pickPhysicalDevice() {
   vkEnumeratePhysicalDevices(Instance, &deviceCount, devices.data());
 
   for (const auto &device : devices) {
-    if (isDeviceSuitable(device, Surface)) {
+    if (isDeviceSuitable(device, Surface, deviceExtensionNames)) {
       PhysicalDevice = device;
       break;
     }
@@ -318,5 +329,50 @@ bool VulkanFramework::pickPhysicalDevice() {
     return false;
   }
 
+  return true;
+}
+
+bool VulkanFramework::createLogicalDevice(
+    const std::vector<const char *> &layerNames,
+    const std::vector<const char *> &deviceExtensionNames) {
+  QueueFamilyIndices indices = findQueueFamilies(PhysicalDevice, Surface);
+
+  std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+  std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(),
+                                            indices.presentFamily.value()};
+
+  float queuePriority = 1.0f;
+  for (uint32_t queueFamily : uniqueQueueFamilies) {
+    VkDeviceQueueCreateInfo queueCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = queueFamily,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+    queueCreateInfos.push_back(queueCreateInfo);
+  }
+
+  VkPhysicalDeviceFeatures deviceFeatures{};
+
+  VkDeviceCreateInfo createInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+      .pQueueCreateInfos = queueCreateInfos.data(),
+      .enabledLayerCount = static_cast<uint32_t>(layerNames.size()),
+      .ppEnabledLayerNames = layerNames.data(),
+      .enabledExtensionCount =
+          static_cast<uint32_t>(deviceExtensionNames.size()),
+      .ppEnabledExtensionNames = deviceExtensionNames.data(),
+      .pEnabledFeatures = &deviceFeatures,
+  };
+
+  if (vkCreateDevice(PhysicalDevice, &createInfo, nullptr, &Device) !=
+      VK_SUCCESS) {
+    LOGE("failed to create logical device!");
+    return false;
+  }
+
+  vkGetDeviceQueue(Device, indices.graphicsFamily.value(), 0, &GraphicsQueue);
+  vkGetDeviceQueue(Device, indices.presentFamily.value(), 0, &PresentQueue);
   return true;
 }

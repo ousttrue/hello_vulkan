@@ -88,6 +88,9 @@ void android_main(android_app *state) {
 int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
   std::vector<const char *> instanceExtensions;
+  std::vector<const char *> deviceExtensions = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
 #ifndef NDEBUG
   LOGI("[debug build]");
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");
@@ -107,7 +110,7 @@ int main(int argc, char **argv) {
     return 2;
   }
 
-  if (!vulfwk.initializeDevice()) {
+  if (!vulfwk.initializeDevice(validationLayers, deviceExtensions)) {
     return 3;
   }
 
