@@ -58,7 +58,7 @@ pub fn cmakeAndroidToolchain(
     cmake_build.addDirectoryArg(build_dir);
     cmake_build.addArgs(&.{
         "--config",
-        "Release",
+        if (optimize == .Debug) "Debug" else "Release",
         // "--clean-first",
     });
 

@@ -13,7 +13,7 @@ FetchContent_Populate(
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
 
-function(add_shader TARGET SHADER)
+function(add_glsl TARGET SHADER)
   find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Include/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})
   set(current-output-path ${CMAKE_CURRENT_BINARY_DIR}/${SHADER}.spv)
@@ -25,7 +25,7 @@ function(add_shader TARGET SHADER)
     VERBATIM)
   set_source_files_properties(${current-output-path} PROPERTIES GENERATED TRUE)
   target_sources(${TARGET} PRIVATE ${current-output-path})
-endfunction(add_shader)
+endfunction(add_glsl)
 
 if(ANDROID_NDK)
   set(TARGET_NAME android_native_app_glue)

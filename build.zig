@@ -28,6 +28,11 @@ pub fn build(b: *std.Build) void {
         },
     );
 
+    const shaders_wf = b.addWriteFiles();
+    shaders_wf.step.dependOn(so.step);
+    _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
+    _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
+
     //
     // build apk zip archive
     //
@@ -35,18 +40,19 @@ pub fn build(b: *std.Build) void {
     const zip_file = ndk_build.makeZipfile(
         b,
         tools,
+        &shaders_wf.step,
         b.path("samples/vulfwk/android/AndroidManifest.xml"),
         .{ .bin = .{
             .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),
             .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
         } },
         null,
+        shaders_wf.getDirectory(),
         &.{.{
             .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
             .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
         }},
     );
-    zip_file.step.dependOn(so.step);
 
     // zipalign
     const aligned_apk = ndk_build.runZipalign(

@@ -21,5 +21,5 @@ target_link_libraries(${TARGET_NAME} PRIVATE
   glfw
   vulkan-1.lib
 )
-add_shader(${TARGET_NAME} shader.vert)
-add_shader(${TARGET_NAME} shader.frag)
+add_glsl(${TARGET_NAME} shader.vert)
+add_glsl(${TARGET_NAME} shader.frag)

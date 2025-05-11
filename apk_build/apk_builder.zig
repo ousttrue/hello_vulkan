@@ -21,19 +21,23 @@ const ApkBuilder = struct {
     pub fn create(
         b: *std.Build,
         tools: *android.Tools,
+        dependOn: *std.Build.Step,
         android_manifest_file: std.Build.LazyPath,
         resource_directory: ?std.Build.LazyPath,
+        assets_directory: ?std.Build.LazyPath,
     ) @This() {
         const self = @This(){
             .files = b.addWriteFiles(),
             .files_not_compressed = b.addWriteFiles(),
         };
+        self.files.step.dependOn(dependOn);
 
         self.run_jar(
             b,
             tools,
             android_manifest_file,
             resource_directory,
+            assets_directory,
         );
 
         return self;
@@ -47,6 +51,7 @@ const ApkBuilder = struct {
         tools: *android.Tools,
         android_manifest_file: std.Build.LazyPath,
         resource_directory: ?std.Build.LazyPath,
+        assets_directory: ?std.Build.LazyPath,
     ) void {
         const jar = b.addSystemCommand(&[_][]const u8{
             tools.java_tools.jar,
@@ -64,6 +69,7 @@ const ApkBuilder = struct {
             tools,
             android_manifest_file,
             resource_directory,
+            assets_directory,
         );
         jar.addPrefixedFileArg("--file=", resources_apk.file);
 
@@ -171,6 +177,7 @@ fn aapt2_link(
     tools: *android.Tools,
     android_manifest_file: std.Build.LazyPath,
     resource_directory: ?std.Build.LazyPath,
+    assets_directory: ?std.Build.LazyPath,
 ) struct {
     step: *std.Build.Step.Run,
     file: std.Build.LazyPath,
@@ -210,15 +217,6 @@ fn aapt2_link(
     aapt2link.addArg("-o");
     const resources_apk = aapt2link.addOutputFileArg("resources.apk");
 
-    // TODO(jae): 2024-09-17
-    // Add support for asset directories
-    // Additional directory
-    // aapt.step.dependOn(&resource_write_files.step);
-    // for (app_config.asset_directories) |dir| {
-    //     make_unsigned_apk.addArg("-A"); // additional directory in which to find raw asset files
-    //     make_unsigned_apk.addArg(sdk.b.pathFromRoot(dir));
-    // }
-
     // Add resource files
     if (resource_directory) |dir| {
         const resources_flat_zip = resblk: {
@@ -248,6 +246,11 @@ fn aapt2_link(
         aapt2link.addFileArg(resources_flat_zip);
     }
 
+    if (assets_directory) |dir| {
+        aapt2link.addArg("-A");
+        aapt2link.addDirectoryArg(dir);
+    }
+
     return .{
         .step = aapt2link,
         .file = resources_apk,
@@ -273,16 +276,20 @@ pub const EntryPoint = union(enum) {
 pub fn makeZipfile(
     b: *std.Build,
     tools: *android.Tools,
+    dependOn: *std.Build.Step,
     android_manifest_file: std.Build.LazyPath,
     entrypoint: EntryPoint,
     resource_directory: ?std.Build.LazyPath,
+    assets_directory: ?std.Build.LazyPath,
     appends: ?[]const CopyFile,
 ) ZipFile {
     const builder = ApkBuilder.create(
         b,
         tools,
+        dependOn,
         android_manifest_file,
         resource_directory,
+        assets_directory,
     );
 
     switch (entrypoint) {

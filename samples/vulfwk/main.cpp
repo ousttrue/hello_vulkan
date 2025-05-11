@@ -79,6 +79,8 @@ void android_main(android_app *state) {
   state->userData = &userData;
   state->onAppCmd = engineHandleCmd;
 
+  vulfwk.setAssetManager(state->activity->assetManager);
+
   for (;;) {
     struct android_poll_source *source;
     int ident;

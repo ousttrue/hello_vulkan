@@ -35,9 +35,12 @@ class VulkanFramework {
   std::vector<VkFence> InFlightFences;
   uint32_t CurrentFrame = 0;
 
+  void *AssetManager = nullptr;
+
 public:
   VulkanFramework(const char *appName, const char *engineName);
   ~VulkanFramework();
+  void setAssetManager(void *p) { AssetManager = p; }
   bool
   initializeInstance(const std::vector<const char *> &layerNames,
                      const std::vector<const char *> &instanceExtensionNames);

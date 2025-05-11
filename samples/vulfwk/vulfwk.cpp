@@ -8,25 +8,6 @@
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-static std::vector<char> readFile(const std::string &filename) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open()) {
-    LOGE("failed to open: %s", filename.c_str());
-    return {};
-  }
-
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
-
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-
-  file.close();
-
-  return buffer;
-}
-
 static bool
 checkValidationLayerSupport(const std::vector<const char *> &validationLayers) {
   uint32_t layerCount;
@@ -671,15 +652,51 @@ bool VulkanFramework::createRenderPass() {
   return true;
 }
 
+#if ANDROID
+static std::vector<char> readFile(const char *filePath, void *p) {
+  auto manager = reinterpret_cast<AAssetManager *>(p);
+  AAsset *asset = AAssetManager_open(manager, filePath, AASSET_MODE_BUFFER);
+  if (!asset) {
+    return {};
+  }
+
+  size_t size = AAsset_getLength(asset);
+  std::vector<char> buffer(size);
+
+  // データを読み込む
+  AAsset_read(asset, buffer.data(), size);
+  AAsset_close(asset);
+
+  return buffer;
+}
+#else
+static std::vector<char> readFile(const char filename, void *) {
+  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+  if (!file.is_open()) {
+    LOGE("failed to open: %s", filename);
+    return {};
+  }
+
+  size_t fileSize = (size_t)file.tellg();
+  std::vector<char> buffer(fileSize);
+
+  file.seekg(0);
+  file.read(buffer.data(), fileSize);
+
+  file.close();
+
+  return buffer;
+}
+#endif
+
 bool VulkanFramework::createGraphicsPipeline() {
-  auto vertShaderCode = readFile("shader.vert.spv");
+  auto vertShaderCode = readFile("shader.vert.spv", AssetManager);
   if (vertShaderCode.empty()) {
-    LOGE("failed: readFile: shader.vert.spv");
     return false;
   }
-  auto fragShaderCode = readFile("shader.frag.spv");
+  auto fragShaderCode = readFile("shader.frag.spv", AssetManager);
   if (fragShaderCode.empty()) {
-    LOGE("failed: readFile: shader.frag.spv");
     return false;
   }
 
