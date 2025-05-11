@@ -4,8 +4,6 @@
 
 #include <vector>
 
-void *getDebugMessengerCreateInfo(std::vector<const char *> &extensions);
-
 class Glfw {
   GLFWwindow *_window = nullptr;
 

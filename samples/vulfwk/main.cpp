@@ -5,12 +5,11 @@
 int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
   std::vector<const char *> instanceExtensions;
-  void *pNext = nullptr;
 
 #ifndef NDEBUG
   LOGI("[debug build]");
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-  pNext = getDebugMessengerCreateInfo(instanceExtensions);
+  instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
   Glfw glfw;
@@ -18,7 +17,7 @@ int main(int argc, char **argv) {
   glfw.addRequiredExtensions(instanceExtensions);
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
-  if (!vulfwk.initialize(validationLayers, pNext, instanceExtensions)) {
+  if (!vulfwk.initialize(validationLayers, instanceExtensions)) {
     LOGE("failed");
     return 1;
   }
