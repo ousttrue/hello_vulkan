@@ -202,7 +202,7 @@ void android_main(android_app *state)
 	LOGI("Entering android_main()!\n");
 
 	// Make sure glue is not stripped.
-	app_dummy();
+	// app_dummy();
 
 	AndroidState engine;
 	memset(&engine, 0, sizeof(engine));

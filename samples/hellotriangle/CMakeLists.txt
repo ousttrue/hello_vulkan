@@ -18,7 +18,11 @@ elseif(MSVC)
 endif()
 
 if(NOT PLATFORM)
-	set(PLATFORM png)
+  if(ANDROID_NDK)
+    set(PLATFORM android)
+  else()
+    set(PLATFORM png)
+  endif()
 endif(NOT PLATFORM)
 
 add_subdirectory(framework)

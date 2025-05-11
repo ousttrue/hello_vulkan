@@ -2,7 +2,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(TARGET_NAME vulfwk)
 
-if(${PLATFORM} MATCHES "android")
+if(ANDROID_NDK)
   add_library(${TARGET_NAME} SHARED main.cpp vulfwk.cpp)
   target_compile_definitions(${TARGET_NAME} PRIVATE ANDROID=1)
   target_link_libraries(${TARGET_NAME} PRIVATE android_native_app_glue android

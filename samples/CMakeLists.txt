@@ -13,12 +13,12 @@ FetchContent_Populate(
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
 
-if(${PLATFORM} MATCHES "android")
+if(ANDROID_NDK)
   set(TARGET_NAME android_native_app_glue)
   add_library(
     ${TARGET_NAME} STATIC
     ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
-  target_link_options(${TARGET_NAME} PRIVATE -u ANativeActivity_onCreate)
+  target_link_options(${TARGET_NAME} PUBLIC -u ANativeActivity_onCreate)
   target_include_directories(
     ${TARGET_NAME} PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 
@@ -31,7 +31,7 @@ else()
     PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
                IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/vulkan-1.lib)
 
-  subdirs(vulkan_tutorial deps_win32)
+  subdirs(vulkan_tutorial)
 endif()
 
 subdirs(vulfwk)

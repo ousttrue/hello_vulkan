@@ -1,0 +1,20 @@
+.{
+    .name = .hello_vulkan,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0xd605a0449309a6ba,
+    .minimum_zig_version = "0.14.0",
+
+    .dependencies = .{
+        .android = .{
+            .url = "git+https://github.com/silbinarywolf/zig-android-sdk.git#17aa6475b12bea73cd7d07480b433d2f2d9d7c1c",
+            .hash = "android-0.1.0-7iz7QoSaAQCGbFl_CMg5mPgHq4_vogPxzxlhWpr5rM88",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}

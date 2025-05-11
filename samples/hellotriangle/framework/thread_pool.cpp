@@ -34,7 +34,7 @@ void ThreadPool::setWorkerThreadCount(unsigned workerThreadCount)
 
 void ThreadPool::pushWorkToThread(unsigned threadIndex, std::function<void()> func)
 {
-	workerThreads[threadIndex]->pushWork(move(func));
+	workerThreads[threadIndex]->pushWork(std::move(func));
 }
 
 void ThreadPool::waitIdle()
@@ -66,7 +66,7 @@ ThreadPool::Worker::~Worker()
 void ThreadPool::Worker::pushWork(std::function<void()> func)
 {
 	lock_guard<mutex> holder{ lock };
-	workQueue.push(move(func));
+	workQueue.push(std::move(func));
 	cond.notify_one();
 }
 

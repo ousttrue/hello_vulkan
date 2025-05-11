@@ -3,7 +3,14 @@
 
 #ifdef ANDROID
 #include <android_native_app_glue.h>
-void android_main(android_app *state) { LOGI("Entering android_main()!\n"); }
+void android_main(android_app *state) {
+#ifdef NDEBUG
+  LOGI("[release]Entering android_main()!\n");
+#else
+  LOGI("[debug]Entering android_main()!\n");
+#endif
+}
+
 #else
 #include "platform_win32.h"
 
