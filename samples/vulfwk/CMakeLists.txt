@@ -4,7 +4,8 @@ set(TARGET_NAME vulfwk)
 
 if(ANDROID_NDK)
   add_library(${TARGET_NAME} SHARED main.cpp vulfwk.cpp)
-  target_compile_definitions(${TARGET_NAME} PRIVATE ANDROID=1)
+  target_compile_definitions(${TARGET_NAME}
+                             PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
   target_link_libraries(${TARGET_NAME} PRIVATE android_native_app_glue android
                                                log vulkan)
 else()

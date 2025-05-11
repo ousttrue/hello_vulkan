@@ -26,10 +26,36 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
     break;
   }
 
-  case APP_CMD_INIT_WINDOW:
+  case APP_CMD_INIT_WINDOW: {
     LOGI("Initializing platform!\n");
-    // userData->impl->onInitWindow(pApp->window);
+    auto vulfwk = userData->impl;
+
+    std::vector<const char *> validationLayers;
+    std::vector<const char *> instanceExtensions = {"VK_KHR_surface",
+                                                    "VK_KHR_android_surface"};
+    std::vector<const char *> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#ifdef NDEBUG
+#else
+    validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+    instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+    if (!vulfwk->initializeInstance(validationLayers, instanceExtensions)) {
+      LOGE("failed: initializeInstance");
+      return;
+    }
+    if (!userData->impl->createSurfaceAndroid(pApp->window)) {
+      LOGE("failed: createSurfaceAndroid");
+      return;
+    }
+    if (!vulfwk->initializeDevice(validationLayers, deviceExtensions)) {
+      LOGE("failed: initializeDevice");
+      return;
+    }
+    LOGI("vulkan initilized");
+
     break;
+  }
 
   case APP_CMD_TERM_WINDOW:
     LOGI("Terminating application!\n");
@@ -39,21 +65,13 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
 }
 
 void android_main(android_app *state) {
-  std::vector<const char *> validationLayers;
-  std::vector<const char *> instanceExtensions;
 #ifdef NDEBUG
   LOGI("[release]Entering android_main()!\n");
 #else
   LOGI("[debug]Entering android_main()!\n");
-  validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-  instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
   VulkanFramework vulfwk("vulfwk", "No Engine");
-  if (!vulfwk.initializeInstance(validationLayers, instanceExtensions)) {
-    return;
-  }
-
   UserData<VulkanFramework> userData = {
       .pApp = state,
       .impl = &vulfwk,
@@ -105,15 +123,12 @@ int main(int argc, char **argv) {
   if (!vulfwk.initializeInstance(validationLayers, instanceExtensions)) {
     return 1;
   }
-
   if (!vulfwk.createSurfaceWin32(GetModuleHandle(nullptr), hwnd)) {
     return 2;
   }
-
   if (!vulfwk.initializeDevice(validationLayers, deviceExtensions)) {
     return 3;
   }
-  // VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
   while (true) {
     int width, height;

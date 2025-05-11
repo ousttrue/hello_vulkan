@@ -1,4 +1,3 @@
-
 #include "vulfwk.h"
 #include "logger.h"
 
@@ -241,7 +240,8 @@ static VkShaderModule createShaderModule(VkDevice device,
   VkShaderModule shaderModule;
   if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
       VK_SUCCESS) {
-    throw std::runtime_error("failed to create shader module!");
+    LOGE("failed to create shader module!");
+    return VK_NULL_HANDLE;
   }
 
   return shaderModule;
@@ -319,6 +319,29 @@ void VulkanFramework::cleanup() {
   }
 }
 
+#ifdef ANDROID
+#include <android_native_app_glue.h>
+#define VULKAN_SYMBOL_WRAPPER_LOAD_INSTANCE_SYMBOL(instance, name, pfn)        \
+  vulkanSymbolWrapperLoadInstanceSymbol(instance, name,                        \
+                                        (PFN_vkVoidFunction *)&(pfn))
+
+bool VulkanFramework::createSurfaceAndroid(void *p) {
+  auto pNativeWindow = reinterpret_cast<ANativeWindow *>(p);
+
+  VkAndroidSurfaceCreateInfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+      .window = pNativeWindow,
+  };
+
+  if (vkCreateAndroidSurfaceKHR(Instance, &info, nullptr, &Surface) !=
+      VK_SUCCESS) {
+    LOGE("failed: vkCreateAndroidSurfaceKHR");
+    return false;
+  }
+
+  return true;
+}
+#else
 bool VulkanFramework::createSurfaceWin32(void *hInstance, void *hWnd) {
   VkWin32SurfaceCreateInfoKHR createInfo{
       .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
@@ -333,19 +356,23 @@ bool VulkanFramework::createSurfaceWin32(void *hInstance, void *hWnd) {
   }
   return true;
 }
+#endif
 
 bool VulkanFramework::initializeDevice(
     const std::vector<const char *> &layerNames,
     const std::vector<const char *> &deviceExtensionNames) {
   if (!pickPhysicalDevice(deviceExtensionNames)) {
+    LOGE("failed: pickPhysicalDevice");
     return false;
   }
   if (!createLogicalDevice(layerNames, deviceExtensionNames)) {
+    LOGE("failed: createLogicalDevice");
     return false;
   }
 
   SwapChainSupportDetails swapChainSupport;
   if (!swapChainSupport.querySwapChainSupport(PhysicalDevice, Surface)) {
+    LOGE("failed: querySwapChainSupport");
     return false;
   }
 
@@ -355,18 +382,23 @@ bool VulkanFramework::initializeDevice(
 
   // pipeline
   if (!createRenderPass()) {
+    LOGE("failed: createRenderPass");
     return false;
   }
   if (!createGraphicsPipeline()) {
+    LOGE("failed: createGraphicsPipeline");
     return false;
   }
   if (!createCommandPool()) {
+    LOGE("failed: createCommandPool");
     return false;
   }
   if (!createCommandBuffers()) {
+    LOGE("failed: createCommandBuffers");
     return false;
   }
   if (!createSyncObjects()) {
+    LOGE("failed: createSyncObjects");
     return false;
   }
   return true;
@@ -642,15 +674,23 @@ bool VulkanFramework::createRenderPass() {
 bool VulkanFramework::createGraphicsPipeline() {
   auto vertShaderCode = readFile("shader.vert.spv");
   if (vertShaderCode.empty()) {
+    LOGE("failed: readFile: shader.vert.spv");
     return false;
   }
   auto fragShaderCode = readFile("shader.frag.spv");
   if (fragShaderCode.empty()) {
+    LOGE("failed: readFile: shader.frag.spv");
     return false;
   }
 
   VkShaderModule vertShaderModule = createShaderModule(Device, vertShaderCode);
+  if (vertShaderModule == VK_NULL_HANDLE) {
+    return false;
+  }
   VkShaderModule fragShaderModule = createShaderModule(Device, fragShaderCode);
+  if (fragShaderModule == VK_NULL_HANDLE) {
+    return false;
+  }
 
   VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
   vertShaderStageInfo.sType =
@@ -912,7 +952,8 @@ bool VulkanFramework::recordCommandBuffer(VkCommandBuffer commandBuffer,
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
   if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-    throw std::runtime_error("failed to begin recording command buffer!");
+    LOGE("failed to begin recording command buffer!");
+    return false;
   }
 
   VkRenderPassBeginInfo renderPassInfo{};

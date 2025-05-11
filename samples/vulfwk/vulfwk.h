@@ -42,7 +42,11 @@ public:
   initializeInstance(const std::vector<const char *> &layerNames,
                      const std::vector<const char *> &instanceExtensionNames);
   void cleanup();
+#ifdef ANDROID
+  bool createSurfaceAndroid(void *window);
+#else
   bool createSurfaceWin32(void *hInstance, void *hWnd);
+#endif
   bool initializeDevice(const std::vector<const char *> &layerNames,
                         const std::vector<const char *> &deviceExtensionNames);
 
