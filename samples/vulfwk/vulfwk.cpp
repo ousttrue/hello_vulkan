@@ -124,7 +124,7 @@ bool VulkanFramework::createInstance(
 
   VkInstanceCreateInfo InstanceCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      .pNext = &DebugUtilsMessengerCreateInfoEXT,
+      .pNext = layerNames.size() ? &DebugUtilsMessengerCreateInfoEXT : nullptr,
       .pApplicationInfo = &ApplicationInfo,
       .enabledLayerCount = static_cast<uint32_t>(layerNames.size()),
       .ppEnabledLayerNames = layerNames.data(),
@@ -132,9 +132,12 @@ bool VulkanFramework::createInstance(
       .ppEnabledExtensionNames = extensionNames.data(),
   };
 
-  if (vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance) != VK_SUCCESS) {
-    LOGE("failed to create instance!");
-    return false;
+  if (layerNames.size()) {
+    if (vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance) !=
+        VK_SUCCESS) {
+      LOGE("failed to create instance!");
+      return false;
+    }
   }
 
   if (CreateDebugUtilsMessengerEXT(Instance, &DebugUtilsMessengerCreateInfoEXT,

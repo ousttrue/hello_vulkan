@@ -1,6 +1,11 @@
 #include "logger.h"
-#include "platform_win32.h"
 #include "vulfwk.h"
+
+#ifdef ANDROID
+#include <android_native_app_glue.h>
+void android_main(android_app *state) { LOGI("Entering android_main()!\n"); }
+#else
+#include "platform_win32.h"
 
 int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
@@ -33,3 +38,4 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+#endif
