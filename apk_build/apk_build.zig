@@ -15,6 +15,7 @@ pub const runZipalign = apk_builder.runZipalign;
 pub const runApksigner = apk_builder.runApksigner;
 
 pub const cmakeAndroidToolchain = build_cmake.cmakeAndroidToolchain;
+pub const CmakeAndroidToolchainStep = build_cmake.CmakeAndroidToolchainStep;
 
 pub const adbStart = adb_util.adbStart;
 

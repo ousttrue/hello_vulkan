@@ -1,11 +1,9 @@
 const std = @import("std");
 const ndk_build = @import("apk_build/apk_build.zig");
+const android = @import("android");
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
-    const package_name = "com.ousttrue.vulfwk";
-    const apk_name = "vulfwk";
-    const so_name = b.fmt("lib{s}.so", .{apk_name});
     const abi = "arm64-v8a";
 
     const tools = ndk_build.createAndroidTools(b, .{
@@ -28,6 +26,86 @@ pub fn build(b: *std.Build) void {
         },
     );
 
+    build_vulfwk_apk(b, tools, abi, so);
+    build_hellotriangle_apk(b, tools, abi, so);
+}
+
+fn build_hellotriangle_apk(
+    b: *std.Build,
+    tools: *android.Tools,
+    abi: []const u8,
+    so: ndk_build.CmakeAndroidToolchainStep,
+) void {
+    const package_name = "com.arm.vulkansdk.hellotriangle";
+    const apk_name = "hellotriangle";
+    const so_name = "libnative.so";
+
+    //
+    // build apk zip archive
+    //
+    const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
+    const zip_file = ndk_build.makeZipfile(
+        b,
+        tools,
+        so.step,
+        b.path("samples/hellotriangle/samples/hellotriangle/app/AndroidManifest.xml"),
+        .{ .bin = .{
+            .src = so.build_dir.path(b, "samples/hellotriangle/samples/hellotriangle/libnative.so"),
+            .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
+        } },
+        b.path("samples/hellotriangle/samples/hellotriangle/app/res"),
+        b.path("samples/hellotriangle/samples/hellotriangle/app/assets"),
+        &.{.{
+            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+        }},
+    );
+
+    // zipalign
+    const aligned_apk = ndk_build.runZipalign(
+        b,
+        tools,
+        zip_file.file,
+        apk_name,
+    );
+    aligned_apk.step.dependOn(zip_file.step);
+
+    // apksigner
+    const apk = ndk_build.runApksigner(
+        b,
+        tools,
+        aligned_apk.file,
+    );
+
+    // install to zig-out
+    const install_apk = b.addInstallBinFile(
+        apk,
+        b.fmt("{s}.apk", .{apk_name}),
+    );
+    b.getInstallStep().dependOn(&install_apk.step);
+
+    //
+    // zig build run => adb install && adb shell am start
+    //
+    const adb_start = ndk_build.adbStart(
+        b,
+        tools,
+        &install_apk.step,
+        apk_name,
+        package_name,
+    );
+    b.step("hellotriangle", "adb install... && adb shell am start...").dependOn(&adb_start.step);
+}
+
+fn build_vulfwk_apk(
+    b: *std.Build,
+    tools: *android.Tools,
+    abi: []const u8,
+    so: ndk_build.CmakeAndroidToolchainStep,
+) void {
+    const package_name = "com.ousttrue.vulfwk";
+    const apk_name = "vulfwk";
+    const so_name = b.fmt("lib{s}.so", .{apk_name});
     const shaders_wf = b.addWriteFiles();
     shaders_wf.step.dependOn(so.step);
     _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
@@ -87,5 +165,5 @@ pub fn build(b: *std.Build) void {
         apk_name,
         package_name,
     );
-    b.step("run", "adb install... && adb shell am start...").dependOn(&adb_start.step);
+    b.step("vulfwk", "adb install... && adb shell am start...").dependOn(&adb_start.step);
 }

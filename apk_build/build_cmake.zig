@@ -6,16 +6,18 @@ pub const ToolchainOptions = struct {
     platform: []const u8 = "android-30",
 };
 
+pub const CmakeAndroidToolchainStep = struct {
+    step: *std.Build.Step,
+    build_dir: std.Build.LazyPath,
+};
+
 pub fn cmakeAndroidToolchain(
     b: *std.Build,
     optimize: std.builtin.OptimizeMode,
     source_dir: std.Build.LazyPath,
     tools: *android.Tools,
     options: ToolchainOptions,
-) struct {
-    step: *std.Build.Step,
-    build_dir: std.Build.LazyPath,
-} {
+) CmakeAndroidToolchainStep {
     const cmake_configure = b.addSystemCommand(&.{
         "cmake",
         // "--fresh",
