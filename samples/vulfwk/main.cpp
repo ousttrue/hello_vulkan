@@ -1,5 +1,6 @@
 #include "logger.h"
 #include "vulfwk.h"
+#include <android/native_window.h>
 
 #ifdef ANDROID
 #include <android_native_app_glue.h>
@@ -53,6 +54,11 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
       return;
     }
     LOGI("vulkan initilized");
+    auto width = ANativeWindow_getWidth(pApp->window);
+    auto height = ANativeWindow_getHeight(pApp->window);
+    vulfwk->createSwapChain(
+        {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
+    vulfwk->drawFrame();
 
     break;
   }
@@ -96,7 +102,6 @@ void android_main(android_app *state) {
     }
 
     // renderFrame
-
     if (userData.active) {
     }
   }

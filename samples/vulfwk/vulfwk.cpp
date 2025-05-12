@@ -905,6 +905,40 @@ bool VulkanFramework::createSyncObjects() {
   return true;
 }
 
+// unsigned index;
+// vector<VkImage> images;
+// Platform::SwapchainDimensions dim;
+//
+// Result res = platform.acquireNextImage(&index);
+// while (res == RESULT_ERROR_OUTDATED_SWAPCHAIN)
+// {
+// 	platform.acquireNextImage(&index);
+// 	platform.getCurrentSwapchain(&images, &dim);
+// 	engine.pVulkanApp->updateSwapchain(images, dim);
+// }
+//
+// if (FAILED(res))
+// {
+// 	LOGE("Unrecoverable swapchain error.\n");
+// 	break;
+// }
+//
+// engine.pVulkanApp->render(index, 0.0166f);
+// res = platform.presentImage(index);
+//
+// // Handle Outdated error in acquire.
+// if (FAILED(res) && res != RESULT_ERROR_OUTDATED_SWAPCHAIN)
+// 	break;
+//
+// frameCount++;
+// if (frameCount == 100)
+// {
+// 	double endTime = OS::getCurrentTime();
+// 	LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
+// 	frameCount = 0;
+// 	startTime = endTime;
+// }
+
 bool VulkanFramework::drawFrame() {
   vkWaitForFences(Device, 1, &InFlightFences[CurrentFrame], VK_TRUE,
                   UINT64_MAX);
