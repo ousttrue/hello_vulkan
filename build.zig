@@ -48,13 +48,13 @@ fn build_hellotriangle_apk(
         b,
         tools,
         so.step,
-        b.path("samples/hellotriangle/samples/hellotriangle/app/AndroidManifest.xml"),
+        b.path("samples/hellotriangle/android/AndroidManifest.xml"),
         .{ .bin = .{
             .src = so.build_dir.path(b, "samples/hellotriangle/samples/hellotriangle/libnative.so"),
             .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
         } },
-        b.path("samples/hellotriangle/samples/hellotriangle/app/res"),
-        b.path("samples/hellotriangle/samples/hellotriangle/app/assets"),
+        b.path("samples/hellotriangle/android/res"),
+        b.path("samples/hellotriangle/android/assets"),
         &.{.{
             .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
             .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
