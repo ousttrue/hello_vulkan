@@ -7,9 +7,10 @@
 #include <vulkan/vulkan_core.h>
 
 class SwapchainImpl;
-
+class PipelineImpl;
 class VulkanFramework {
   std::shared_ptr<SwapchainImpl> Swapchain;
+  std::shared_ptr<PipelineImpl> Pipeline;
 
   std::string _appName;
   std::string _engineName;
@@ -22,13 +23,6 @@ class VulkanFramework {
   VkQueue PresentQueue = VK_NULL_HANDLE;
 
   VkFormat SwapchainImageFormat = {};
-
-  VkRenderPass RenderPass = VK_NULL_HANDLE;
-  VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
-  VkPipeline GraphicsPipeline = VK_NULL_HANDLE;
-
-  VkCommandPool CommandPool;
-  std::vector<VkCommandBuffer> CommandBuffers;
 
   void *AssetManager = nullptr;
 
@@ -51,7 +45,6 @@ public:
   bool drawFrame(uint32_t width, uint32_t height);
 
 private:
-  bool createSwapChain(VkExtent2D imageExtent);
   bool createInstance(const std::vector<const char *> &layerNames,
                       const std::vector<const char *> &instanceExtensionNames);
   bool
@@ -59,12 +52,4 @@ private:
   bool
   createLogicalDevice(const std::vector<const char *> &layerNames,
                       const std::vector<const char *> &deviceExtensionNames);
-  bool createRenderPass();
-  bool createGraphicsPipeline();
-  bool createCommandPool();
-  bool createCommandBuffers();
-
-private:
-  bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
-                           VkFramebuffer framebuffer, VkExtent2D imageExtent);
 };

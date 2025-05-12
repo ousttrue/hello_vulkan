@@ -2,7 +2,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(TARGET_NAME vulfwk)
 
-set(SRCS main.cpp vulfwk.cpp vulfwk_swapchain.cpp)
+set(SRCS main.cpp vulfwk.cpp vulfwk_swapchain.cpp vulfwk_pipeline.cpp
+         vulfwk_queuefamily.cpp)
 if(ANDROID_NDK)
   add_library(${TARGET_NAME} SHARED ${SRCS})
   target_compile_definitions(${TARGET_NAME}

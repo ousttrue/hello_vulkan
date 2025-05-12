@@ -13,18 +13,6 @@ struct SwapChainSupportDetails {
   bool querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 };
 
-struct QueueFamilyIndices {
-  std::optional<uint32_t> graphicsFamily;
-  std::optional<uint32_t> presentFamily;
-
-  bool isComplete() {
-    return graphicsFamily.has_value() && presentFamily.has_value();
-  }
-
-  static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
-                                              VkSurfaceKHR surface);
-};
-
 class SwapchainImpl {
 public:
   static const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -58,6 +46,9 @@ public:
   create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkDevice device,
          VkExtent2D imageExtent, VkFormat imageFormat, VkRenderPass renderPass);
 
+  bool isSameSize(uint32_t width, uint32_t height) const {
+    return SwapchainExtent.width == width && SwapchainExtent.height == height;
+  }
   VkExtent2D extent() const { return SwapchainExtent; }
   VkFramebuffer frameBuffer(uint32_t imageIndex) const {
     return SwapchainFramebuffers[imageIndex];
