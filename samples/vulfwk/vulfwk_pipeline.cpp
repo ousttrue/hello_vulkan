@@ -9,6 +9,7 @@ static std::vector<char> readFile(const char *filePath, void *p) {
   auto manager = reinterpret_cast<AAssetManager *>(p);
   AAsset *asset = AAssetManager_open(manager, filePath, AASSET_MODE_BUFFER);
   if (!asset) {
+    LOGE("failed to AAssetManager_open: %s", filePath);
     return {};
   }
 

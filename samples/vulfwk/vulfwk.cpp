@@ -131,7 +131,7 @@ bool VulkanFramework::initializeInstance(
     return false;
   }
   for (auto name : extensionNames) {
-    LOGI("[extension] %s", name);
+    LOGI("[instance extension] %s", name);
   }
   if (!createInstance(layerNames, extensionNames)) {
     return false;
@@ -152,7 +152,7 @@ void VulkanFramework::cleanup() {
   if (DebugUtilsMessengerEXT) {
     DestroyDebugUtilsMessengerEXT(Instance, DebugUtilsMessengerEXT, nullptr);
   }
-  if (Instance != VK_NULL_HANDLE) {
+  if (Instance) {
     vkDestroyInstance(Instance, nullptr);
   }
 }
@@ -164,15 +164,14 @@ bool VulkanFramework::createSurfaceAndroid(void *p) {
 
   VkAndroidSurfaceCreateInfoKHR info = {
       .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+      .flags = 0,
       .window = pNativeWindow,
   };
-
   if (vkCreateAndroidSurfaceKHR(Instance, &info, nullptr, &Surface) !=
       VK_SUCCESS) {
     LOGE("failed: vkCreateAndroidSurfaceKHR");
     return false;
   }
-
   return true;
 }
 #else
@@ -213,8 +212,6 @@ bool VulkanFramework::initializeDevice(
   VkSurfaceFormatKHR surfaceFormat =
       SwapchainImpl::chooseSwapSurfaceFormat(swapChainSupport.formats);
   SwapchainImageFormat = surfaceFormat.format;
-
-  // pipeline
   Pipeline = PipelineImpl::create(PhysicalDevice, Surface, Device,
                                   SwapchainImageFormat, AssetManager);
   if (!Pipeline) {
@@ -304,6 +301,10 @@ bool VulkanFramework::pickPhysicalDevice(
 bool VulkanFramework::createLogicalDevice(
     const std::vector<const char *> &layerNames,
     const std::vector<const char *> &deviceExtensionNames) {
+  for (auto name : deviceExtensionNames) {
+    LOGI("[device extension] %s", name);
+  }
+
   auto indices =
       QueueFamilyIndices ::findQueueFamilies(PhysicalDevice, Surface);
 
