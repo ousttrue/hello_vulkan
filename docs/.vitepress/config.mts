@@ -4,6 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "hello_vulkan",
   description: "vulan on windows and android",
+  base: "/hello_vulkan/",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
