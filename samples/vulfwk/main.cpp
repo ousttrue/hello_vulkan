@@ -1,8 +1,8 @@
 #include "logger.h"
 #include "vulfwk.h"
-#include <android/native_window.h>
 
 #ifdef ANDROID
+// #include <android/native_window.h>
 #include <android_native_app_glue.h>
 
 template <typename T> struct UserData {
@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
     vulfwk.createSwapChain(
         {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
     vulfwk.drawFrame();
-    glfw.flush();
+    // glfw.flush();
   }
 
   return 0;

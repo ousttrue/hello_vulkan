@@ -1,7 +1,6 @@
 #include "vulfwk.h"
 #include "logger.h"
 
-#include <fstream>
 #include <optional>
 #include <set>
 #include <string>
@@ -670,7 +669,8 @@ static std::vector<char> readFile(const char *filePath, void *p) {
   return buffer;
 }
 #else
-static std::vector<char> readFile(const char filename, void *) {
+#include <fstream>
+static std::vector<char> readFile(const char *filename, void *) {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
   if (!file.is_open()) {
