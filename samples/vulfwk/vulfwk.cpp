@@ -1,11 +1,9 @@
 #include "vulfwk.h"
 #include "logger.h"
+#include "vulfwk_swapchain.h"
 
-#include <optional>
 #include <set>
 #include <string>
-
-const int MAX_FRAMES_IN_FLIGHT = 2;
 
 static bool
 checkValidationLayerSupport(const std::vector<const char *> &validationLayers) {
@@ -66,49 +64,6 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance,
   }
 }
 
-struct QueueFamilyIndices {
-  std::optional<uint32_t> graphicsFamily;
-  std::optional<uint32_t> presentFamily;
-
-  bool isComplete() {
-    return graphicsFamily.has_value() && presentFamily.has_value();
-  }
-};
-
-static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device,
-                                            VkSurfaceKHR surface) {
-  QueueFamilyIndices indices;
-
-  uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-  std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-                                           queueFamilies.data());
-
-  int i = 0;
-  for (const auto &queueFamily : queueFamilies) {
-    if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      indices.graphicsFamily = i;
-    }
-
-    VkBool32 presentSupport = false;
-    vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
-
-    if (presentSupport) {
-      indices.presentFamily = i;
-    }
-
-    if (indices.isComplete()) {
-      break;
-    }
-
-    i++;
-  }
-
-  return indices;
-}
-
 static bool
 checkDeviceExtensionSupport(VkPhysicalDevice device,
                             const std::vector<const char *> &deviceExtensions) {
@@ -130,47 +85,10 @@ checkDeviceExtensionSupport(VkPhysicalDevice device,
   return requiredExtensions.empty();
 }
 
-struct SwapChainSupportDetails {
-  VkSurfaceCapabilitiesKHR capabilities = {};
-  std::vector<VkSurfaceFormatKHR> formats;
-  std::vector<VkPresentModeKHR> presentModes;
-
-  bool querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-    if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-            device, surface, &this->capabilities) != VK_SUCCESS) {
-      LOGE("failed: vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
-      return false;
-    }
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount,
-                                         nullptr);
-
-    if (formatCount != 0) {
-      this->formats.resize(formatCount);
-      vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount,
-                                           this->formats.data());
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
-                                              &presentModeCount, nullptr);
-
-    if (presentModeCount != 0) {
-      this->presentModes.resize(presentModeCount);
-      vkGetPhysicalDeviceSurfacePresentModesKHR(
-          device, surface, &presentModeCount, this->presentModes.data());
-    }
-
-    return true;
-  }
-};
-
 static bool
 isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface,
                  const std::vector<const char *> &deviceExtensions) {
-  QueueFamilyIndices indices = findQueueFamilies(device, surface);
-
+  auto indices = QueueFamilyIndices ::findQueueFamilies(device, surface);
   bool extensionsSupported =
       checkDeviceExtensionSupport(device, deviceExtensions);
 
@@ -185,29 +103,6 @@ isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface,
   }
 
   return indices.isComplete() && extensionsSupported && swapChainAdequate;
-}
-
-static VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR> &availableFormats) {
-  for (const auto &availableFormat : availableFormats) {
-    if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
-        availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-      return availableFormat;
-    }
-  }
-
-  return availableFormats[0];
-}
-
-static VkPresentModeKHR chooseSwapPresentMode(
-    const std::vector<VkPresentModeKHR> &availablePresentModes) {
-  for (const auto &availablePresentMode : availablePresentModes) {
-    if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-      return availablePresentMode;
-    }
-  }
-
-  return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 static VkShaderModule createShaderModule(VkDevice device,
@@ -259,11 +154,8 @@ bool VulkanFramework::initializeInstance(
 }
 
 void VulkanFramework::cleanup() {
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    vkDestroySemaphore(Device, RenderFinishedSemaphores[i], nullptr);
-    vkDestroySemaphore(Device, ImageAvailableSemaphores[i], nullptr);
-    vkDestroyFence(Device, InFlightFences[i], nullptr);
-  }
+  Swapchain = nullptr;
+
   if (CommandPool) {
     vkDestroyCommandPool(Device, CommandPool, nullptr);
   }
@@ -275,15 +167,6 @@ void VulkanFramework::cleanup() {
   }
   if (RenderPass) {
     vkDestroyRenderPass(Device, RenderPass, nullptr);
-  }
-  for (auto framebuffer : SwapchainFramebuffers) {
-    vkDestroyFramebuffer(Device, framebuffer, nullptr);
-  }
-  for (auto imageView : SwapchainImageViews) {
-    vkDestroyImageView(Device, imageView, nullptr);
-  }
-  if (Swapchain) {
-    vkDestroySwapchainKHR(Device, Swapchain, nullptr);
   }
   if (Device) {
     vkDestroyDevice(Device, nullptr);
@@ -357,7 +240,7 @@ bool VulkanFramework::initializeDevice(
   }
 
   VkSurfaceFormatKHR surfaceFormat =
-      chooseSwapSurfaceFormat(swapChainSupport.formats);
+      SwapchainImpl::chooseSwapSurfaceFormat(swapChainSupport.formats);
   SwapchainImageFormat = surfaceFormat.format;
 
   // pipeline
@@ -377,81 +260,22 @@ bool VulkanFramework::initializeDevice(
     LOGE("failed: createCommandBuffers");
     return false;
   }
-  if (!createSyncObjects()) {
-    LOGE("failed: createSyncObjects");
-    return false;
-  }
   return true;
 }
 
 bool VulkanFramework::createSwapChain(VkExtent2D imageExtent) {
-  if (SwapchainExtent.width == imageExtent.width &&
-      SwapchainExtent.height == imageExtent.height) {
-    return true;
-  }
-  SwapChainSupportDetails swapChainSupport;
-  if (!swapChainSupport.querySwapChainSupport(PhysicalDevice, Surface)) {
-    return false;
-  }
-
-  VkSurfaceFormatKHR surfaceFormat =
-      chooseSwapSurfaceFormat(swapChainSupport.formats);
-  VkPresentModeKHR presentMode =
-      chooseSwapPresentMode(swapChainSupport.presentModes);
-
-  uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-  if (swapChainSupport.capabilities.maxImageCount > 0 &&
-      imageCount > swapChainSupport.capabilities.maxImageCount) {
-    imageCount = swapChainSupport.capabilities.maxImageCount;
+  if (Swapchain) {
+    auto swapchainExtent = Swapchain->extent();
+    if (swapchainExtent.width == imageExtent.width &&
+        swapchainExtent.height == imageExtent.height) {
+      return true;
+    }
   }
 
-  VkSwapchainCreateInfoKHR createInfo{
-      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-      .surface = Surface,
-      .minImageCount = imageCount,
-      .imageFormat = surfaceFormat.format,
-      .imageColorSpace = surfaceFormat.colorSpace,
-      .imageExtent = imageExtent,
-      .imageArrayLayers = 1,
-      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-  };
-
-  QueueFamilyIndices indices = findQueueFamilies(PhysicalDevice, Surface);
-  uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(),
-                                   indices.presentFamily.value()};
-
-  if (indices.graphicsFamily != indices.presentFamily) {
-    createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-    createInfo.queueFamilyIndexCount = 2;
-    createInfo.pQueueFamilyIndices = queueFamilyIndices;
-  } else {
-    createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  }
-
-  createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-  createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  createInfo.presentMode = presentMode;
-  createInfo.clipped = VK_TRUE;
-
-  createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-  if (vkCreateSwapchainKHR(Device, &createInfo, nullptr, &Swapchain) !=
-      VK_SUCCESS) {
-    LOGE("failed to create swap chain!");
-    return false;
-  }
-
-  vkGetSwapchainImagesKHR(Device, Swapchain, &imageCount, nullptr);
-  SwapchainImages.resize(imageCount);
-  vkGetSwapchainImagesKHR(Device, Swapchain, &imageCount,
-                          SwapchainImages.data());
-
-  SwapchainExtent = imageExtent;
-
-  if (!createImageViews()) {
-    return false;
-  }
-  if (!createFramebuffers()) {
+  Swapchain =
+      SwapchainImpl::create(PhysicalDevice, Surface, Device, imageExtent,
+                            SwapchainImageFormat, RenderPass);
+  if (!Swapchain) {
     return false;
   }
   return true;
@@ -538,7 +362,8 @@ bool VulkanFramework::pickPhysicalDevice(
 bool VulkanFramework::createLogicalDevice(
     const std::vector<const char *> &layerNames,
     const std::vector<const char *> &deviceExtensionNames) {
-  QueueFamilyIndices indices = findQueueFamilies(PhysicalDevice, Surface);
+  auto indices =
+      QueueFamilyIndices ::findQueueFamilies(PhysicalDevice, Surface);
 
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
   std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(),
@@ -577,32 +402,6 @@ bool VulkanFramework::createLogicalDevice(
 
   vkGetDeviceQueue(Device, indices.graphicsFamily.value(), 0, &GraphicsQueue);
   vkGetDeviceQueue(Device, indices.presentFamily.value(), 0, &PresentQueue);
-  return true;
-}
-
-bool VulkanFramework::createImageViews() {
-  SwapchainImageViews.resize(SwapchainImages.size());
-  for (size_t i = 0; i < SwapchainImages.size(); i++) {
-    VkImageViewCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    createInfo.image = SwapchainImages[i];
-    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    createInfo.format = SwapchainImageFormat;
-    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    createInfo.subresourceRange.baseMipLevel = 0;
-    createInfo.subresourceRange.levelCount = 1;
-    createInfo.subresourceRange.baseArrayLayer = 0;
-    createInfo.subresourceRange.layerCount = 1;
-    if (vkCreateImageView(Device, &createInfo, nullptr,
-                          &SwapchainImageViews[i]) != VK_SUCCESS) {
-      LOGE("failed to create image views!");
-      return false;
-    }
-  }
   return true;
 }
 
@@ -822,32 +621,9 @@ bool VulkanFramework::createGraphicsPipeline() {
   return true;
 }
 
-bool VulkanFramework::createFramebuffers() {
-  SwapchainFramebuffers.resize(SwapchainImageViews.size());
-  for (size_t i = 0; i < SwapchainImageViews.size(); i++) {
-    VkImageView attachments[] = {SwapchainImageViews[i]};
-
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = RenderPass;
-    framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = attachments;
-    framebufferInfo.width = SwapchainExtent.width;
-    framebufferInfo.height = SwapchainExtent.height;
-    framebufferInfo.layers = 1;
-
-    if (vkCreateFramebuffer(Device, &framebufferInfo, nullptr,
-                            &SwapchainFramebuffers[i]) != VK_SUCCESS) {
-      LOGE("failed to create framebuffer!");
-      return false;
-    }
-  }
-  return true;
-}
-
 bool VulkanFramework::createCommandPool() {
-  QueueFamilyIndices queueFamilyIndices =
-      findQueueFamilies(PhysicalDevice, Surface);
+  auto queueFamilyIndices =
+      QueueFamilyIndices ::findQueueFamilies(PhysicalDevice, Surface);
 
   VkCommandPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -863,7 +639,7 @@ bool VulkanFramework::createCommandPool() {
 }
 
 bool VulkanFramework::createCommandBuffers() {
-  CommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  CommandBuffers.resize(SwapchainImpl::MAX_FRAMES_IN_FLIGHT);
 
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -879,126 +655,27 @@ bool VulkanFramework::createCommandBuffers() {
   return true;
 }
 
-bool VulkanFramework::createSyncObjects() {
-  ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-  RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-  InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-  VkSemaphoreCreateInfo semaphoreInfo{};
-  semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-  VkFenceCreateInfo fenceInfo{};
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    if (vkCreateSemaphore(Device, &semaphoreInfo, nullptr,
-                          &ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-        vkCreateSemaphore(Device, &semaphoreInfo, nullptr,
-                          &RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-        vkCreateFence(Device, &fenceInfo, nullptr, &InFlightFences[i]) !=
-            VK_SUCCESS) {
-      LOGE("failed to create synchronization objects for a frame!");
-      return false;
-    }
-  }
-  return true;
-}
-
-// unsigned index;
-// vector<VkImage> images;
-// Platform::SwapchainDimensions dim;
-//
-// Result res = platform.acquireNextImage(&index);
-// while (res == RESULT_ERROR_OUTDATED_SWAPCHAIN)
-// {
-// 	platform.acquireNextImage(&index);
-// 	platform.getCurrentSwapchain(&images, &dim);
-// 	engine.pVulkanApp->updateSwapchain(images, dim);
-// }
-//
-// if (FAILED(res))
-// {
-// 	LOGE("Unrecoverable swapchain error.\n");
-// 	break;
-// }
-//
-// engine.pVulkanApp->render(index, 0.0166f);
-// res = platform.presentImage(index);
-//
-// // Handle Outdated error in acquire.
-// if (FAILED(res) && res != RESULT_ERROR_OUTDATED_SWAPCHAIN)
-// 	break;
-//
-// frameCount++;
-// if (frameCount == 100)
-// {
-// 	double endTime = OS::getCurrentTime();
-// 	LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
-// 	frameCount = 0;
-// 	startTime = endTime;
-// }
-
 bool VulkanFramework::drawFrame() {
-  vkWaitForFences(Device, 1, &InFlightFences[CurrentFrame], VK_TRUE,
-                  UINT64_MAX);
-  vkResetFences(Device, 1, &InFlightFences[CurrentFrame]);
+  auto [imageIndex, currentFrame] = Swapchain->begin();
 
-  uint32_t imageIndex;
-  vkAcquireNextImageKHR(Device, Swapchain, UINT64_MAX,
-                        ImageAvailableSemaphores[CurrentFrame], VK_NULL_HANDLE,
-                        &imageIndex);
-
-  vkResetCommandBuffer(CommandBuffers[CurrentFrame],
+  vkResetCommandBuffer(CommandBuffers[currentFrame],
                        /*VkCommandBufferResetFlagBits*/ 0);
-  if (!recordCommandBuffer(CommandBuffers[CurrentFrame], imageIndex)) {
+  if (!recordCommandBuffer(CommandBuffers[currentFrame], imageIndex,
+                           Swapchain->frameBuffer(imageIndex),
+                           Swapchain->extent())) {
     return false;
   }
 
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-  VkSemaphore waitSemaphores[] = {ImageAvailableSemaphores[CurrentFrame]};
-  VkPipelineStageFlags waitStages[] = {
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-  submitInfo.waitSemaphoreCount = 1;
-  submitInfo.pWaitSemaphores = waitSemaphores;
-  submitInfo.pWaitDstStageMask = waitStages;
-
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &CommandBuffers[CurrentFrame];
-
-  VkSemaphore signalSemaphores[] = {RenderFinishedSemaphores[CurrentFrame]};
-  submitInfo.signalSemaphoreCount = 1;
-  submitInfo.pSignalSemaphores = signalSemaphores;
-
-  if (vkQueueSubmit(GraphicsQueue, 1, &submitInfo,
-                    InFlightFences[CurrentFrame]) != VK_SUCCESS) {
-    LOGE("failed to submit draw command buffer!");
-    return false;
-  }
-
-  VkPresentInfoKHR presentInfo{};
-  presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-  presentInfo.waitSemaphoreCount = 1;
-  presentInfo.pWaitSemaphores = signalSemaphores;
-
-  VkSwapchainKHR swapChains[] = {Swapchain};
-  presentInfo.swapchainCount = 1;
-  presentInfo.pSwapchains = swapChains;
-
-  presentInfo.pImageIndices = &imageIndex;
-
-  vkQueuePresentKHR(PresentQueue, &presentInfo);
-
-  CurrentFrame = (CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+  Swapchain->end(imageIndex, CommandBuffers[currentFrame], GraphicsQueue,
+                 PresentQueue);
 
   return true;
 }
 
 bool VulkanFramework::recordCommandBuffer(VkCommandBuffer commandBuffer,
-                                          uint32_t imageIndex) {
+                                          uint32_t imageIndex,
+                                          VkFramebuffer framebuffer,
+                                          VkExtent2D imageExtent) {
   VkCommandBufferBeginInfo beginInfo{};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -1010,10 +687,9 @@ bool VulkanFramework::recordCommandBuffer(VkCommandBuffer commandBuffer,
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   renderPassInfo.renderPass = RenderPass;
-  renderPassInfo.framebuffer = SwapchainFramebuffers[imageIndex];
+  renderPassInfo.framebuffer = framebuffer;
   renderPassInfo.renderArea.offset = {0, 0};
-  renderPassInfo.renderArea.extent = SwapchainExtent;
-
+  renderPassInfo.renderArea.extent = imageExtent;
   VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
   renderPassInfo.clearValueCount = 1;
   renderPassInfo.pClearValues = &clearColor;
@@ -1027,15 +703,15 @@ bool VulkanFramework::recordCommandBuffer(VkCommandBuffer commandBuffer,
   VkViewport viewport{};
   viewport.x = 0.0f;
   viewport.y = 0.0f;
-  viewport.width = (float)SwapchainExtent.width;
-  viewport.height = (float)SwapchainExtent.height;
+  viewport.width = (float)imageExtent.width;
+  viewport.height = (float)imageExtent.height;
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
   vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
   VkRect2D scissor{};
   scissor.offset = {0, 0};
-  scissor.extent = SwapchainExtent;
+  scissor.extent = imageExtent;
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
   vkCmdDraw(commandBuffer, 3, 1, 0, 0);

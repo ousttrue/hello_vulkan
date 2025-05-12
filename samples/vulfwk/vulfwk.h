@@ -1,11 +1,16 @@
 #pragma once
 #include <vulkan/vulkan.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
+class SwapchainImpl;
+
 class VulkanFramework {
+  std::shared_ptr<SwapchainImpl> Swapchain;
+
   std::string _appName;
   std::string _engineName;
   VkInstance Instance = VK_NULL_HANDLE;
@@ -16,12 +21,7 @@ class VulkanFramework {
   VkQueue GraphicsQueue = VK_NULL_HANDLE;
   VkQueue PresentQueue = VK_NULL_HANDLE;
 
-  VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
-  std::vector<VkImage> SwapchainImages;
   VkFormat SwapchainImageFormat = {};
-  VkExtent2D SwapchainExtent = {0, 0};
-  std::vector<VkImageView> SwapchainImageViews;
-  std::vector<VkFramebuffer> SwapchainFramebuffers;
 
   VkRenderPass RenderPass = VK_NULL_HANDLE;
   VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
@@ -29,11 +29,6 @@ class VulkanFramework {
 
   VkCommandPool CommandPool;
   std::vector<VkCommandBuffer> CommandBuffers;
-
-  std::vector<VkSemaphore> ImageAvailableSemaphores;
-  std::vector<VkSemaphore> RenderFinishedSemaphores;
-  std::vector<VkFence> InFlightFences;
-  uint32_t CurrentFrame = 0;
 
   void *AssetManager = nullptr;
 
@@ -64,14 +59,12 @@ private:
   bool
   createLogicalDevice(const std::vector<const char *> &layerNames,
                       const std::vector<const char *> &deviceExtensionNames);
-  bool createImageViews();
   bool createRenderPass();
   bool createGraphicsPipeline();
-  bool createFramebuffers();
   bool createCommandPool();
   bool createCommandBuffers();
-  bool createSyncObjects();
 
 private:
-  bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
+                           VkFramebuffer framebuffer, VkExtent2D imageExtent);
 };

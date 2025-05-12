@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/builddir/samples/vulfwk/vulfwk.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builddir/samples/vulfwk",
             "environment": [],
             "console": "integratedTerminal"
         }
