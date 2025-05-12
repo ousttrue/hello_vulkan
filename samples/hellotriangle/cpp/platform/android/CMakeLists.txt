@@ -11,9 +11,7 @@ find_library(android-lib android)
 target_link_libraries(
   platform-android
   framework
-  platform-wsi
   android_native_app_glue
-  platform-asset-manager
   ${log-lib}
   ${android-lib})
 target_include_directories(platform-android

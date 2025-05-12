@@ -50,7 +50,7 @@ fn build_hellotriangle_apk(
         so.step,
         b.path("samples/hellotriangle/android/AndroidManifest.xml"),
         .{ .bin = .{
-            .src = so.build_dir.path(b, "samples/hellotriangle/samples/hellotriangle/libnative.so"),
+            .src = so.build_dir.path(b, "samples/hellotriangle/cpp/libnative.so"),
             .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
         } },
         b.path("samples/hellotriangle/android/res"),

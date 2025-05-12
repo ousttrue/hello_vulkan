@@ -36,7 +36,7 @@ if(ANDROID_NDK)
   target_include_directories(
     ${TARGET_NAME} PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 
-  subdirs(hellotriangle)
+  subdirs(hellotriangle/cpp)
 else()
   set(TARGET_NAME vulkan_sdk)
   add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
