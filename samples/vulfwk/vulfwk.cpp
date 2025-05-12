@@ -269,6 +269,10 @@ bool VulkanFramework::createSwapChain(VkExtent2D imageExtent) {
     if (swapchainExtent.width == imageExtent.width &&
         swapchainExtent.height == imageExtent.height) {
       return true;
+    } else {
+      // clear recreate
+      vkDeviceWaitIdle(Device);
+      Swapchain = nullptr;
     }
   }
 
@@ -655,7 +659,10 @@ bool VulkanFramework::createCommandBuffers() {
   return true;
 }
 
-bool VulkanFramework::drawFrame() {
+bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
+
+  createSwapChain({width, height});
+
   auto [imageIndex, currentFrame] = Swapchain->begin();
 
   vkResetCommandBuffer(CommandBuffers[currentFrame],

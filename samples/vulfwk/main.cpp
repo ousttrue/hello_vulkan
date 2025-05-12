@@ -2,7 +2,6 @@
 #include "vulfwk.h"
 
 #ifdef ANDROID
-// #include <android/native_window.h>
 #include <android_native_app_glue.h>
 
 template <typename T> struct UserData {
@@ -56,9 +55,7 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
     LOGI("vulkan initilized");
     auto width = ANativeWindow_getWidth(pApp->window);
     auto height = ANativeWindow_getHeight(pApp->window);
-    vulfwk->createSwapChain(
-        {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
-    vulfwk->drawFrame();
+    vulfwk->drawFrame(width, height);
 
     break;
   }
@@ -102,7 +99,10 @@ void android_main(android_app *state) {
     }
 
     // renderFrame
-    if (userData.active) {
+    if (userData.active && state->window) {
+      // auto width = ANativeWindow_getWidth(state->window);
+      // auto height = ANativeWindow_getHeight(state->window);
+      // vulfwk.drawFrame(width, height);
     }
   }
 }
@@ -143,9 +143,7 @@ int main(int argc, char **argv) {
       break;
     }
 
-    vulfwk.createSwapChain(
-        {static_cast<uint32_t>(width), static_cast<uint32_t>(height)});
-    vulfwk.drawFrame();
+    vulfwk.drawFrame(width, height);
     // glfw.flush();
   }
 

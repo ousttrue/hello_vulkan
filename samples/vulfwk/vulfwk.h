@@ -48,10 +48,10 @@ public:
   bool initializeDevice(const std::vector<const char *> &layerNames,
                         const std::vector<const char *> &deviceExtensionNames);
 
-  bool createSwapChain(VkExtent2D imageExtent);
-  bool drawFrame();
+  bool drawFrame(uint32_t width, uint32_t height);
 
 private:
+  bool createSwapChain(VkExtent2D imageExtent);
   bool createInstance(const std::vector<const char *> &layerNames,
                       const std::vector<const char *> &instanceExtensionNames);
   bool
