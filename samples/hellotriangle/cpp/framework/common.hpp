@@ -21,7 +21,7 @@
 #ifndef FRAMEWORK_COMMON_HPP
 #define FRAMEWORK_COMMON_HPP
 
-#include "libvulkan-stub.h"
+#include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <stdlib.h>
 

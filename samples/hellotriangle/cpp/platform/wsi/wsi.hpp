@@ -22,8 +22,8 @@
 #define PLATFORM_WSI_HPP
 
 #include "framework/semaphore_manager.hpp"
-#include "libvulkan-stub.h"
-#include "platform.hpp"
+#include <vulkan/vulkan.h>
+#include "../platform.hpp"
 
 namespace MaliSDK
 {
@@ -104,8 +104,6 @@ private:
 	std::vector<VkImage> swapchainImages;
 
 	virtual VkSurfaceKHR createSurface() = 0;
-	Result loadDeviceSymbols();
-	Result loadInstanceSymbols();
 
 	bool validateExtensions(const std::vector<const char *> &required,
 	                        const std::vector<VkExtensionProperties> &available);

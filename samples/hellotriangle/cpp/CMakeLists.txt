@@ -30,7 +30,6 @@ endif(NOT PLATFORM)
 
 add_subdirectory(framework)
 add_subdirectory(platform)
-add_subdirectory(stub)
 
 # set(sources-os) if (UNIX AND (NOT ANDROID)) set(sources-os
 # platform/os/linux.cpp platform/os/linux.hpp) elseif(WIN32) set(sources-os

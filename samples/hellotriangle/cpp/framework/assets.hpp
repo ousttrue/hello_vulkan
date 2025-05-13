@@ -22,7 +22,7 @@
 #define FRAMEWORK_ASSETS_HPP
 
 #include "common.hpp"
-#include "libvulkan-stub.h"
+#include <vulkan/vulkan.h>
 #include <stdint.h>
 #include <vector>
 

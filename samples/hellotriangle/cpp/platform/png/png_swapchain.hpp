@@ -21,7 +21,7 @@
 #ifndef DMABUF_SWAPCHAIN_HPP
 #define DMABUF_SWAPCHAIN_HPP
 
-#include "libvulkan-stub.h"
+#include <vulkan/vulkan.h>
 #include <condition_variable>
 #include <mutex>
 #include <queue>

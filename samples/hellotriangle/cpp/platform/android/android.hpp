@@ -26,7 +26,7 @@
 #include "android_native_app_glue.h"
 #include "cpu-features.h"
 #include "framework/application.hpp"
-#include "platform.hpp"
+#include "../platform.hpp"
 #include "platform/os.hpp"
 #include "platform/wsi/wsi.hpp"
 #include <time.h>
