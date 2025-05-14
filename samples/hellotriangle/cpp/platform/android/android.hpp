@@ -24,7 +24,6 @@
 #define VK_USE_PLATFORM_ANDROID_KHR
 #include "android_assets.hpp"
 #include "android_native_app_glue.h"
-#include "cpu-features.h"
 #include "framework/application.hpp"
 #include "../platform.hpp"
 #include "platform/os.hpp"
@@ -33,18 +32,7 @@
 
 namespace MaliSDK
 {
-/// @brief State used for the android mainloop.
-struct AndroidState
-{
-	/// The ANativeActivity handle.
-	struct android_app *pApp;
 
-	/// The Vulkan application.
-	VulkanApplication *pVulkanApp;
-
-	/// The application is in focus and running.
-	bool active;
-};
 
 /// @brief The Android specific platform.
 class AndroidPlatform : public WSIPlatform

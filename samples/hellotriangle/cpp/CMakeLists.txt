@@ -43,7 +43,7 @@ add_subdirectory(platform)
 # libnative.so since we only build one sample per APK. Otherwise, we want to
 # control our output folder so we can pick up assets without any problems.
 set(TARGET hellotriangle)
-set(SOURCES hellotriangle.cpp)
+set(SOURCES main.cpp hellotriangle.cpp)
 if(ANDROID)
   add_library(${TARGET} SHARED ${SOURCES})
   target_link_libraries(${TARGET} platform)
