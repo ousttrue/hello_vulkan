@@ -13,6 +13,11 @@ FetchContent_Populate(
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
 
+FetchContent_Populate(
+  magic_enum
+  URL https://github.com/Neargye/magic_enum/releases/download/v0.9.7/magic_enum-v0.9.7.tar.gz
+)
+
 function(add_glsl TARGET SHADER)
   find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Include/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})

@@ -14,7 +14,6 @@ static double getCurrentTime() {
 }
 
 void Dispatcher::onResume() {
-  LOGI("[onResume]");
   this->active = true;
   MaliSDK::Platform::SwapchainDimensions dim =
       this->pPlatform->getPreferredSwapchain();
@@ -29,14 +28,12 @@ void Dispatcher::onResume() {
 }
 
 void Dispatcher::onPause() {
-  LOGI("[onPause]");
   this->active = false;
   this->pPlatform->onPause();
 }
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  LOGI("[onInitWindow]");
   static_cast<MaliSDK::AndroidAssetManager &>(MaliSDK::OS::getAssetManager())
       .setAssetManager(assetManager);
 
@@ -74,7 +71,6 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
 }
 
 void Dispatcher::onTermWindow() {
-  LOGI("[onTermWindow]");
   if (this->pVulkanApp) {
     this->pVulkanApp->terminate();
     delete this->pVulkanApp;
