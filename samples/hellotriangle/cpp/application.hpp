@@ -21,7 +21,7 @@
 #ifndef FRAMEWORK_APPLICATION_HPP
 #define FRAMEWORK_APPLICATION_HPP
 
-#include "platform/platform.hpp"
+#include "/platform.hpp"
 
 namespace MaliSDK
 {

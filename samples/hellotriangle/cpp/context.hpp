@@ -23,7 +23,7 @@
 
 #include "command_buffer_manager.hpp"
 #include "fence_manager.hpp"
-#include "framework/common.hpp"
+#include "common.hpp"
 #include <memory>
 #include <vector>
 

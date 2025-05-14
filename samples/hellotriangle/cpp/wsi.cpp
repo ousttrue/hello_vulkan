@@ -230,6 +230,26 @@ WSIPlatform::initVulkan(const SwapchainDimensions &swapchain,
       LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
       return RESULT_ERROR_GENERIC;
     }
+
+    // VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT{
+    //     .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+    //     .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+    //                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+    //                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+    //     .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+    //                    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+    //                    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+    //     .pfnUserCallback = debugCallback,
+    // };
+    //
+    // if (activeLayers.size()) {
+    //   if (CreateDebugUtilsMessengerEXT(
+    //           Instance, &DebugUtilsMessengerCreateInfoEXT, nullptr,
+    //           &DebugUtilsMessengerEXT) != VK_SUCCESS) {
+    //     LOGE("failed to set up debug messenger!");
+    //     return false;
+    //   }
+    // }
   }
 
   if (haveDebugReport) {
@@ -242,8 +262,8 @@ WSIPlatform::initVulkan(const SwapchainDimensions &swapchain,
     info.pfnCallback = debugCallback;
     info.pUserData = this;
 
-    // vkCreateDebugReportCallbackEXT(instance, &info, nullptr, &debug_callback);
-    // LOGI("Enabling Vulkan debug reporting.\n");
+    // vkCreateDebugReportCallbackEXT(instance, &info, nullptr,
+    // &debug_callback); LOGI("Enabling Vulkan debug reporting.\n");
   }
 
   uint32_t gpuCount = 0;

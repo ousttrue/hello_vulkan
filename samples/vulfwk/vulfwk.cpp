@@ -253,19 +253,18 @@ bool VulkanFramework::createInstance(
       .ppEnabledExtensionNames = extensionNames.data(),
   };
 
-  if (layerNames.size()) {
-    if (vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance) !=
-        VK_SUCCESS) {
-      LOGE("failed to create instance!");
-      return false;
-    }
+  if (vkCreateInstance(&InstanceCreateInfo, nullptr, &Instance) != VK_SUCCESS) {
+    LOGE("failed to create instance!");
+    return false;
   }
 
-  if (CreateDebugUtilsMessengerEXT(Instance, &DebugUtilsMessengerCreateInfoEXT,
-                                   nullptr,
-                                   &DebugUtilsMessengerEXT) != VK_SUCCESS) {
-    LOGE("failed to set up debug messenger!");
-    return false;
+  if (layerNames.size()) {
+    if (CreateDebugUtilsMessengerEXT(Instance,
+                                     &DebugUtilsMessengerCreateInfoEXT, nullptr,
+                                     &DebugUtilsMessengerEXT) != VK_SUCCESS) {
+      LOGE("failed to set up debug messenger!");
+      return false;
+    }
   }
 
   return true;

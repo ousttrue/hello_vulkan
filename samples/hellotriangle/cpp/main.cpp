@@ -1,6 +1,6 @@
 #include "application.hpp"
 #include "common.hpp"
-#include "platform/android/android.hpp"
+#include "android.hpp"
 
 #include <android_native_app_glue.h>
 

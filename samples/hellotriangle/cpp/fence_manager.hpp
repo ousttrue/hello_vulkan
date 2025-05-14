@@ -21,7 +21,7 @@
 #ifndef FRAMEWORK_FENCE_MANAGER_HPP
 #define FRAMEWORK_FENCE_MANAGER_HPP
 
-#include "framework/common.hpp"
+#include "common.hpp"
 #include <vector>
 
 namespace MaliSDK

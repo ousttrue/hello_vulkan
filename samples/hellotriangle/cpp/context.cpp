@@ -19,7 +19,7 @@
  */
 
 #include "context.hpp"
-#include "platform/platform.hpp"
+#include "platform.hpp"
 
 namespace MaliSDK
 {

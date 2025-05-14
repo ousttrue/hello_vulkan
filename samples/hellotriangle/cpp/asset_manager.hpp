@@ -18,37 +18,52 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef PLATFORM_ANDROID_ASSETS
-#define PLATFORM_ANDROID_ASSETS
+#ifndef PLATFORM_ASSET_MANAGER_HPP
+#define PLATFORM_ASSET_MANAGER_HPP
 
-#include "../asset_manager.hpp"
-#include <android/asset_manager.h>
-#include <string>
+#include "common.hpp"
+#include <stddef.h>
+#include <stdint.h>
+#include <vector>
 
 namespace MaliSDK
 {
 
-/// @brief An asset manager implementation for Android. Uses AAssetManager to
-/// load assets.
-class AndroidAssetManager : public AssetManager
+/// @brief The asset manager reads data from a platform specific location.
+/// This class is used internally to load binary data from disk.
+class AssetManager
 {
 public:
+	virtual ~AssetManager() = default;
+
+	/// @brief Reads a binary file into typed container.
+	/// @param[out] pOutput Output vector to write data into.
+	/// The vector will be cleared before adding any data to the container.
+	/// @param[out] pPath The path to read.
+	/// @returns Error code
+	template <typename T>
+	inline Result readBinaryFile(std::vector<T> *pOutput, const char *pPath)
+	{
+		void *pData;
+		size_t size;
+		Result error = readBinaryFile(pPath, &pData, &size);
+		if (error != RESULT_SUCCESS)
+			return error;
+
+		size_t numElements = size / sizeof(T);
+
+		pOutput->clear();
+		pOutput->insert(end(*pOutput), reinterpret_cast<T *>(pData), reinterpret_cast<T *>(pData) + numElements);
+		free(pData);
+		return RESULT_SUCCESS;
+	}
+
 	/// @brief Reads a binary file as a raw blob.
 	/// @param pPath The path of the asset.
 	/// @param[out] ppData allocated output data. Must be freed with `free()`.
 	/// @param[out] pSize The size of the allocated data.
 	/// @returns Error code
-	virtual Result readBinaryFile(const char *pPath, void **ppData, size_t *pSize) override;
-
-	/// @brief Sets the asset manager to use. Called from platform.
-	/// @param pAssetManager The asset manager.
-	void setAssetManager(AAssetManager *pAssetManager)
-	{
-		pManager = pAssetManager;
-	}
-
-private:
-	AAssetManager *pManager = nullptr;
+	virtual Result readBinaryFile(const char *pPath, void **ppData, size_t *pSize);
 };
 }
 

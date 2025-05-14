@@ -18,43 +18,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef PLATFORM_READ_WRITE_LOCK_HPP
-#define PLATFORM_READ_WRITE_LOCK_HPP
+#ifndef PLATFORM_ANDROID_ASSETS
+#define PLATFORM_ANDROID_ASSETS
 
-#include <memory>
+#include "asset_manager.hpp"
+#include <android/asset_manager.h>
+#include <string>
 
 namespace MaliSDK
 {
 
-/// @brief Implements a read-write lock.
-///
-/// This is a mutex optimized for cases where we almost always have readers
-/// locking a data structure,
-/// but very rarely writers.
-/// On Linux, this is implemented with pthread rw lock.
-class ReadWriteLock
+/// @brief An asset manager implementation for Android. Uses AAssetManager to
+/// load assets.
+class AndroidAssetManager : public AssetManager
 {
 public:
-	/// @brief Constructor
-	ReadWriteLock();
-	/// @brief Destructor
-	~ReadWriteLock();
+	/// @brief Reads a binary file as a raw blob.
+	/// @param pPath The path of the asset.
+	/// @param[out] ppData allocated output data. Must be freed with `free()`.
+	/// @param[out] pSize The size of the allocated data.
+	/// @returns Error code
+	virtual Result readBinaryFile(const char *pPath, void **ppData, size_t *pSize) override;
 
-	/// Locks for readers. Multiple readers can lock without blocking each other.
-	void lockRead();
-	/// Unlocks for readers.
-	void unlockRead();
-	/// Locks for writes. Only one writer (and no readers) can be inside critical
-	/// regions at the same time.
-	void lockWrite();
-	/// Unlocks for writes.
-	void unlockWrite();
+	/// @brief Sets the asset manager to use. Called from platform.
+	/// @param pAssetManager The asset manager.
+	void setAssetManager(AAssetManager *pAssetManager)
+	{
+		pManager = pAssetManager;
+	}
 
 private:
-	/// Pimpl idiom. Hides implementation details.
-	struct Impl;
-	/// The pimpl.
-	std::unique_ptr<Impl> pImpl;
+	AAssetManager *pManager = nullptr;
 };
 }
 

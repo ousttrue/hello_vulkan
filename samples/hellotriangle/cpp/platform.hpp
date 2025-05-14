@@ -25,8 +25,8 @@
 #include <vector>
 
 #include "asset_manager.hpp"
-#include "framework/common.hpp"
-#include "framework/context.hpp"
+#include "common.hpp"
+#include "context.hpp"
 
 namespace MaliSDK
 {

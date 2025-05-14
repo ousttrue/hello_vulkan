@@ -21,9 +21,9 @@
 #ifndef PLATFORM_WSI_HPP
 #define PLATFORM_WSI_HPP
 
-#include "framework/semaphore_manager.hpp"
+#include "semaphore_manager.hpp"
 #include <vulkan/vulkan.h>
-#include "../platform.hpp"
+#include "platform.hpp"
 
 namespace MaliSDK
 {
