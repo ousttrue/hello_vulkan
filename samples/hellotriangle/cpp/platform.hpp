@@ -40,7 +40,6 @@ class Platform
 public:
 	/// @brief The platform is a singleton.
 	/// @returns The platform
-	static Platform &get();
 
 	/// @brief Destructor
 	virtual ~Platform() = default;

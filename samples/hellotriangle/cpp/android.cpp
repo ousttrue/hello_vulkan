@@ -28,12 +28,6 @@
 using namespace std;
 
 namespace MaliSDK {
-Platform &Platform::get() {
-  // Not initialized until first call to Platform::get().
-  // Initialization is thread-safe.
-  static AndroidPlatform singleton;
-  return singleton;
-}
 
 Platform::Status AndroidPlatform::getWindowStatus() { return STATUS_RUNNING; }
 
@@ -51,16 +45,6 @@ VkSurfaceKHR AndroidPlatform::createSurface() {
 AssetManager &MaliSDK::OS::getAssetManager() {
   static AndroidAssetManager manager;
   return manager;
-}
-
-double MaliSDK::OS::getCurrentTime() {
-  timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
-    LOGE("clock_gettime() failed.\n");
-    return 0.0;
-  }
-
-  return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
 unsigned MaliSDK::OS::getNumberOfCpuThreads() {

@@ -1,0 +1,128 @@
+#include "dispatcher.h"
+#include "android.hpp"
+#include "common.hpp"
+
+/// @brief Get the current monotonic time in seconds.
+/// @returns Current time.
+static double getCurrentTime() {
+  timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
+    LOGE("clock_gettime() failed.\n");
+    return 0.0;
+  }
+  return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+void Dispatcher::onResume() {
+  LOGI("[onResume]");
+  this->active = true;
+  MaliSDK::Platform::SwapchainDimensions dim =
+      this->pPlatform->getPreferredSwapchain();
+
+  if (this->pVulkanApp) {
+    this->pPlatform->onResume(dim);
+
+    std::vector<VkImage> images;
+    this->pPlatform->getCurrentSwapchain(&images, &dim);
+    this->pVulkanApp->updateSwapchain(images, dim);
+  }
+}
+
+void Dispatcher::onPause() {
+  LOGI("[onPause]");
+  this->active = false;
+  this->pPlatform->onPause();
+}
+
+void Dispatcher::onInitWindow(ANativeWindow *window,
+                              AAssetManager *assetManager) {
+  LOGI("[onInitWindow]");
+  static_cast<MaliSDK::AndroidAssetManager &>(MaliSDK::OS::getAssetManager())
+      .setAssetManager(assetManager);
+
+  if (this->pPlatform->initialize() != MaliSDK::RESULT_SUCCESS) {
+    LOGE("Failed to initialize platform.\n");
+    abort();
+  }
+
+  this->pPlatform->setNativeWindow(window);
+
+  MaliSDK::Platform::SwapchainDimensions dim =
+      this->pPlatform->getPreferredSwapchain();
+
+  LOGI("Creating window!\n");
+  if (this->pPlatform->createWindow(dim) != MaliSDK::RESULT_SUCCESS) {
+    LOGE("Failed to create Vulkan window.\n");
+    abort();
+  }
+
+  LOGI("Creating application!\n");
+  this->pVulkanApp = MaliSDK::createApplication();
+
+  LOGI("Initializing application!\n");
+  if (!this->pVulkanApp->initialize(&this->pPlatform->getContext())) {
+    LOGE("Failed to initialize Vulkan application.\n");
+    abort();
+  }
+
+  LOGI("Updating swapchain!\n");
+  std::vector<VkImage> images;
+  this->pPlatform->getCurrentSwapchain(&images, &dim);
+  this->pVulkanApp->updateSwapchain(images, dim);
+
+  this->startTime = getCurrentTime();
+}
+
+void Dispatcher::onTermWindow() {
+  LOGI("[onTermWindow]");
+  if (this->pVulkanApp) {
+    this->pVulkanApp->terminate();
+    delete this->pVulkanApp;
+    this->pVulkanApp = nullptr;
+    this->pPlatform->terminate();
+  }
+}
+
+bool Dispatcher::onFrame() {
+  if (!this->active) {
+    return true;
+  }
+  if (!this->pVulkanApp) {
+    return true;
+  }
+
+  unsigned index;
+  std::vector<VkImage> images;
+  MaliSDK::Platform::SwapchainDimensions dim;
+
+  auto res = this->pPlatform->acquireNextImage(&index);
+  while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+    this->pPlatform->acquireNextImage(&index);
+    this->pPlatform->getCurrentSwapchain(&images, &dim);
+    this->pVulkanApp->updateSwapchain(images, dim);
+  }
+
+  if (res != MaliSDK::RESULT_SUCCESS) {
+    LOGE("Unrecoverable swapchain error.\n");
+    return false;
+  }
+
+  this->pVulkanApp->render(index, 0.0166f);
+  res = this->pPlatform->presentImage(index);
+
+  // Handle Outdated error in acquire.
+  if (res != MaliSDK::RESULT_SUCCESS &&
+      res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+    return false;
+  }
+
+  frameCount++;
+  if (frameCount == 100) {
+    double endTime = getCurrentTime();
+    LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
+    frameCount = 0;
+    startTime = endTime;
+  }
+
+  return true;
+}

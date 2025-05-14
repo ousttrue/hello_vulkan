@@ -2,6 +2,7 @@ set(TARGET native)
 add_library(
   ${TARGET} SHARED
   main.cpp
+  dispatcher.cpp
   hellotriangle.cpp
   android.cpp
   wsi.cpp

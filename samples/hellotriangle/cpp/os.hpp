@@ -28,10 +28,6 @@ namespace MaliSDK
 namespace OS
 {
 
-/// @brief Get the current monotonic time in seconds.
-/// @returns Current time.
-double getCurrentTime();
-
 /// @brief Get the asset manager for the platform.
 /// @returns The asset manager.
 AssetManager &getAssetManager();
