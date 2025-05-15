@@ -25,7 +25,6 @@
 #ifndef PLATFORM_ANDROID_HPP
 #define PLATFORM_ANDROID_HPP
 
-#define VK_USE_PLATFORM_ANDROID_KHR
 #include "android_assets.hpp"
 #include "application.hpp"
 #include "platform.hpp"

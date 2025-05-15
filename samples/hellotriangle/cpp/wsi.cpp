@@ -36,28 +36,43 @@ using namespace std;
 
 namespace MaliSDK {
 
+// typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
+//     VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
+//     VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
+//     const VkDebugUtilsMessengerCallbackDataEXT*      pCallbackData,
+//     void*                                            pUserData);
 static VKAPI_ATTR VkBool32 VKAPI_CALL
-debugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT type,
-              uint64_t object, size_t location, int32_t messageCode,
-              const char *pLayerPrefix, const char *pMessage, void *pUserData) {
-  auto *platform = static_cast<WSIPlatform *>(pUserData);
-  auto callback = platform->getExternalDebugCallback();
-
-  if (callback) {
-    return callback(flags, type, object, location, messageCode, pLayerPrefix,
-                    pMessage, platform->getExternalDebugCallbackUserData());
+debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+              VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+              const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+              void *pUserData) {
+  if (pCallbackData->flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
+    LOGE("Validation Layer: Error: %s: %s\n", pCallbackData->pMessageIdName,
+         pCallbackData->pMessage);
+  } else if (pCallbackData->flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
+    LOGE("Validation Layer: Warning: %s: %s\n", pCallbackData->pMessageIdName,
+         pCallbackData->pMessage);
+  } else if (pCallbackData->flags &
+             VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
+    LOGI("Validation Layer: Performance warning: %s: %s\n",
+         pCallbackData->pMessageIdName, pCallbackData->pMessage);
   } else {
-    if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-      LOGE("Validation Layer: Error: %s: %s\n", pLayerPrefix, pMessage);
-    } else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-      LOGE("Validation Layer: Warning: %s: %s\n", pLayerPrefix, pMessage);
-    } else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-      LOGI("Validation Layer: Performance warning: %s: %s\n", pLayerPrefix,
-           pMessage);
-    } else {
-      LOGI("Validation Layer: Information: %s: %s\n", pLayerPrefix, pMessage);
-    }
-    return VK_FALSE;
+    LOGI("Validation Layer: Information: %s: %s\n",
+         pCallbackData->pMessageIdName, pCallbackData->pMessage);
+  }
+  return VK_FALSE;
+}
+
+static VkResult CreateDebugUtilsMessengerEXT(
+    VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+    const VkAllocationCallbacks *pAllocator,
+    VkDebugUtilsMessengerEXT *pDebugMessenger) {
+  auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+      instance, "vkCreateDebugUtilsMessengerEXT");
+  if (func != nullptr) {
+    return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+  } else {
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
   }
 }
 
@@ -231,39 +246,25 @@ WSIPlatform::initVulkan(const SwapchainDimensions &swapchain,
       return RESULT_ERROR_GENERIC;
     }
 
-    // VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT{
-    //     .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-    //     .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-    //                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-    //                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-    //     .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-    //                    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-    //                    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-    //     .pfnUserCallback = debugCallback,
-    // };
-    //
-    // if (activeLayers.size()) {
-    //   if (CreateDebugUtilsMessengerEXT(
-    //           Instance, &DebugUtilsMessengerCreateInfoEXT, nullptr,
-    //           &DebugUtilsMessengerEXT) != VK_SUCCESS) {
-    //     LOGE("failed to set up debug messenger!");
-    //     return false;
-    //   }
-    // }
-  }
+    VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT{
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = debugCallback,
+    };
 
-  if (haveDebugReport) {
-    VkDebugReportCallbackCreateInfoEXT info = {
-        VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT};
-    info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT |
-                 VK_DEBUG_REPORT_WARNING_BIT_EXT |
-                 VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-
-    info.pfnCallback = debugCallback;
-    info.pUserData = this;
-
-    // vkCreateDebugReportCallbackEXT(instance, &info, nullptr,
-    // &debug_callback); LOGI("Enabling Vulkan debug reporting.\n");
+    if (activeLayers.size()) {
+      if (CreateDebugUtilsMessengerEXT(
+              instance, &DebugUtilsMessengerCreateInfoEXT, nullptr,
+              &DebugUtilsMessengerEXT) != VK_SUCCESS) {
+        LOGE("failed to set up debug messenger!");
+        return RESULT_ERROR_GENERIC;
+      }
+    }
   }
 
   uint32_t gpuCount = 0;
