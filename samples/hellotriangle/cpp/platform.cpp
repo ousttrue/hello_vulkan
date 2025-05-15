@@ -77,9 +77,7 @@ static VkResult CreateDebugUtilsMessengerEXT(
   }
 }
 
-WSIPlatform::~WSIPlatform() { terminate(); }
-
-bool WSIPlatform::validateExtensions(
+bool Platform::validateExtensions(
     const vector<const char *> &required,
     const std::vector<VkExtensionProperties> &available) {
   for (auto extension : required) {
@@ -98,7 +96,7 @@ bool WSIPlatform::validateExtensions(
   return true;
 }
 
-Result WSIPlatform::initialize() {
+Result Platform::initialize() {
   pContext = new Context();
   if (!pContext)
     return RESULT_ERROR_OUT_OF_MEMORY;
@@ -127,9 +125,9 @@ static void addSupportedLayers(vector<const char *> &activeLayers,
 }
 
 Result
-WSIPlatform::initVulkan(const SwapchainDimensions &swapchain,
-                        const vector<const char *> &requiredInstanceExtensions,
-                        const vector<const char *> &requiredDeviceExtensions) {
+Platform::initVulkan(const SwapchainDimensions &swapchain,
+                     const vector<const char *> &requiredInstanceExtensions,
+                     const vector<const char *> &requiredDeviceExtensions) {
   uint32_t instanceExtensionCount;
   vector<const char *> activeInstanceExtensions;
   VK_CHECK(vkEnumerateInstanceExtensionProperties(
@@ -419,7 +417,7 @@ WSIPlatform::initVulkan(const SwapchainDimensions &swapchain,
   return RESULT_SUCCESS;
 }
 
-void WSIPlatform::destroySwapchain() {
+void Platform::destroySwapchain() {
   if (device)
     vkDeviceWaitIdle(device);
 
@@ -429,7 +427,7 @@ void WSIPlatform::destroySwapchain() {
   }
 }
 
-void WSIPlatform::terminate() {
+void Platform::terminate() {
   // Don't release anything until the GPU is completely idle.
   if (device)
     vkDeviceWaitIdle(device);
@@ -466,7 +464,7 @@ void WSIPlatform::terminate() {
   }
 }
 
-Result WSIPlatform::initSwapchain(const SwapchainDimensions &dim) {
+Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   VkSurfaceCapabilitiesKHR surfaceProperties;
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
                                                      &surfaceProperties));
@@ -591,17 +589,13 @@ Result WSIPlatform::initSwapchain(const SwapchainDimensions &dim) {
   return RESULT_SUCCESS;
 }
 
-void WSIPlatform::getCurrentSwapchain(vector<VkImage> *images,
-                                      SwapchainDimensions *swapchain) {
+void Platform::getCurrentSwapchain(vector<VkImage> *images,
+                                   SwapchainDimensions *swapchain) {
   *images = swapchainImages;
   *swapchain = swapchainDimensions;
 }
 
-unsigned WSIPlatform::getNumSwapchainImages() const {
-  return swapchainImages.size();
-}
-
-Result WSIPlatform::acquireNextImage(unsigned *image) {
+Result Platform::acquireNextImage(unsigned *image) {
   auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
   VkResult res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
                                        acquireSemaphore, VK_NULL_HANDLE, image);
@@ -636,7 +630,7 @@ Result WSIPlatform::acquireNextImage(unsigned *image) {
   }
 }
 
-Result WSIPlatform::presentImage(unsigned index) {
+Result Platform::presentImage(unsigned index) {
   VkResult result;
   VkPresentInfoKHR present = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
   present.swapchainCount = 1;
@@ -656,7 +650,7 @@ Result WSIPlatform::presentImage(unsigned index) {
     return RESULT_SUCCESS;
 }
 
-VkSurfaceKHR WSIPlatform::createSurface() {
+VkSurfaceKHR Platform::createSurface() {
   VkSurfaceKHR surface;
 
   VkAndroidSurfaceCreateInfoKHR info = {
@@ -667,21 +661,5 @@ VkSurfaceKHR WSIPlatform::createSurface() {
   return surface;
 }
 
-SwapchainDimensions WSIPlatform::getPreferredSwapchain() {
-  SwapchainDimensions chain = {1280, 720, VK_FORMAT_B8G8R8A8_UNORM};
-  return chain;
-}
-
-Result WSIPlatform::createWindow(const SwapchainDimensions &swapchain) {
-  return initVulkan(swapchain, {"VK_KHR_surface", "VK_KHR_android_surface"},
-                    {"VK_KHR_swapchain"});
-}
-
-void WSIPlatform::onResume(const SwapchainDimensions &swapchain) {
-  vkDeviceWaitIdle(device);
-  initSwapchain(swapchain);
-}
-
-void WSIPlatform::onPause() { destroySwapchain(); }
 
 } // namespace MaliSDK

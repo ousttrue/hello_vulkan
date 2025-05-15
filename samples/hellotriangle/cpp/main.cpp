@@ -69,7 +69,7 @@ void android_main(android_app *state) {
 
   MaliSDK::AssetManager asset(state->activity->assetManager);
   MaliSDK::VulkanApplication app(&asset);
-  MaliSDK::WSIPlatform platform;
+  MaliSDK::Platform platform;
   Dispatcher dispatcher{
       .pPlatform = &platform,
       .pVulkanApp = &app,

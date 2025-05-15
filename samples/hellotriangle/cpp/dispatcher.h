@@ -3,12 +3,12 @@
 #include <vulkan/vulkan_core.h>
 
 namespace MaliSDK {
-class WSIPlatform;
+class Platform;
 class VulkanApplication;
 } // namespace MaliSDK
 
 struct Dispatcher {
-  MaliSDK::WSIPlatform *pPlatform = nullptr;
+  MaliSDK::Platform *pPlatform = nullptr;
   MaliSDK::VulkanApplication *pVulkanApp = nullptr;
   bool active = false;
 
