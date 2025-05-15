@@ -54,7 +54,7 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   }
 
   LOGI("Creating application!\n");
-  this->pVulkanApp = MaliSDK::createApplication();
+  this->pVulkanApp = new MaliSDK::VulkanApplication();
 
   LOGI("Initializing application!\n");
   if (!this->pVulkanApp->initialize(&this->pPlatform->getContext())) {

@@ -3,7 +3,7 @@ add_library(
   ${TARGET} SHARED
   main.cpp
   dispatcher.cpp
-  hellotriangle.cpp
+  application.cpp
   android.cpp
   wsi.cpp
   context.cpp

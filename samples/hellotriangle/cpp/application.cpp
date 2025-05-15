@@ -51,73 +51,9 @@ using namespace MaliSDK;
 using namespace std;
 using namespace glm;
 
-struct Backbuffer {
-  // We get this image from the platform. Its memory is bound to the display or
-  // window.
-  VkImage image;
-
-  // We need an image view to be able to access the image as a framebuffer.
-  VkImageView view;
-
-  // The actual framebuffer.
-  VkFramebuffer framebuffer;
-};
-
-struct Buffer {
-  // The buffer object.
-  VkBuffer buffer;
-
-  // Buffer objects are backed by device memory.
-  VkDeviceMemory memory;
-};
-
 struct Vertex {
   vec4 position;
   vec4 color;
-};
-
-class HelloTriangle : public VulkanApplication {
-public:
-  virtual bool initialize(Context *pContext);
-  virtual void render(unsigned swapchainIndex, float deltaTime);
-  virtual void terminate();
-  virtual void updateSwapchain(const vector<VkImage> &backbuffers,
-                               const Platform::SwapchainDimensions &dim);
-
-private:
-  Context *pContext;
-
-  vector<Backbuffer> backbuffers;
-  unsigned width, height;
-
-  // The renderpass description.
-  VkRenderPass renderPass;
-
-  // The graphics pipeline.
-  VkPipeline pipeline;
-
-  // Pipeline objects can be cached in a pipeline cache.
-  // Mostly useful when you have many pipeline objects.
-  VkPipelineCache pipelineCache;
-
-  // Specified the pipeline layout for resources.
-  // We don't use any in this sample, but we still need to provide a dummy
-  // one.
-  VkPipelineLayout pipelineLayout;
-
-  // Vertex buffer for our triangle.
-  Buffer vertexBuffer;
-
-  // Helper function to create a buffer.
-  Buffer createBuffer(const void *pInitial, size_t size, VkFlags usage);
-  uint32_t findMemoryTypeFromRequirements(uint32_t deviceRequirements,
-                                          uint32_t hostRequirements);
-
-  void initRenderPass(VkFormat format);
-  void termBackbuffers();
-
-  void initVertexBuffer();
-  void initPipeline();
 };
 
 // To create a buffer, both the device and application have requirements from
@@ -129,8 +65,8 @@ private:
 // The different memory types' properties must match with what the application
 // wants.
 uint32_t
-HelloTriangle::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
-                                              uint32_t hostRequirements) {
+VulkanApplication::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
+                                                  uint32_t hostRequirements) {
   const VkPhysicalDeviceMemoryProperties &props =
       pContext->getPlatform().getMemoryProperties();
   for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
@@ -146,8 +82,8 @@ HelloTriangle::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
   abort();
 }
 
-Buffer HelloTriangle::createBuffer(const void *pInitialData, size_t size,
-                                   VkFlags usage) {
+Buffer VulkanApplication::createBuffer(const void *pInitialData, size_t size,
+                                       VkFlags usage) {
   Buffer buffer;
   VkDevice device = pContext->getDevice();
 
@@ -187,7 +123,7 @@ Buffer HelloTriangle::createBuffer(const void *pInitialData, size_t size,
   return buffer;
 }
 
-void HelloTriangle::initRenderPass(VkFormat format) {
+void VulkanApplication::initRenderPass(VkFormat format) {
   VkAttachmentDescription attachment = {0};
   // Backbuffer format.
   attachment.format = format;
@@ -256,7 +192,7 @@ void HelloTriangle::initRenderPass(VkFormat format) {
       vkCreateRenderPass(pContext->getDevice(), &rpInfo, nullptr, &renderPass));
 }
 
-void HelloTriangle::initVertexBuffer() {
+void VulkanApplication::initVertexBuffer() {
   // A simple counter-clockwise triangle.
   // We specify the positions directly in clip space.
   static const Vertex data[] = {
@@ -279,7 +215,7 @@ void HelloTriangle::initVertexBuffer() {
       createBuffer(data, sizeof(data), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 }
 
-void HelloTriangle::initPipeline() {
+void VulkanApplication::initPipeline() {
   // Create a blank pipeline layout.
   // We are not binding any resources to the pipeline in this first sample.
   VkDevice device = pContext->getDevice();
@@ -415,7 +351,7 @@ void HelloTriangle::initPipeline() {
   vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
 }
 
-bool HelloTriangle::initialize(Context *pContext) {
+bool VulkanApplication::initialize(Context *pContext) {
   // This is the very first call to our application, we don't know much about
   // our swapchain currently,
   // so there isn't too much we can initialize here.
@@ -433,7 +369,7 @@ bool HelloTriangle::initialize(Context *pContext) {
   return true;
 }
 
-void HelloTriangle::render(unsigned swapchainIndex, float /*deltaTime*/) {
+void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
   // Render to this backbuffer.
   Backbuffer &backbuffer = backbuffers[swapchainIndex];
 
@@ -502,7 +438,7 @@ void HelloTriangle::render(unsigned swapchainIndex, float /*deltaTime*/) {
   pContext->submitSwapchain(cmd);
 }
 
-void HelloTriangle::termBackbuffers() {
+void VulkanApplication::termBackbuffers() {
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
   VkDevice device = pContext->getDevice();
@@ -521,7 +457,7 @@ void HelloTriangle::termBackbuffers() {
   }
 }
 
-void HelloTriangle::terminate() {
+void VulkanApplication::terminate() {
   vkDeviceWaitIdle(pContext->getDevice());
 
   // Final teardown.
@@ -533,8 +469,9 @@ void HelloTriangle::terminate() {
   vkDestroyPipelineCache(device, pipelineCache, nullptr);
 }
 
-void HelloTriangle::updateSwapchain(const vector<VkImage> &newBackbuffers,
-                                    const Platform::SwapchainDimensions &dim) {
+void VulkanApplication::updateSwapchain(
+    const vector<VkImage> &newBackbuffers,
+    const Platform::SwapchainDimensions &dim) {
   VkDevice device = pContext->getDevice();
   width = dim.width;
   height = dim.height;
@@ -585,5 +522,3 @@ void HelloTriangle::updateSwapchain(const vector<VkImage> &newBackbuffers,
     backbuffers.push_back(backbuffer);
   }
 }
-
-VulkanApplication *MaliSDK::createApplication() { return new HelloTriangle(); }
