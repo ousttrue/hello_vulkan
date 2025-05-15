@@ -596,6 +596,14 @@ void Platform::getCurrentSwapchain(vector<VkImage> *images,
 }
 
 Result Platform::acquireNextImage(unsigned *image) {
+  if (swapchain == VK_NULL_HANDLE) {
+    // Recreate swapchain.
+    if (SUCCEEDED(initSwapchain(swapchainDimensions)))
+      return RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    else
+      return RESULT_ERROR_GENERIC;
+  }
+
   auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
   VkResult res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
                                        acquireSemaphore, VK_NULL_HANDLE, image);
@@ -660,6 +668,5 @@ VkSurfaceKHR Platform::createSurface() {
   VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
   return surface;
 }
-
 
 } // namespace MaliSDK

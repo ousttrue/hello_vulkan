@@ -45,10 +45,9 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   }
 
   // if (this->pVulkanApp) {
-  //   MaliSDK::Platform::SwapchainDimensions dim =
-  //       this->pPlatform->getPreferredSwapchain();
-  //   this->pPlatform->onResume(dim);
-  //
+  // dim = this->pPlatform->getPreferredSwapchain();
+  this->pPlatform->onResume(dim);
+
   //   std::vector<VkImage> images;
   //   this->pPlatform->getCurrentSwapchain(&images, &dim);
   //   this->pVulkanApp->updateSwapchain(images, dim);
@@ -75,7 +74,7 @@ bool Dispatcher::onFrame() {
   if (!this->active) {
     return true;
   }
-  if (!this->pVulkanApp->isReady()) {
+  if (!this->pPlatform->pNativeWindow) {
     return true;
   }
 
