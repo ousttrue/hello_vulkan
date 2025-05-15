@@ -49,7 +49,8 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   this->pPlatform->onResume(dim);
 
   LOGI("Updating swapchain!\n");
-  this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+  this->pVulkanApp->updateSwapchain(assetManager,
+                                    this->pPlatform->swapchainImages,
                                     this->pPlatform->swapchainDimensions);
 
   this->startTime = getCurrentTime();
@@ -64,7 +65,7 @@ void Dispatcher::onTermWindow() {
   }
 }
 
-bool Dispatcher::onFrame() {
+bool Dispatcher::onFrame(AAssetManager *assetManager) {
   if (!this->active) {
     return true;
   }
@@ -76,7 +77,8 @@ bool Dispatcher::onFrame() {
   auto res = this->pPlatform->acquireNextImage(&index);
   while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
     res = this->pPlatform->acquireNextImage(&index);
-    this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+    this->pVulkanApp->updateSwapchain(assetManager,
+                                      this->pPlatform->swapchainImages,
                                       this->pPlatform->swapchainDimensions);
   }
 

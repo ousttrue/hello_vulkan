@@ -6,7 +6,6 @@ add_library(
   application.cpp
   platform.cpp
   per_frame.cpp
-  asset_manager.cpp
   fence_manager.cpp
   semaphore_manager.cpp
   command_buffer_manager.cpp

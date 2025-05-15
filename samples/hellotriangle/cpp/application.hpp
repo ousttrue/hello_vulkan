@@ -1,6 +1,9 @@
 #pragma once
 #include "platform.hpp"
 
+#include <android/asset_manager.h>
+#include <android_native_app_glue.h>
+
 namespace MaliSDK {
 
 struct Backbuffer {
@@ -15,7 +18,6 @@ struct Buffer {
 };
 
 class VulkanApplication {
-  class AssetManager *pAsset;
   Platform *pContext;
 
   std::vector<Backbuffer> backbuffers;
@@ -27,10 +29,11 @@ class VulkanApplication {
   Buffer vertexBuffer;
 
 public:
-  VulkanApplication(AssetManager *asset) : pAsset(asset) {}
+  VulkanApplication() = default;
   ~VulkanApplication() = default;
   bool initialize(Platform *pContext);
-  void updateSwapchain(const std::vector<VkImage> &backbuffers,
+  void updateSwapchain(AAssetManager *assetManager,
+                       const std::vector<VkImage> &backbuffers,
                        const SwapchainDimensions &dim);
   void render(unsigned swapchainIndex, float deltaTime);
   void terminate();
@@ -44,7 +47,7 @@ private:
   void termBackbuffers();
 
   void initVertexBuffer();
-  void initPipeline();
+  void initPipeline(AAssetManager *assetManager);
 };
 
 } // namespace MaliSDK

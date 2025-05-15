@@ -1,33 +1,50 @@
-/* Copyright (c) 2016-2017, ARM Limited and Contributors
- *
- * SPDX-License-Identifier: MIT
- *
- * Permission is hereby granted, free of charge,
- * to any person obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without restriction,
- * including without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sublicense, and/or sell copies of the Software, and to permit
- * persons to whom the Software is furnished to do so, subject to the following
- * conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
- * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
- * OR OTHER DEALINGS IN THE SOFTWARE.
- */
-
 #include "application.hpp"
-#include "asset_manager.hpp"
 #include "common.hpp"
 #include "math.hpp"
 #include "platform.hpp"
 #include <string.h>
+
+static std::vector<uint8_t> readRawFile(AAssetManager *assetManager,
+                                        const char *pPath) {
+  if (!assetManager) {
+    LOGE("Asset manager does not exist.");
+    return {};
+  }
+
+  AAsset *asset = AAssetManager_open(assetManager, pPath, AASSET_MODE_BUFFER);
+  if (!asset) {
+    LOGE("AAssetManager_open() failed to load file: %s.", pPath);
+    return {};
+  }
+
+  auto buffer = AAsset_getBuffer(asset);
+  if (!buffer) {
+    LOGE("Failed to obtain buffer for asset: %s.", pPath);
+    AAsset_close(asset);
+    return {};
+  }
+
+  auto len = AAsset_getLength(asset);
+  std::vector<uint8_t> out(len);
+
+  memcpy(out.data(), buffer, len);
+  AAsset_close(asset);
+  return out;
+}
+
+template <typename T>
+inline std::vector<T> readBinaryFile(AAssetManager *assetManager,
+                                     const char *pPath) {
+  auto raw = readRawFile(assetManager, pPath);
+  if (raw.empty()) {
+    return {};
+  }
+
+  size_t numElements = raw.size() / sizeof(T);
+  std::vector<T> buffer(numElements);
+  memcpy(buffer.data(), raw.data(), raw.size());
+  return buffer;
+}
 
 static VkShaderModule loadShaderModule(VkDevice device,
                                        const std::vector<uint32_t> &buffer) {
@@ -213,7 +230,7 @@ void VulkanApplication::initVertexBuffer() {
       createBuffer(data, sizeof(data), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 }
 
-void VulkanApplication::initPipeline() {
+void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   // Create a blank pipeline layout.
   // We are not binding any resources to the pipeline in this first sample.
   VkDevice device = pContext->getDevice();
@@ -316,11 +333,13 @@ void VulkanApplication::initPipeline() {
   // We have two pipeline stages, vertex and fragment.
   shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   shaderStages[0].module = loadShaderModule(
-      device, pAsset->readBinaryFile<uint32_t>("shaders/triangle.vert.spv"));
+      device,
+      readBinaryFile<uint32_t>(assetManager, "shaders/triangle.vert.spv"));
   shaderStages[0].pName = "main";
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shaderStages[1].module = loadShaderModule(
-      device, pAsset->readBinaryFile<uint32_t>("shaders/triangle.frag.spv"));
+      device,
+      readBinaryFile<uint32_t>(assetManager, "shaders/triangle.frag.spv"));
   shaderStages[1].pName = "main";
 
   VkGraphicsPipelineCreateInfo pipe = {
@@ -467,9 +486,9 @@ void VulkanApplication::terminate() {
   vkDestroyPipelineCache(device, pipelineCache, nullptr);
 }
 
-void VulkanApplication::updateSwapchain(
-    const vector<VkImage> &newBackbuffers,
-    const SwapchainDimensions &dim) {
+void VulkanApplication::updateSwapchain(AAssetManager *assetManager,
+                                        const vector<VkImage> &newBackbuffers,
+                                        const SwapchainDimensions &dim) {
   VkDevice device = pContext->getDevice();
   width = dim.width;
   height = dim.height;
@@ -480,7 +499,7 @@ void VulkanApplication::updateSwapchain(
   // We can't initialize the renderpass until we know the swapchain format.
   initRenderPass(dim.format);
   // We can't initialize the pipeline until we know the render pass.
-  initPipeline();
+  initPipeline(assetManager);
 
   // For all backbuffers in the swapchain ...
   for (auto image : newBackbuffers) {

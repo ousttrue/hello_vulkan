@@ -1,5 +1,4 @@
 #include "application.hpp"
-#include "asset_manager.hpp"
 #include "common.hpp"
 #include "dispatcher.h"
 #include "platform.hpp"
@@ -67,8 +66,7 @@ void android_main(android_app *state) {
   LOGI("#### [debug][android_main] ####");
 #endif
 
-  MaliSDK::AssetManager asset(state->activity->assetManager);
-  MaliSDK::VulkanApplication app(&asset);
+  MaliSDK::VulkanApplication app;
   MaliSDK::Platform platform;
   Dispatcher dispatcher{
       .pPlatform = &platform,
@@ -97,7 +95,7 @@ void android_main(android_app *state) {
       }
     }
 
-    if (!dispatcher.onFrame()) {
+    if (!dispatcher.onFrame(state->activity->assetManager)) {
       break;
     }
   }

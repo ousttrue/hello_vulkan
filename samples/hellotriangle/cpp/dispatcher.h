@@ -20,5 +20,5 @@ struct Dispatcher {
   void onPause();
   void onInitWindow(ANativeWindow *window, AAssetManager *assetManager);
   void onTermWindow();
-  bool onFrame();
+  bool onFrame(AAssetManager *assetManager);
 };
