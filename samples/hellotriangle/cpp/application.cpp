@@ -23,6 +23,7 @@
  */
 
 #include "application.hpp"
+#include "asset_manager.hpp"
 #include "common.hpp"
 #include "context.hpp"
 #include "math.hpp"
@@ -469,7 +470,7 @@ void VulkanApplication::terminate() {
 
 void VulkanApplication::updateSwapchain(
     const vector<VkImage> &newBackbuffers,
-    const Platform::SwapchainDimensions &dim) {
+    const SwapchainDimensions &dim) {
   VkDevice device = pContext->getDevice();
   width = dim.width;
   height = dim.height;

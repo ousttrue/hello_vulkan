@@ -1,7 +1,7 @@
 #include "dispatcher.h"
 #include "application.hpp"
 #include "common.hpp"
-#include "wsi.hpp"
+#include "platform.hpp"
 
 /// @brief Get the current monotonic time in seconds.
 /// @returns Current time.
@@ -30,8 +30,7 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
 
   this->pPlatform->setNativeWindow(window);
 
-  MaliSDK::Platform::SwapchainDimensions dim =
-      this->pPlatform->getPreferredSwapchain();
+  auto dim = this->pPlatform->getPreferredSwapchain();
 
   LOGI("Creating window!\n");
   if (this->pPlatform->createWindow(dim) != MaliSDK::RESULT_SUCCESS) {
@@ -82,7 +81,7 @@ bool Dispatcher::onFrame() {
 
   unsigned index;
   std::vector<VkImage> images;
-  MaliSDK::Platform::SwapchainDimensions dim;
+  MaliSDK::SwapchainDimensions dim;
 
   auto res = this->pPlatform->acquireNextImage(&index);
   while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {

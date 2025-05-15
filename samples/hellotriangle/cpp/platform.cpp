@@ -22,7 +22,8 @@
  * OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "wsi.hpp"
+#include "platform.hpp"
+#include "context.hpp"
 #include <string.h>
 #include <vulkan/vulkan.h>
 
@@ -655,8 +656,6 @@ Result WSIPlatform::presentImage(unsigned index) {
     return RESULT_SUCCESS;
 }
 
-Platform::Status WSIPlatform::getWindowStatus() { return STATUS_RUNNING; }
-
 VkSurfaceKHR WSIPlatform::createSurface() {
   VkSurfaceKHR surface;
 
@@ -668,7 +667,7 @@ VkSurfaceKHR WSIPlatform::createSurface() {
   return surface;
 }
 
-Platform::SwapchainDimensions WSIPlatform::getPreferredSwapchain() {
+SwapchainDimensions WSIPlatform::getPreferredSwapchain() {
   SwapchainDimensions chain = {1280, 720, VK_FORMAT_B8G8R8A8_UNORM};
   return chain;
 }

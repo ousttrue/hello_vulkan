@@ -4,7 +4,7 @@ add_library(
   main.cpp
   dispatcher.cpp
   application.cpp
-  wsi.cpp
+  platform.cpp
   context.cpp
   asset_manager.cpp
   fence_manager.cpp
