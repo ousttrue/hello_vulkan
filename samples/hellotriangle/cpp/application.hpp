@@ -31,6 +31,10 @@ class VulkanApplication {
 public:
   VulkanApplication() = default;
   ~VulkanApplication() = default;
+
+  static std::shared_ptr<VulkanApplication> create(Platform *platform,
+                                                   AAssetManager *assetManager);
+
   bool initialize(Platform *pContext);
   void updateSwapchain(AAssetManager *assetManager,
                        const std::vector<VkImage> &backbuffers,

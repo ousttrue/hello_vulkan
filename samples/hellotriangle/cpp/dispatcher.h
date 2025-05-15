@@ -2,19 +2,22 @@
 #include <android_native_app_glue.h>
 #include <vulkan/vulkan_core.h>
 
+#include <memory>
+
 namespace MaliSDK {
 class Platform;
 class VulkanApplication;
 } // namespace MaliSDK
 
 struct Dispatcher {
-  MaliSDK::Platform *pPlatform = nullptr;
-  MaliSDK::VulkanApplication *pVulkanApp = nullptr;
+  std::shared_ptr<MaliSDK::Platform> pPlatform;
+  std::shared_ptr<MaliSDK::VulkanApplication> pVulkanApp;
   bool active = false;
 
   unsigned frameCount = 0;
   double startTime = 0;
 
+public:
   bool isReady() const { return this->pVulkanApp && this->active; }
   void onResume();
   void onPause();

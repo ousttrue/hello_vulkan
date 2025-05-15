@@ -71,6 +71,22 @@ struct Vertex {
   vec4 color;
 };
 
+std::shared_ptr<VulkanApplication>
+VulkanApplication::create(Platform *platform, AAssetManager *assetManager) {
+  auto ptr = std::shared_ptr<MaliSDK::VulkanApplication>(
+      new MaliSDK::VulkanApplication);
+  LOGI("Initializing application!\n");
+  if (!ptr->initialize(platform)) {
+    LOGE("Failed to initialize Vulkan application.\n");
+    abort();
+  }
+
+  LOGI("Updating swapchain!\n");
+  ptr->updateSwapchain(assetManager, platform->swapchainImages,
+                       platform->swapchainDimensions);
+  return ptr;
+}
+
 // To create a buffer, both the device and application have requirements from
 // the buffer object.
 // Vulkan exposes the different types of buffers the device can allocate, and we

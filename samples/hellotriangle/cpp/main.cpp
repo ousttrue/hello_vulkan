@@ -1,7 +1,5 @@
-#include "application.hpp"
 #include "common.hpp"
 #include "dispatcher.h"
-#include "platform.hpp"
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -66,13 +64,7 @@ void android_main(android_app *state) {
   LOGI("#### [debug][android_main] ####");
 #endif
 
-  MaliSDK::VulkanApplication app;
-  MaliSDK::Platform platform;
-  Dispatcher dispatcher{
-      .pPlatform = &platform,
-      .pVulkanApp = &app,
-      .active = false,
-  };
+  Dispatcher dispatcher;
   UserData engine{
       .pApp = state,
       .dispatcher = &dispatcher,

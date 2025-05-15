@@ -55,6 +55,8 @@ public:
   Platform(Platform &&) = delete;
   void operator=(Platform &&) = delete;
 
+  static std::shared_ptr<Platform> create(ANativeWindow *window);
+
   void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
   Result initialize();
   inline void addExternalLayer(const char *pName) {

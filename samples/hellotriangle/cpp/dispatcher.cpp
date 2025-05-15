@@ -16,93 +16,58 @@ static double getCurrentTime() {
 
 void Dispatcher::onResume() { this->active = true; }
 
-void Dispatcher::onPause() {
-  this->active = false;
-  this->pPlatform->onPause();
-}
+void Dispatcher::onPause() { this->active = false; }
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  if (this->pPlatform->initialize() != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Failed to initialize platform.\n");
-    abort();
-  }
-
-  this->pPlatform->setNativeWindow(window);
-
-  auto dim = this->pPlatform->getPreferredSwapchain();
-
-  LOGI("Creating window!\n");
-  if (this->pPlatform->createWindow(dim) != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Failed to create Vulkan window.\n");
-    abort();
-  }
-
-  LOGI("Initializing application!\n");
-  if (!this->pVulkanApp->initialize(this->pPlatform)) {
-    LOGE("Failed to initialize Vulkan application.\n");
-    abort();
-  }
-
-  // if (this->pVulkanApp) {
-  // dim = this->pPlatform->getPreferredSwapchain();
-  this->pPlatform->onResume(dim);
-
-  LOGI("Updating swapchain!\n");
-  this->pVulkanApp->updateSwapchain(assetManager,
-                                    this->pPlatform->swapchainImages,
-                                    this->pPlatform->swapchainDimensions);
-
+  pPlatform = MaliSDK::Platform::create(window);
+  pVulkanApp =
+      MaliSDK::VulkanApplication::create(pPlatform.get(), assetManager);
   this->startTime = getCurrentTime();
 }
 
 void Dispatcher::onTermWindow() {
-  if (this->pVulkanApp) {
-    this->pVulkanApp->terminate();
-    delete this->pVulkanApp;
-    this->pVulkanApp = nullptr;
-    this->pPlatform->terminate();
-  }
+  this->pVulkanApp = {};
+  this->pPlatform = {};
 }
 
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
   if (!this->active) {
     return true;
   }
-  if (!this->pPlatform->pNativeWindow) {
-    return true;
+  if (this->pPlatform && this->pVulkanApp) {
+    // swapchain current backbuffer
+    unsigned index;
+    auto res = this->pPlatform->acquireNextImage(&index);
+    while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+      res = this->pPlatform->acquireNextImage(&index);
+      this->pVulkanApp->updateSwapchain(assetManager,
+                                        this->pPlatform->swapchainImages,
+                                        this->pPlatform->swapchainDimensions);
+    }
+    if (res != MaliSDK::RESULT_SUCCESS) {
+      LOGE("Unrecoverable swapchain error.\n");
+      return false;
+    }
+
+    // render
+    this->pVulkanApp->render(index, 0.0166f);
+
+    // present
+    res = this->pPlatform->presentImage(index);
+    // Handle Outdated error in acquire.
+    if (res != MaliSDK::RESULT_SUCCESS &&
+        res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+      return false;
+    }
+
+    frameCount++;
+    if (frameCount == 100) {
+      double endTime = getCurrentTime();
+      LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
+      frameCount = 0;
+      startTime = endTime;
+    }
   }
-
-  unsigned index;
-  auto res = this->pPlatform->acquireNextImage(&index);
-  while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-    res = this->pPlatform->acquireNextImage(&index);
-    this->pVulkanApp->updateSwapchain(assetManager,
-                                      this->pPlatform->swapchainImages,
-                                      this->pPlatform->swapchainDimensions);
-  }
-
-  if (res != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Unrecoverable swapchain error.\n");
-    return false;
-  }
-
-  this->pVulkanApp->render(index, 0.0166f);
-  res = this->pPlatform->presentImage(index);
-
-  // Handle Outdated error in acquire.
-  if (res != MaliSDK::RESULT_SUCCESS &&
-      res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-    return false;
-  }
-
-  frameCount++;
-  if (frameCount == 100) {
-    double endTime = getCurrentTime();
-    LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
-    frameCount = 0;
-    startTime = endTime;
-  }
-
   return true;
 }
