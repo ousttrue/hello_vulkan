@@ -23,12 +23,29 @@
  */
 
 #include "application.hpp"
-#include "assets.hpp"
 #include "common.hpp"
 #include "context.hpp"
 #include "math.hpp"
+#include "os.hpp"
 #include "platform.hpp"
 #include <string.h>
+
+static VkShaderModule loadShaderModule(VkDevice device, const char *pPath) {
+  auto buffer = MaliSDK::OS::getAssetManager().readBinaryFile<uint32_t>(pPath);
+  if (buffer.empty()) {
+    LOGE("Failed to read SPIR-V file: %s.\n", pPath);
+    return VK_NULL_HANDLE;
+  }
+
+  VkShaderModuleCreateInfo moduleInfo = {
+      VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+  moduleInfo.codeSize = buffer.size() * sizeof(uint32_t);
+  moduleInfo.pCode = buffer.data();
+
+  VkShaderModule shaderModule;
+  VK_CHECK(vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule));
+  return shaderModule;
+}
 
 using namespace MaliSDK;
 using namespace std;

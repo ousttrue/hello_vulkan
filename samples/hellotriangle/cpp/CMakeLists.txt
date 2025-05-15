@@ -7,7 +7,6 @@ add_library(
   android.cpp
   wsi.cpp
   context.cpp
-  assets.cpp
   asset_manager.cpp
   android_assets.cpp
   fence_manager.cpp
