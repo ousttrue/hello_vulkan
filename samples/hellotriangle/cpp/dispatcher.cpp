@@ -39,7 +39,7 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   }
 
   LOGI("Initializing application!\n");
-  if (!this->pVulkanApp->initialize(&this->pPlatform->getContext())) {
+  if (!this->pVulkanApp->initialize(this->pPlatform)) {
     LOGE("Failed to initialize Vulkan application.\n");
     abort();
   }

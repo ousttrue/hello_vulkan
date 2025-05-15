@@ -5,7 +5,6 @@ add_library(
   dispatcher.cpp
   application.cpp
   platform.cpp
-  context.cpp
   per_frame.cpp
   asset_manager.cpp
   fence_manager.cpp

@@ -2,7 +2,6 @@
 #include "platform.hpp"
 
 namespace MaliSDK {
-class Context;
 
 struct Backbuffer {
   // We get this image from the platform. Its memory is bound to the display or
@@ -22,7 +21,7 @@ struct Buffer {
 
 class VulkanApplication {
   class AssetManager *pAsset;
-  Context *pContext;
+  Platform *pContext;
 
   std::vector<Backbuffer> backbuffers;
   unsigned width, height;
@@ -36,7 +35,7 @@ public:
   VulkanApplication(AssetManager *asset) : pAsset(asset) {}
   ~VulkanApplication() = default;
   bool isReady() const { return pContext != nullptr; }
-  bool initialize(Context *pContext);
+  bool initialize(Platform *pContext);
   void updateSwapchain(const std::vector<VkImage> &backbuffers,
                        const SwapchainDimensions &dim);
   void render(unsigned swapchainIndex, float deltaTime);

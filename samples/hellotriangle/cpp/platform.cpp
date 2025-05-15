@@ -23,7 +23,6 @@
  */
 
 #include "platform.hpp"
-#include "context.hpp"
 #include <string.h>
 #include <vulkan/vulkan.h>
 
@@ -97,9 +96,9 @@ bool Platform::validateExtensions(
 }
 
 Result Platform::initialize() {
-  pContext = new Context();
-  if (!pContext)
-    return RESULT_ERROR_OUT_OF_MEMORY;
+  // pContext = new Context();
+  // if (!pContext)
+  //   return RESULT_ERROR_OUT_OF_MEMORY;
 
   return RESULT_SUCCESS;
 }
@@ -409,7 +408,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
     return res;
   }
 
-  res = pContext->onPlatformUpdate(this);
+  res = onPlatformUpdate();
   if (FAILED(res))
     return res;
 
@@ -434,12 +433,6 @@ void Platform::terminate() {
 
   delete semaphoreManager;
   semaphoreManager = nullptr;
-
-  // Make sure we tear down the context before destroying the device since
-  // context
-  // also owns some Vulkan resources.
-  delete pContext;
-  pContext = nullptr;
 
   destroySwapchain();
 
@@ -628,7 +621,7 @@ Result Platform::acquireNextImage(unsigned *image) {
     // When submitting command buffer that writes to swapchain, we need to wait
     // for this semaphore first.
     // Also, delete the older semaphore.
-    auto oldSemaphore = pContext->beginFrame(*image, acquireSemaphore);
+    auto oldSemaphore = beginFrame(*image, acquireSemaphore);
 
     // Recycle the old semaphore back into the semaphore manager.
     if (oldSemaphore != VK_NULL_HANDLE)
@@ -646,7 +639,7 @@ Result Platform::presentImage(unsigned index) {
   present.pImageIndices = &index;
   present.pResults = &result;
   present.waitSemaphoreCount = 1;
-  present.pWaitSemaphores = &pContext->getSwapchainReleaseSemaphore();
+  present.pWaitSemaphores = &getSwapchainReleaseSemaphore();
 
   VkResult res = vkQueuePresentKHR(queue, &present);
 
@@ -667,6 +660,67 @@ VkSurfaceKHR Platform::createSurface() {
 
   VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
   return surface;
+}
+
+void Platform::submitSwapchain(VkCommandBuffer cmd) {
+  // For the first frames, we will create a release semaphore.
+  // This can be reused every frame. Semaphores are reset when they have been
+  // successfully been waited on.
+  // If we aren't using acquire semaphores, we aren't using release semaphores
+  // either.
+  if (getSwapchainReleaseSemaphore() == VK_NULL_HANDLE &&
+      getSwapchainAcquireSemaphore() != VK_NULL_HANDLE) {
+    VkSemaphore releaseSemaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VK_CHECK(
+        vkCreateSemaphore(device, &semaphoreInfo, nullptr, &releaseSemaphore));
+    perFrame[swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
+  }
+
+  submitCommandBuffer(cmd, getSwapchainAcquireSemaphore(),
+                      getSwapchainReleaseSemaphore());
+}
+
+void Platform::submitCommandBuffer(VkCommandBuffer cmd,
+                                   VkSemaphore acquireSemaphore,
+                                   VkSemaphore releaseSemaphore) {
+  // All queue submissions get a fence that CPU will wait
+  // on for synchronization purposes.
+  VkFence fence = getFenceManager().requestClearedFence();
+
+  VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  info.commandBufferCount = 1;
+  info.pCommandBuffers = &cmd;
+
+  const VkPipelineStageFlags waitStage =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  info.waitSemaphoreCount = acquireSemaphore != VK_NULL_HANDLE ? 1 : 0;
+  info.pWaitSemaphores = &acquireSemaphore;
+  info.pWaitDstStageMask = &waitStage;
+  info.signalSemaphoreCount = releaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
+  info.pSignalSemaphores = &releaseSemaphore;
+
+  VK_CHECK(vkQueueSubmit(queue, 1, &info, fence));
+}
+
+Result Platform::onPlatformUpdate() {
+  device = this->getDevice();
+  queue = this->getGraphicsQueue();
+
+  waitIdle();
+
+  // Initialize per-frame resources.
+  // Every swapchain image has its own command pool and fence manager.
+  // This makes it very easy to keep track of when we can reset command buffers
+  // and such.
+  perFrame.clear();
+  for (unsigned i = 0; i < this->getNumSwapchainImages(); i++)
+    perFrame.emplace_back(new PerFrame(device, this->getGraphicsQueueIndex()));
+
+  setRenderingThreadCount(renderingThreadCount);
+
+  return RESULT_SUCCESS;
 }
 
 } // namespace MaliSDK

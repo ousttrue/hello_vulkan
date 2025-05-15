@@ -1,4 +1,5 @@
 #pragma once
+#include "per_frame.hpp"
 #include "semaphore_manager.hpp"
 #include <vulkan/vulkan.h>
 
@@ -16,7 +17,6 @@ struct Platform {
   VkPhysicalDevice gpu = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
-  class Context *pContext = nullptr;
   VkPhysicalDeviceProperties gpuProperties;
   VkPhysicalDeviceMemoryProperties memoryProperties;
   std::vector<VkQueueFamilyProperties> queueProperties;
@@ -56,7 +56,6 @@ public:
   void operator=(Platform &&) = delete;
 
   void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
-  inline class Context &getContext() { return *pContext; }
   Result initialize();
   inline void addExternalLayer(const char *pName) {
     externalLayers.push_back(pName);
@@ -112,6 +111,39 @@ public:
   void onResume(const SwapchainDimensions &swapchain) {
     vkDeviceWaitIdle(device);
     initSwapchain(swapchain);
+  }
+
+  Result onPlatformUpdate();
+  void waitIdle() { vkDeviceWaitIdle(device); }
+  std::vector<std::unique_ptr<PerFrame>> perFrame;
+  unsigned swapchainIndex = 0;
+  unsigned renderingThreadCount = 0;
+  VkCommandBuffer requestPrimaryCommandBuffer() {
+    return perFrame[swapchainIndex]->commandManager.requestCommandBuffer();
+  }
+  const VkSemaphore &getSwapchainReleaseSemaphore() const {
+    return perFrame[swapchainIndex]->swapchainReleaseSemaphore;
+  }
+  const VkSemaphore &getSwapchainAcquireSemaphore() const {
+    return perFrame[swapchainIndex]->swapchainAcquireSemaphore;
+  }
+  FenceManager &getFenceManager() {
+    return perFrame[swapchainIndex]->fenceManager;
+  }
+  void submitSwapchain(VkCommandBuffer cmdBuffer);
+  void submitCommandBuffer(VkCommandBuffer, VkSemaphore acquireSemaphore,
+                           VkSemaphore releaseSemaphore);
+  VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
+    swapchainIndex = index;
+    perFrame[swapchainIndex]->beginFrame();
+    return perFrame[swapchainIndex]->setSwapchainAcquireSemaphore(
+        acquireSemaphore);
+  }
+  void setRenderingThreadCount(unsigned count) {
+    vkQueueWaitIdle(queue);
+    for (auto &pFrame : perFrame)
+      pFrame->setSecondaryCommandManagersCount(count);
+    renderingThreadCount = count;
   }
 };
 

@@ -25,7 +25,6 @@
 #include "application.hpp"
 #include "asset_manager.hpp"
 #include "common.hpp"
-#include "context.hpp"
 #include "math.hpp"
 #include "platform.hpp"
 #include <string.h>
@@ -67,7 +66,7 @@ uint32_t
 VulkanApplication::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
                                                   uint32_t hostRequirements) {
   const VkPhysicalDeviceMemoryProperties &props =
-      pContext->getPlatform().getMemoryProperties();
+      pContext->getMemoryProperties();
   for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
     if (deviceRequirements & (1u << i)) {
       if ((props.memoryTypes[i].propertyFlags & hostRequirements) ==
@@ -350,7 +349,7 @@ void VulkanApplication::initPipeline() {
   vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
 }
 
-bool VulkanApplication::initialize(Context *pContext) {
+bool VulkanApplication::initialize(Platform *pContext) {
   // This is the very first call to our application, we don't know much about
   // our swapchain currently,
   // so there isn't too much we can initialize here.
