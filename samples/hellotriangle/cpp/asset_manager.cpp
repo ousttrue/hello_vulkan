@@ -30,23 +30,30 @@ using namespace std;
 namespace MaliSDK {
 
 std::vector<uint8_t> AssetManager::readBinaryFile(const char *pPath) {
-  FILE *file = fopen(pPath, "rb");
-  if (!file) {
+  if (!pManager) {
+    LOGE("Asset manager does not exist.");
     return {};
   }
 
-  fseek(file, 0, SEEK_END);
-  long len = ftell(file);
-  rewind(file);
-
-  std::vector<uint8_t> buffer(len);
-  auto read_size = fread(buffer.data(), 1, len, file);
-  fclose(file);
-
-  if (read_size != len) {
+  AAsset *asset = AAssetManager_open(pManager, pPath, AASSET_MODE_BUFFER);
+  if (!asset) {
+    LOGE("AAssetManager_open() failed to load file: %s.", pPath);
     return {};
   }
-  return buffer;
+
+  auto buffer = AAsset_getBuffer(asset);
+  if (!buffer) {
+    LOGE("Failed to obtain buffer for asset: %s.", pPath);
+    AAsset_close(asset);
+    return {};
+  }
+
+  auto len = AAsset_getLength(asset);
+  std::vector<uint8_t> out(len);
+
+  memcpy(out.data(), buffer, len);
+  AAsset_close(asset);
+  return out;
 }
 
 } // namespace MaliSDK

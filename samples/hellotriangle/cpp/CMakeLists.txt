@@ -8,7 +8,6 @@ add_library(
   wsi.cpp
   context.cpp
   asset_manager.cpp
-  android_assets.cpp
   fence_manager.cpp
   semaphore_manager.cpp
   command_buffer_manager.cpp

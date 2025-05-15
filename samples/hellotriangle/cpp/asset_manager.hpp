@@ -30,13 +30,15 @@
 #include <stdint.h>
 #include <vector>
 
+#include <android_native_app_glue.h>
+
 namespace MaliSDK {
 
 /// @brief The asset manager reads data from a platform specific location.
 /// This class is used internally to load binary data from disk.
 class AssetManager {
 public:
-  virtual ~AssetManager() = default;
+  ~AssetManager() = default;
 
   template <typename T>
   inline std::vector<T> readBinaryFile(const char *pPath) {
@@ -50,7 +52,16 @@ public:
     return buffer;
   }
 
-  virtual std::vector<uint8_t> readBinaryFile(const char *pPath);
+  std::vector<uint8_t> readBinaryFile(const char *pPath);
+
+  /// @brief Sets the asset manager to use. Called from platform.
+  /// @param pAssetManager The asset manager.
+  void setAssetManager(AAssetManager *pAssetManager) {
+    pManager = pAssetManager;
+  }
+
+private:
+  AAssetManager *pManager = nullptr;
 };
 
 } // namespace MaliSDK

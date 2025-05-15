@@ -34,7 +34,7 @@ void Dispatcher::onPause() {
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  static_cast<MaliSDK::AndroidAssetManager &>(MaliSDK::OS::getAssetManager())
+  static_cast<MaliSDK::AssetManager &>(MaliSDK::OS::getAssetManager())
       .setAssetManager(assetManager);
 
   if (this->pPlatform->initialize() != MaliSDK::RESULT_SUCCESS) {

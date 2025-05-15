@@ -43,7 +43,7 @@ VkSurfaceKHR AndroidPlatform::createSurface() {
 }
 
 AssetManager &MaliSDK::OS::getAssetManager() {
-  static AndroidAssetManager manager;
+  static AssetManager manager;
   return manager;
 }
 

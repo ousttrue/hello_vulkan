@@ -25,10 +25,10 @@
 #ifndef PLATFORM_ANDROID_HPP
 #define PLATFORM_ANDROID_HPP
 
-#include "android_assets.hpp"
 #include "application.hpp"
-#include "platform.hpp"
+#include "asset_manager.hpp"
 #include "os.hpp"
+#include "platform.hpp"
 #include "wsi.hpp"
 #include <android_native_app_glue.h>
 #include <time.h>
