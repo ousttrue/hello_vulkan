@@ -582,12 +582,6 @@ Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   return RESULT_SUCCESS;
 }
 
-void Platform::getCurrentSwapchain(vector<VkImage> *images,
-                                   SwapchainDimensions *swapchain) {
-  *images = swapchainImages;
-  *swapchain = swapchainDimensions;
-}
-
 Result Platform::acquireNextImage(unsigned *image) {
   if (swapchain == VK_NULL_HANDLE) {
     // Recreate swapchain.

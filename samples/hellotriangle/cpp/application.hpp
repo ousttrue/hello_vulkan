@@ -4,18 +4,13 @@
 namespace MaliSDK {
 
 struct Backbuffer {
-  // We get this image from the platform. Its memory is bound to the display or
-  // window.
   VkImage image;
-  // We need an image view to be able to access the image as a framebuffer.
   VkImageView view;
-  // The actual framebuffer.
   VkFramebuffer framebuffer;
 };
 
 struct Buffer {
   VkBuffer buffer;
-  // Buffer objects are backed by device memory.
   VkDeviceMemory memory;
 };
 
@@ -34,7 +29,6 @@ class VulkanApplication {
 public:
   VulkanApplication(AssetManager *asset) : pAsset(asset) {}
   ~VulkanApplication() = default;
-  bool isReady() const { return pContext != nullptr; }
   bool initialize(Platform *pContext);
   void updateSwapchain(const std::vector<VkImage> &backbuffers,
                        const SwapchainDimensions &dim);

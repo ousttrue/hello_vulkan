@@ -81,8 +81,6 @@ public:
                       {"VK_KHR_swapchain"});
   }
 
-  void getCurrentSwapchain(std::vector<VkImage> *images,
-                           SwapchainDimensions *swapchain);
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   Result acquireNextImage(unsigned *index);
   Result presentImage(unsigned index);

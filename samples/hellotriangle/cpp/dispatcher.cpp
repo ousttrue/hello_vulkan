@@ -48,15 +48,9 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   // dim = this->pPlatform->getPreferredSwapchain();
   this->pPlatform->onResume(dim);
 
-  //   std::vector<VkImage> images;
-  //   this->pPlatform->getCurrentSwapchain(&images, &dim);
-  //   this->pVulkanApp->updateSwapchain(images, dim);
-  // }
-
   LOGI("Updating swapchain!\n");
-  std::vector<VkImage> images;
-  this->pPlatform->getCurrentSwapchain(&images, &dim);
-  this->pVulkanApp->updateSwapchain(images, dim);
+  this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+                                    this->pPlatform->swapchainDimensions);
 
   this->startTime = getCurrentTime();
 }
@@ -79,14 +73,11 @@ bool Dispatcher::onFrame() {
   }
 
   unsigned index;
-  std::vector<VkImage> images;
-  MaliSDK::SwapchainDimensions dim;
-
   auto res = this->pPlatform->acquireNextImage(&index);
   while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-    this->pPlatform->acquireNextImage(&index);
-    this->pPlatform->getCurrentSwapchain(&images, &dim);
-    this->pVulkanApp->updateSwapchain(images, dim);
+    res = this->pPlatform->acquireNextImage(&index);
+    this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+                                      this->pPlatform->swapchainDimensions);
   }
 
   if (res != MaliSDK::RESULT_SUCCESS) {
