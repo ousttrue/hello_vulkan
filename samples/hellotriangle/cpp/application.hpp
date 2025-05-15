@@ -21,6 +21,7 @@ struct Buffer {
 };
 
 class VulkanApplication {
+  AssetManager *pAsset;
   Context *pContext;
 
   std::vector<Backbuffer> backbuffers;
@@ -32,7 +33,9 @@ class VulkanApplication {
   Buffer vertexBuffer;
 
 public:
+  VulkanApplication(AssetManager *asset) : pAsset(asset) {}
   ~VulkanApplication() = default;
+  bool isReady() const { return pContext != nullptr; }
   bool initialize(Context *pContext);
   void updateSwapchain(const std::vector<VkImage> &backbuffers,
                        const Platform::SwapchainDimensions &dim);

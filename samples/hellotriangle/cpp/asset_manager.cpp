@@ -29,7 +29,7 @@ using namespace std;
 
 namespace MaliSDK {
 
-std::vector<uint8_t> AssetManager::readBinaryFile(const char *pPath) {
+std::vector<uint8_t> AssetManager::readRawFile(const char *pPath) {
   if (!pManager) {
     LOGE("Asset manager does not exist.");
     return {};

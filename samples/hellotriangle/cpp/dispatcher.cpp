@@ -1,6 +1,7 @@
 #include "dispatcher.h"
-#include "android.hpp"
+#include "application.hpp"
 #include "common.hpp"
+#include "wsi.hpp"
 
 /// @brief Get the current monotonic time in seconds.
 /// @returns Current time.
@@ -13,19 +14,7 @@ static double getCurrentTime() {
   return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-void Dispatcher::onResume() {
-  this->active = true;
-  MaliSDK::Platform::SwapchainDimensions dim =
-      this->pPlatform->getPreferredSwapchain();
-
-  if (this->pVulkanApp) {
-    this->pPlatform->onResume(dim);
-
-    std::vector<VkImage> images;
-    this->pPlatform->getCurrentSwapchain(&images, &dim);
-    this->pVulkanApp->updateSwapchain(images, dim);
-  }
-}
+void Dispatcher::onResume() { this->active = true; }
 
 void Dispatcher::onPause() {
   this->active = false;
@@ -34,9 +23,6 @@ void Dispatcher::onPause() {
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  static_cast<MaliSDK::AssetManager &>(MaliSDK::OS::getAssetManager())
-      .setAssetManager(assetManager);
-
   if (this->pPlatform->initialize() != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to initialize platform.\n");
     abort();
@@ -53,14 +39,21 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
     abort();
   }
 
-  LOGI("Creating application!\n");
-  this->pVulkanApp = new MaliSDK::VulkanApplication();
-
   LOGI("Initializing application!\n");
   if (!this->pVulkanApp->initialize(&this->pPlatform->getContext())) {
     LOGE("Failed to initialize Vulkan application.\n");
     abort();
   }
+
+  // if (this->pVulkanApp) {
+  //   MaliSDK::Platform::SwapchainDimensions dim =
+  //       this->pPlatform->getPreferredSwapchain();
+  //   this->pPlatform->onResume(dim);
+  //
+  //   std::vector<VkImage> images;
+  //   this->pPlatform->getCurrentSwapchain(&images, &dim);
+  //   this->pVulkanApp->updateSwapchain(images, dim);
+  // }
 
   LOGI("Updating swapchain!\n");
   std::vector<VkImage> images;
@@ -83,7 +76,7 @@ bool Dispatcher::onFrame() {
   if (!this->active) {
     return true;
   }
-  if (!this->pVulkanApp) {
+  if (!this->pVulkanApp->isReady()) {
     return true;
   }
 

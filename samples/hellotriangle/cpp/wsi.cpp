@@ -654,4 +654,35 @@ Result WSIPlatform::presentImage(unsigned index) {
   else
     return RESULT_SUCCESS;
 }
+
+Platform::Status WSIPlatform::getWindowStatus() { return STATUS_RUNNING; }
+
+VkSurfaceKHR WSIPlatform::createSurface() {
+  VkSurfaceKHR surface;
+
+  VkAndroidSurfaceCreateInfoKHR info = {
+      VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR};
+  info.window = pNativeWindow;
+
+  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
+  return surface;
+}
+
+Platform::SwapchainDimensions WSIPlatform::getPreferredSwapchain() {
+  SwapchainDimensions chain = {1280, 720, VK_FORMAT_B8G8R8A8_UNORM};
+  return chain;
+}
+
+Result WSIPlatform::createWindow(const SwapchainDimensions &swapchain) {
+  return initVulkan(swapchain, {"VK_KHR_surface", "VK_KHR_android_surface"},
+                    {"VK_KHR_swapchain"});
+}
+
+void WSIPlatform::onResume(const SwapchainDimensions &swapchain) {
+  vkDeviceWaitIdle(device);
+  initSwapchain(swapchain);
+}
+
+void WSIPlatform::onPause() { destroySwapchain(); }
+
 } // namespace MaliSDK

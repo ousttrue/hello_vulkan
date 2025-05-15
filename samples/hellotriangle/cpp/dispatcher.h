@@ -3,14 +3,14 @@
 #include <vulkan/vulkan_core.h>
 
 namespace MaliSDK {
-class AndroidPlatform;
+class WSIPlatform;
 class VulkanApplication;
 } // namespace MaliSDK
 
 struct Dispatcher {
-  MaliSDK::AndroidPlatform *pPlatform = nullptr;
-  bool active = false;
+  MaliSDK::WSIPlatform *pPlatform = nullptr;
   MaliSDK::VulkanApplication *pVulkanApp = nullptr;
+  bool active = false;
 
   unsigned frameCount = 0;
   double startTime = 0;

@@ -107,13 +107,46 @@ private:
   SwapchainDimensions swapchainDimensions;
   std::vector<VkImage> swapchainImages;
 
-  virtual VkSurfaceKHR createSurface() = 0;
-
   bool validateExtensions(const std::vector<const char *> &required,
                           const std::vector<VkExtensionProperties> &available);
 
   // VkDebugReportCallbackEXT debug_callback = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
+
+public:
+  /// @brief Sets the native window used to create Vulkan swapchain.
+  /// Called by the mainloop.
+  /// @param pWindow The native window.
+  void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
+
+  /// @brief Gets the preferred swapchain size.
+  /// @returns Error code.
+  virtual SwapchainDimensions getPreferredSwapchain() override;
+
+  /// @brief Creates a window with desired swapchain dimensions.
+  ///
+  /// The swapchain parameters might not necessarily be honored by the platform.
+  /// Use @ref getCurrentSwapchain to query the dimensions we actually
+  /// initialized.
+  /// @returns Error code.
+  virtual Result createWindow(const SwapchainDimensions &swapchain) override;
+
+  /// @brief Gets current window status.
+  /// @returns Window status.
+  virtual Status getWindowStatus() override;
+
+  /// @brief Called on APP_CMD_ON_PAUSE. Tears down swapchain.
+  void onPause();
+  /// @brief Called on APP_CMD_ON_RESUME. Reinitializes swapchain.
+  /// @param swapchain The swapchain parameters.
+  void onResume(const SwapchainDimensions &swapchain);
+
+private:
+  Result initConnection();
+  Result initWindow();
+
+  ANativeWindow *pNativeWindow = nullptr;
+  virtual VkSurfaceKHR createSurface();
 };
 } // namespace MaliSDK
 

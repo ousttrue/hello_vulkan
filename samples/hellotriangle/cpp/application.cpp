@@ -26,14 +26,12 @@
 #include "common.hpp"
 #include "context.hpp"
 #include "math.hpp"
-#include "os.hpp"
 #include "platform.hpp"
 #include <string.h>
 
-static VkShaderModule loadShaderModule(VkDevice device, const char *pPath) {
-  auto buffer = MaliSDK::OS::getAssetManager().readBinaryFile<uint32_t>(pPath);
+static VkShaderModule loadShaderModule(VkDevice device,
+                                       const std::vector<uint32_t> &buffer) {
   if (buffer.empty()) {
-    LOGE("Failed to read SPIR-V file: %s.\n", pPath);
     return VK_NULL_HANDLE;
   }
 
@@ -317,12 +315,12 @@ void VulkanApplication::initPipeline() {
 
   // We have two pipeline stages, vertex and fragment.
   shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  shaderStages[0].module =
-      loadShaderModule(device, "shaders/triangle.vert.spv");
+  shaderStages[0].module = loadShaderModule(
+      device, pAsset->readBinaryFile<uint32_t>("shaders/triangle.vert.spv"));
   shaderStages[0].pName = "main";
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  shaderStages[1].module =
-      loadShaderModule(device, "shaders/triangle.frag.spv");
+  shaderStages[1].module = loadShaderModule(
+      device, pAsset->readBinaryFile<uint32_t>("shaders/triangle.frag.spv"));
   shaderStages[1].pName = "main";
 
   VkGraphicsPipelineCreateInfo pipe = {

@@ -37,12 +37,15 @@ namespace MaliSDK {
 /// @brief The asset manager reads data from a platform specific location.
 /// This class is used internally to load binary data from disk.
 class AssetManager {
+  AAssetManager *pManager = nullptr;
+
 public:
+  AssetManager(AAssetManager *asset) : pManager(asset) {}
   ~AssetManager() = default;
 
   template <typename T>
   inline std::vector<T> readBinaryFile(const char *pPath) {
-    auto raw = readBinaryFile(pPath);
+    auto raw = readRawFile(pPath);
     if (raw.empty() != RESULT_SUCCESS) {
       return {};
     }
@@ -52,16 +55,7 @@ public:
     return buffer;
   }
 
-  std::vector<uint8_t> readBinaryFile(const char *pPath);
-
-  /// @brief Sets the asset manager to use. Called from platform.
-  /// @param pAssetManager The asset manager.
-  void setAssetManager(AAssetManager *pAssetManager) {
-    pManager = pAssetManager;
-  }
-
-private:
-  AAssetManager *pManager = nullptr;
+  std::vector<uint8_t> readRawFile(const char *pPath);
 };
 
 } // namespace MaliSDK

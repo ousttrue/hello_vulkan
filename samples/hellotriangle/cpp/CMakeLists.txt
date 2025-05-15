@@ -4,7 +4,6 @@ add_library(
   main.cpp
   dispatcher.cpp
   application.cpp
-  android.cpp
   wsi.cpp
   context.cpp
   asset_manager.cpp

@@ -1,6 +1,7 @@
-#include "android.hpp"
+#include "application.hpp"
 #include "common.hpp"
 #include "dispatcher.h"
+#include "wsi.hpp"
 
 #include <magic_enum/magic_enum.hpp>
 
@@ -65,16 +66,18 @@ void android_main(android_app *state) {
   LOGI("#### [debug][android_main] ####");
 #endif
 
-  MaliSDK::AndroidPlatform platform;
+  MaliSDK::AssetManager asset(state->activity->assetManager);
+  MaliSDK::VulkanApplication app(&asset);
+  MaliSDK::WSIPlatform platform;
   Dispatcher dispatcher{
       .pPlatform = &platform,
+      .pVulkanApp = &app,
       .active = false,
   };
   UserData engine{
       .pApp = state,
       .dispatcher = &dispatcher,
   };
-
   state->userData = &engine;
   state->onAppCmd = engineHandleCmd;
   state->onInputEvent = [](android_app *, AInputEvent *) { return 0; };
