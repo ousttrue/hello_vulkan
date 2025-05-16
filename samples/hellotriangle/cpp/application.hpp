@@ -42,11 +42,12 @@ public:
   void terminate();
 
 private:
-  Buffer createBuffer(const void *pInitial, size_t size, VkFlags usage);
+  Buffer createBuffer(const VkPhysicalDeviceMemoryProperties &props,
+                      const void *pInitial, size_t size, VkFlags usage);
 
   void initRenderPass(VkFormat format);
   void termBackbuffers();
 
-  void initVertexBuffer();
+  void initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props);
   void initPipeline(AAssetManager *assetManager);
 };

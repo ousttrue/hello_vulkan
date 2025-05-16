@@ -67,6 +67,22 @@ struct Vertex {
   glm::vec4 color;
 };
 
+//
+// VulkanApplication
+//
+VulkanApplication::VulkanApplication(VkDevice device,
+                                     MaliSDK::Platform *platform)
+    : _device(device), pContext(platform) {
+  // Create the vertex buffer.
+  initVertexBuffer(pContext->getMemoryProperties());
+
+  // Create a pipeline cache (although we'll only create one pipeline).
+  VkPipelineCacheCreateInfo pipelineCacheInfo = {
+      VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+  VK_CHECK(vkCreatePipelineCache(_device, &pipelineCacheInfo, nullptr,
+                                 &pipelineCache));
+}
+
 std::shared_ptr<VulkanApplication>
 VulkanApplication::create(MaliSDK::Platform *platform,
                           AAssetManager *assetManager) {
@@ -104,8 +120,10 @@ findMemoryTypeFromRequirements(const VkPhysicalDeviceMemoryProperties &props,
   abort();
 }
 
-Buffer VulkanApplication::createBuffer(const void *pInitialData, size_t size,
-                                       VkFlags usage) {
+Buffer
+VulkanApplication::createBuffer(const VkPhysicalDeviceMemoryProperties &props,
+                                const void *pInitialData, size_t size,
+                                VkFlags usage) {
 
   VkBufferCreateInfo info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   info.usage = usage;
@@ -122,10 +140,10 @@ Buffer VulkanApplication::createBuffer(const void *pInitialData, size_t size,
   alloc.allocationSize = memReqs.size;
 
   // We want host visible and coherent memory to simplify things.
-  alloc.memoryTypeIndex = findMemoryTypeFromRequirements(
-      pContext->getMemoryProperties(), memReqs.memoryTypeBits,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  alloc.memoryTypeIndex =
+      findMemoryTypeFromRequirements(props, memReqs.memoryTypeBits,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
   // Allocate memory.
   VK_CHECK(vkAllocateMemory(_device, &alloc, nullptr, &buffer.memory));
@@ -213,7 +231,8 @@ void VulkanApplication::initRenderPass(VkFormat format) {
   VK_CHECK(vkCreateRenderPass(_device, &rpInfo, nullptr, &renderPass));
 }
 
-void VulkanApplication::initVertexBuffer() {
+void VulkanApplication::initVertexBuffer(
+    const VkPhysicalDeviceMemoryProperties &props) {
   // A simple counter-clockwise triangle.
   // We specify the positions directly in clip space.
   static const Vertex data[] = {
@@ -232,8 +251,8 @@ void VulkanApplication::initVertexBuffer() {
   };
 
   // We will use the buffer as a vertex buffer only.
-  vertexBuffer =
-      createBuffer(data, sizeof(data), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+  vertexBuffer = createBuffer(props, data, sizeof(data),
+                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 }
 
 void VulkanApplication::initPipeline(AAssetManager *assetManager) {
@@ -373,19 +392,6 @@ void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   vkDestroyShaderModule(_device, shaderStages[1].module, nullptr);
 }
 
-VulkanApplication::VulkanApplication(VkDevice device,
-                                     MaliSDK::Platform *platform)
-    : _device(device), pContext(platform) {
-  // Create the vertex buffer.
-  initVertexBuffer();
-
-  // Create a pipeline cache (although we'll only create one pipeline).
-  VkPipelineCacheCreateInfo pipelineCacheInfo = {
-      VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-  VK_CHECK(vkCreatePipelineCache(_device, &pipelineCacheInfo, nullptr,
-                                 &pipelineCache));
-}
-
 void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
   // Render to this backbuffer.
   Backbuffer &backbuffer = backbuffers[swapchainIndex];
@@ -474,7 +480,7 @@ void VulkanApplication::termBackbuffers() {
 }
 
 void VulkanApplication::terminate() {
-  vkDeviceWaitIdle(pContext->getDevice());
+  vkDeviceWaitIdle(_device);
 
   // Final teardown.
   vkFreeMemory(_device, vertexBuffer.memory, nullptr);
