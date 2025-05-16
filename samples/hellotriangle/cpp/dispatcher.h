@@ -6,12 +6,11 @@
 
 namespace MaliSDK {
 class Platform;
-class VulkanApplication;
 } // namespace MaliSDK
 
 struct Dispatcher {
   std::shared_ptr<MaliSDK::Platform> pPlatform;
-  std::shared_ptr<MaliSDK::VulkanApplication> pVulkanApp;
+  std::shared_ptr<class VulkanApplication> pVulkanApp;
   bool active = false;
 
   unsigned frameCount = 0;

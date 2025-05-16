@@ -21,8 +21,7 @@ void Dispatcher::onPause() { this->active = false; }
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
   pPlatform = MaliSDK::Platform::create(window);
-  pVulkanApp =
-      MaliSDK::VulkanApplication::create(pPlatform.get(), assetManager);
+  pVulkanApp = VulkanApplication::create(pPlatform.get(), assetManager);
   this->startTime = getCurrentTime();
 }
 

@@ -4,8 +4,6 @@
 #include <android/asset_manager.h>
 #include <android_native_app_glue.h>
 
-namespace MaliSDK {
-
 struct Backbuffer {
   VkImage image;
   VkImageView view;
@@ -18,7 +16,8 @@ struct Buffer {
 };
 
 class VulkanApplication {
-  Platform *pContext;
+  VkDevice _device;
+  MaliSDK::Platform *pContext;
 
   std::vector<Backbuffer> backbuffers;
   unsigned width, height;
@@ -28,24 +27,22 @@ class VulkanApplication {
   VkPipelineLayout pipelineLayout;
   Buffer vertexBuffer;
 
+  VulkanApplication(VkDevice device, MaliSDK::Platform *platform);
+
 public:
-  VulkanApplication() = default;
   ~VulkanApplication() = default;
 
-  static std::shared_ptr<VulkanApplication> create(Platform *platform,
+  static std::shared_ptr<VulkanApplication> create(MaliSDK::Platform *platform,
                                                    AAssetManager *assetManager);
 
-  bool initialize(Platform *pContext);
   void updateSwapchain(AAssetManager *assetManager,
                        const std::vector<VkImage> &backbuffers,
-                       const SwapchainDimensions &dim);
+                       const MaliSDK::SwapchainDimensions &dim);
   void render(unsigned swapchainIndex, float deltaTime);
   void terminate();
 
 private:
   Buffer createBuffer(const void *pInitial, size_t size, VkFlags usage);
-  uint32_t findMemoryTypeFromRequirements(uint32_t deviceRequirements,
-                                          uint32_t hostRequirements);
 
   void initRenderPass(VkFormat format);
   void termBackbuffers();
@@ -53,5 +50,3 @@ private:
   void initVertexBuffer();
   void initPipeline(AAssetManager *assetManager);
 };
-
-} // namespace MaliSDK

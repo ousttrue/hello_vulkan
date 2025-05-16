@@ -62,24 +62,16 @@ static VkShaderModule loadShaderModule(VkDevice device,
   return shaderModule;
 }
 
-using namespace MaliSDK;
-using namespace std;
-using namespace glm;
-
 struct Vertex {
-  vec4 position;
-  vec4 color;
+  glm::vec4 position;
+  glm::vec4 color;
 };
 
 std::shared_ptr<VulkanApplication>
-VulkanApplication::create(Platform *platform, AAssetManager *assetManager) {
-  auto ptr = std::shared_ptr<MaliSDK::VulkanApplication>(
-      new MaliSDK::VulkanApplication);
-  LOGI("Initializing application!\n");
-  if (!ptr->initialize(platform)) {
-    LOGE("Failed to initialize Vulkan application.\n");
-    abort();
-  }
+VulkanApplication::create(MaliSDK::Platform *platform,
+                          AAssetManager *assetManager) {
+  auto ptr = std::shared_ptr<VulkanApplication>(
+      new VulkanApplication(platform->getDevice(), platform));
 
   LOGI("Updating swapchain!\n");
   ptr->updateSwapchain(assetManager, platform->swapchainImages,
@@ -95,11 +87,10 @@ VulkanApplication::create(Platform *platform, AAssetManager *assetManager) {
 // a buffer object.
 // The different memory types' properties must match with what the application
 // wants.
-uint32_t
-VulkanApplication::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
-                                                  uint32_t hostRequirements) {
-  const VkPhysicalDeviceMemoryProperties &props =
-      pContext->getMemoryProperties();
+static uint32_t
+findMemoryTypeFromRequirements(const VkPhysicalDeviceMemoryProperties &props,
+                               uint32_t deviceRequirements,
+                               uint32_t hostRequirements) {
   for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
     if (deviceRequirements & (1u << i)) {
       if ((props.memoryTypes[i].propertyFlags & hostRequirements) ==
@@ -115,40 +106,40 @@ VulkanApplication::findMemoryTypeFromRequirements(uint32_t deviceRequirements,
 
 Buffer VulkanApplication::createBuffer(const void *pInitialData, size_t size,
                                        VkFlags usage) {
-  Buffer buffer;
-  VkDevice device = pContext->getDevice();
 
   VkBufferCreateInfo info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   info.usage = usage;
   info.size = size;
 
-  VK_CHECK(vkCreateBuffer(device, &info, nullptr, &buffer.buffer));
+  Buffer buffer;
+  VK_CHECK(vkCreateBuffer(_device, &info, nullptr, &buffer.buffer));
 
   // Ask device about its memory requirements.
   VkMemoryRequirements memReqs;
-  vkGetBufferMemoryRequirements(device, buffer.buffer, &memReqs);
+  vkGetBufferMemoryRequirements(_device, buffer.buffer, &memReqs);
 
   VkMemoryAllocateInfo alloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
   alloc.allocationSize = memReqs.size;
 
   // We want host visible and coherent memory to simplify things.
   alloc.memoryTypeIndex = findMemoryTypeFromRequirements(
-      memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+      pContext->getMemoryProperties(), memReqs.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
   // Allocate memory.
-  VK_CHECK(vkAllocateMemory(device, &alloc, nullptr, &buffer.memory));
+  VK_CHECK(vkAllocateMemory(_device, &alloc, nullptr, &buffer.memory));
 
   // Buffers are not backed by memory, so bind our memory explicitly to the
   // buffer.
-  vkBindBufferMemory(device, buffer.buffer, buffer.memory, 0);
+  vkBindBufferMemory(_device, buffer.buffer, buffer.memory, 0);
 
   // Map the memory and dump data in there.
   if (pInitialData) {
     void *pData;
-    VK_CHECK(vkMapMemory(device, buffer.memory, 0, size, 0, &pData));
+    VK_CHECK(vkMapMemory(_device, buffer.memory, 0, size, 0, &pData));
     memcpy(pData, pInitialData, size);
-    vkUnmapMemory(device, buffer.memory);
+    vkUnmapMemory(_device, buffer.memory);
   }
 
   return buffer;
@@ -219,8 +210,7 @@ void VulkanApplication::initRenderPass(VkFormat format) {
   rpInfo.dependencyCount = 1;
   rpInfo.pDependencies = &dependency;
 
-  VK_CHECK(
-      vkCreateRenderPass(pContext->getDevice(), &rpInfo, nullptr, &renderPass));
+  VK_CHECK(vkCreateRenderPass(_device, &rpInfo, nullptr, &renderPass));
 }
 
 void VulkanApplication::initVertexBuffer() {
@@ -228,16 +218,16 @@ void VulkanApplication::initVertexBuffer() {
   // We specify the positions directly in clip space.
   static const Vertex data[] = {
       {
-          vec4(-0.5f, -0.5f, 0.0f, 1.0f),
-          vec4(1.0f, 0.0f, 0.0f, 1.0f),
+          glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f),
+          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
       },
       {
-          vec4(-0.5f, +0.5f, 0.0f, 1.0f),
-          vec4(0.0f, 1.0f, 0.0f, 1.0f),
+          glm::vec4(-0.5f, +0.5f, 0.0f, 1.0f),
+          glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
       },
       {
-          vec4(+0.5f, -0.5f, 0.0f, 1.0f),
-          vec4(0.0f, 0.0f, 1.0f, 1.0f),
+          glm::vec4(+0.5f, -0.5f, 0.0f, 1.0f),
+          glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
       },
   };
 
@@ -249,11 +239,10 @@ void VulkanApplication::initVertexBuffer() {
 void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   // Create a blank pipeline layout.
   // We are not binding any resources to the pipeline in this first sample.
-  VkDevice device = pContext->getDevice();
   VkPipelineLayoutCreateInfo layoutInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
   VK_CHECK(
-      vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout));
+      vkCreatePipelineLayout(_device, &layoutInfo, nullptr, &pipelineLayout));
 
   // Specify we will use triangle lists to draw geometry.
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
@@ -349,12 +338,12 @@ void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   // We have two pipeline stages, vertex and fragment.
   shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   shaderStages[0].module = loadShaderModule(
-      device,
+      _device,
       readBinaryFile<uint32_t>(assetManager, "shaders/triangle.vert.spv"));
   shaderStages[0].pName = "main";
   shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   shaderStages[1].module = loadShaderModule(
-      device,
+      _device,
       readBinaryFile<uint32_t>(assetManager, "shaders/triangle.frag.spv"));
   shaderStages[1].pName = "main";
 
@@ -376,30 +365,25 @@ void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   pipe.renderPass = renderPass;
   pipe.layout = pipelineLayout;
 
-  VK_CHECK(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipe, nullptr,
+  VK_CHECK(vkCreateGraphicsPipelines(_device, pipelineCache, 1, &pipe, nullptr,
                                      &pipeline));
 
   // Pipeline is baked, we can delete the shader modules now.
-  vkDestroyShaderModule(device, shaderStages[0].module, nullptr);
-  vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
+  vkDestroyShaderModule(_device, shaderStages[0].module, nullptr);
+  vkDestroyShaderModule(_device, shaderStages[1].module, nullptr);
 }
 
-bool VulkanApplication::initialize(Platform *pContext) {
-  // This is the very first call to our application, we don't know much about
-  // our swapchain currently,
-  // so there isn't too much we can initialize here.
-  this->pContext = pContext;
-
+VulkanApplication::VulkanApplication(VkDevice device,
+                                     MaliSDK::Platform *platform)
+    : _device(device), pContext(platform) {
   // Create the vertex buffer.
   initVertexBuffer();
 
   // Create a pipeline cache (although we'll only create one pipeline).
   VkPipelineCacheCreateInfo pipelineCacheInfo = {
       VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
-  VK_CHECK(vkCreatePipelineCache(pContext->getDevice(), &pipelineCacheInfo,
-                                 nullptr, &pipelineCache));
-
-  return true;
+  VK_CHECK(vkCreatePipelineCache(_device, &pipelineCacheInfo, nullptr,
+                                 &pipelineCache));
 }
 
 void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
@@ -474,19 +458,18 @@ void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
 void VulkanApplication::termBackbuffers() {
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
-  VkDevice device = pContext->getDevice();
 
   if (!backbuffers.empty()) {
     // Wait until device is idle before teardown.
     vkQueueWaitIdle(pContext->getGraphicsQueue());
     for (auto &backbuffer : backbuffers) {
-      vkDestroyFramebuffer(device, backbuffer.framebuffer, nullptr);
-      vkDestroyImageView(device, backbuffer.view, nullptr);
+      vkDestroyFramebuffer(_device, backbuffer.framebuffer, nullptr);
+      vkDestroyImageView(_device, backbuffer.view, nullptr);
     }
     backbuffers.clear();
-    vkDestroyRenderPass(device, renderPass, nullptr);
-    vkDestroyPipeline(device, pipeline, nullptr);
-    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyRenderPass(_device, renderPass, nullptr);
+    vkDestroyPipeline(_device, pipeline, nullptr);
+    vkDestroyPipelineLayout(_device, pipelineLayout, nullptr);
   }
 }
 
@@ -494,18 +477,16 @@ void VulkanApplication::terminate() {
   vkDeviceWaitIdle(pContext->getDevice());
 
   // Final teardown.
-  VkDevice device = pContext->getDevice();
-  vkFreeMemory(device, vertexBuffer.memory, nullptr);
-  vkDestroyBuffer(device, vertexBuffer.buffer, nullptr);
+  vkFreeMemory(_device, vertexBuffer.memory, nullptr);
+  vkDestroyBuffer(_device, vertexBuffer.buffer, nullptr);
 
   termBackbuffers();
-  vkDestroyPipelineCache(device, pipelineCache, nullptr);
+  vkDestroyPipelineCache(_device, pipelineCache, nullptr);
 }
 
-void VulkanApplication::updateSwapchain(AAssetManager *assetManager,
-                                        const vector<VkImage> &newBackbuffers,
-                                        const SwapchainDimensions &dim) {
-  VkDevice device = pContext->getDevice();
+void VulkanApplication::updateSwapchain(
+    AAssetManager *assetManager, const std::vector<VkImage> &newBackbuffers,
+    const MaliSDK::SwapchainDimensions &dim) {
   width = dim.width;
   height = dim.height;
 
@@ -537,7 +518,7 @@ void VulkanApplication::updateSwapchain(AAssetManager *assetManager,
     view.components.b = VK_COMPONENT_SWIZZLE_B;
     view.components.a = VK_COMPONENT_SWIZZLE_A;
 
-    VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer.view));
+    VK_CHECK(vkCreateImageView(_device, &view, nullptr, &backbuffer.view));
 
     // Build the framebuffer.
     VkFramebufferCreateInfo fbInfo = {
@@ -549,8 +530,8 @@ void VulkanApplication::updateSwapchain(AAssetManager *assetManager,
     fbInfo.height = height;
     fbInfo.layers = 1;
 
-    VK_CHECK(
-        vkCreateFramebuffer(device, &fbInfo, nullptr, &backbuffer.framebuffer));
+    VK_CHECK(vkCreateFramebuffer(_device, &fbInfo, nullptr,
+                                 &backbuffer.framebuffer));
 
     backbuffers.push_back(backbuffer);
   }
