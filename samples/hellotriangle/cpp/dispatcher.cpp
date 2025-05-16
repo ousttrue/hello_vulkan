@@ -33,6 +33,8 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
 }
 
 void Dispatcher::onTermWindow() {
+  vkDeviceWaitIdle(this->pPlatform->getDevice());
+
   this->pPipeline = {};
   this->pPlatform = {};
 }

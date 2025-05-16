@@ -47,7 +47,7 @@ public:
 private:
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   void destroySwapchain();
-  MaliSDK::Result initSwapchain();
+  MaliSDK::Result initSwapchain(const VkSurfaceCapabilitiesKHR &surfaceProperties);
   MaliSDK::Result initVulkan(ANativeWindow *window);
 
   void onPause() { destroySwapchain(); }

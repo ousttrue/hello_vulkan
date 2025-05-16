@@ -2,6 +2,7 @@ set(TARGET native)
 add_library(
   ${TARGET} SHARED
   main.cpp
+  extensions.cpp
   dispatcher.cpp
   platform.cpp
   device_manager.cpp

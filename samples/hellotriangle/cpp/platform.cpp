@@ -11,8 +11,13 @@ Backbuffer::~Backbuffer() {
 }
 
 MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
+  std::vector<const char *> layers;
+#ifdef NDEBUG
+#else
+  layers.push_back("VK_LAYER_KHRONOS_validation");
+#endif
 
-  _device = DeviceManager::create();
+  _device = DeviceManager::create("Mali SDK", "Mali SDK", layers);
   if (!_device) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
@@ -23,11 +28,14 @@ MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
   if (!gpu) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-  if (!_device->createLogicalDevice()) {
+  if (!_device->createLogicalDevice(layers)) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
-  auto _res = initSwapchain();
+  VkSurfaceCapabilitiesKHR surfaceProperties;
+  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+      _device->Selected.Gpu, _device->Surface, &surfaceProperties));
+  auto _res = initSwapchain(surfaceProperties);
   if (_res != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to init swapchain.");
     return _res;
@@ -83,62 +91,23 @@ const VkPhysicalDeviceMemoryProperties &Platform::getMemoryProperties() const {
   return _device->Selected.MemoryProperties;
 }
 
-MaliSDK::Result Platform::initSwapchain() {
-  VkPhysicalDevice gpu = _device->Selected.Gpu;
-
-  VkSurfaceCapabilitiesKHR surfaceProperties;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, _device->Surface,
-                                                     &surfaceProperties));
-
-  uint32_t formatCount;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, _device->Surface, &formatCount,
-                                       nullptr);
-  std::vector<VkSurfaceFormatKHR> formats(formatCount);
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, _device->Surface, &formatCount,
-                                       formats.data());
-
-  VkSurfaceFormatKHR format;
-  format.format = VK_FORMAT_UNDEFINED;
-  if (formatCount == 0) {
-    LOGE("Surface has no formats.\n");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  } else if (formatCount == 1) {
-    format = formats[0];
-  } else {
-    for (auto &candidate : formats) {
-      switch (candidate.format) {
-      // Favor UNORM formats as the samples are not written for sRGB currently.
-      case VK_FORMAT_R8G8B8A8_UNORM:
-      case VK_FORMAT_B8G8R8A8_UNORM:
-      case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-        format = candidate;
-        break;
-
-      default:
-        break;
-      }
-
-      if (format.format != VK_FORMAT_UNDEFINED)
-        break;
-    }
-  }
-
+MaliSDK::Result
+Platform::initSwapchain(const VkSurfaceCapabilitiesKHR &surfaceProperties) {
+  VkSurfaceFormatKHR format = _device->getSurfaceFormat();
   if (format.format == VK_FORMAT_UNDEFINED) {
     LOGE("VK_FORMAT_UNDEFINED");
     abort();
   }
 
-  VkExtent2D swapchainSize;
-  // -1u is a magic value (in Vulkan specification) which means there's no fixed
-  // size.
   if (surfaceProperties.currentExtent.width == -1u) {
+    // -1u is a magic value (in Vulkan specification) which means there's no
+    // fixed size.
     LOGE("-1 size");
     abort();
     // swapchainSize.width = dim.width;
     // swapchainSize.height = dim.height;
-  } else {
-    swapchainSize = surfaceProperties.currentExtent;
   }
+  auto swapchainSize = surfaceProperties.currentExtent;
 
   // FIFO must be supported by all implementations.
   VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -179,21 +148,23 @@ MaliSDK::Result Platform::initSwapchain() {
            VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
     composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
 
-  VkSwapchainCreateInfoKHR info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
-  info.surface = _device->Surface;
-  info.minImageCount = desiredSwapchainImages;
-  info.imageFormat = format.format;
-  info.imageColorSpace = format.colorSpace;
-  info.imageExtent.width = swapchainSize.width;
-  info.imageExtent.height = swapchainSize.height;
-  info.imageArrayLayers = 1;
-  info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  info.preTransform = preTransform;
-  info.compositeAlpha = composite;
-  info.presentMode = swapchainPresentMode;
-  info.clipped = true;
-  info.oldSwapchain = oldSwapchain;
+  VkSwapchainCreateInfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = _device->Surface,
+      .minImageCount = desiredSwapchainImages,
+      .imageFormat = format.format,
+      .imageColorSpace = format.colorSpace,
+      .imageExtent = {.width = swapchainSize.width,
+                      .height = swapchainSize.height},
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .preTransform = preTransform,
+      .compositeAlpha = composite,
+      .presentMode = swapchainPresentMode,
+      .clipped = true,
+      .oldSwapchain = oldSwapchain,
+  };
 
   auto device = _device->Device;
   VK_CHECK(vkCreateSwapchainKHR(device, &info, nullptr, &swapchain));
@@ -217,7 +188,10 @@ MaliSDK::Result Platform::initSwapchain() {
 MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
   if (swapchain == VK_NULL_HANDLE) {
     // Recreate swapchain.
-    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
+    VkSurfaceCapabilitiesKHR surfaceProperties;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        _device->Selected.Gpu, _device->Surface, &surfaceProperties));
+    if (initSwapchain(surfaceProperties) == MaliSDK::RESULT_SUCCESS)
       return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
       return MaliSDK::RESULT_ERROR_GENERIC;
@@ -234,7 +208,10 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
     semaphoreManager->addClearedSemaphore(acquireSemaphore);
 
     // Recreate swapchain.
-    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
+    VkSurfaceCapabilitiesKHR surfaceProperties;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        _device->Selected.Gpu, _device->Surface, &surfaceProperties));
+    if (initSwapchain(surfaceProperties) == MaliSDK::RESULT_SUCCESS)
       return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
       return MaliSDK::RESULT_ERROR_GENERIC;

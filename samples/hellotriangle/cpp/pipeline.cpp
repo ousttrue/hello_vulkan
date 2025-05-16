@@ -141,8 +141,6 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass,
       _pipeline(pipeline), _pipelineCache(pipelineCache) {}
 
 Pipeline::~Pipeline() {
-
-  // Final teardown.
   vkFreeMemory(_device, vertexBuffer.memory, nullptr);
   vkDestroyBuffer(_device, vertexBuffer.buffer, nullptr);
 
