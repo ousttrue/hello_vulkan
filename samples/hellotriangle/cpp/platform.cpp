@@ -85,7 +85,6 @@ std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
     LOGE("Failed to create Vulkan window.\n");
     abort();
   }
-  ptr->onResume(dim);
   return ptr;
 }
 

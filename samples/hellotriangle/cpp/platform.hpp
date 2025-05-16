@@ -109,10 +109,6 @@ public:
   VkSurfaceKHR createSurface();
 
   void onPause() { destroySwapchain(); }
-  void onResume(const SwapchainDimensions &swapchain) {
-    vkDeviceWaitIdle(device);
-    initSwapchain(swapchain);
-  }
 
   Result onPlatformUpdate();
   void waitIdle() { vkDeviceWaitIdle(device); }
