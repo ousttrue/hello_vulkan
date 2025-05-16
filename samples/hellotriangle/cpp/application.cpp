@@ -73,6 +73,7 @@ struct Vertex {
 VulkanApplication::VulkanApplication(VkDevice device,
                                      MaliSDK::Platform *platform)
     : _device(device), pContext(platform) {
+  LOGI("[VulkanApplication::VulkanApplication]");
   // Create the vertex buffer.
   initVertexBuffer(pContext->getMemoryProperties());
 
@@ -84,13 +85,12 @@ VulkanApplication::VulkanApplication(VkDevice device,
 }
 
 std::shared_ptr<VulkanApplication>
-VulkanApplication::create(MaliSDK::Platform *platform,
+VulkanApplication::create(MaliSDK::Platform *platform, VkFormat format,
                           AAssetManager *assetManager) {
   auto ptr = std::shared_ptr<VulkanApplication>(
       new VulkanApplication(platform->getDevice(), platform));
-
-  LOGI("Updating swapchain!\n");
-  ptr->updateSwapchain(assetManager, platform->swapchainImages,
+  ptr->initPipeline(format, assetManager);
+  ptr->updateSwapchain(platform->swapchainImages,
                        platform->swapchainDimensions);
   return ptr;
 }
@@ -163,7 +163,32 @@ VulkanApplication::createBuffer(const VkPhysicalDeviceMemoryProperties &props,
   return buffer;
 }
 
-void VulkanApplication::initRenderPass(VkFormat format) {
+void VulkanApplication::initVertexBuffer(
+    const VkPhysicalDeviceMemoryProperties &props) {
+  // A simple counter-clockwise triangle.
+  // We specify the positions directly in clip space.
+  static const Vertex data[] = {
+      {
+          glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f),
+          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+      },
+      {
+          glm::vec4(-0.5f, +0.5f, 0.0f, 1.0f),
+          glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
+      },
+      {
+          glm::vec4(+0.5f, -0.5f, 0.0f, 1.0f),
+          glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
+      },
+  };
+
+  // We will use the buffer as a vertex buffer only.
+  vertexBuffer = createBuffer(props, data, sizeof(data),
+                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+}
+
+void VulkanApplication::initPipeline(VkFormat format,
+                                     AAssetManager *assetManager) {
   VkAttachmentDescription attachment = {0};
   // Backbuffer format.
   attachment.format = format;
@@ -229,33 +254,7 @@ void VulkanApplication::initRenderPass(VkFormat format) {
   rpInfo.pDependencies = &dependency;
 
   VK_CHECK(vkCreateRenderPass(_device, &rpInfo, nullptr, &renderPass));
-}
 
-void VulkanApplication::initVertexBuffer(
-    const VkPhysicalDeviceMemoryProperties &props) {
-  // A simple counter-clockwise triangle.
-  // We specify the positions directly in clip space.
-  static const Vertex data[] = {
-      {
-          glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f),
-          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
-      },
-      {
-          glm::vec4(-0.5f, +0.5f, 0.0f, 1.0f),
-          glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
-      },
-      {
-          glm::vec4(+0.5f, -0.5f, 0.0f, 1.0f),
-          glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
-      },
-  };
-
-  // We will use the buffer as a vertex buffer only.
-  vertexBuffer = createBuffer(props, data, sizeof(data),
-                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-}
-
-void VulkanApplication::initPipeline(AAssetManager *assetManager) {
   // Create a blank pipeline layout.
   // We are not binding any resources to the pipeline in this first sample.
   VkPipelineLayoutCreateInfo layoutInfo = {
@@ -491,18 +490,13 @@ void VulkanApplication::terminate() {
 }
 
 void VulkanApplication::updateSwapchain(
-    AAssetManager *assetManager, const std::vector<VkImage> &newBackbuffers,
+    const std::vector<VkImage> &newBackbuffers,
     const MaliSDK::SwapchainDimensions &dim) {
   width = dim.width;
   height = dim.height;
 
   // In case we're reinitializing the swapchain, terminate the old one first.
   termBackbuffers();
-
-  // We can't initialize the renderpass until we know the swapchain format.
-  initRenderPass(dim.format);
-  // We can't initialize the pipeline until we know the render pass.
-  initPipeline(assetManager);
 
   // For all backbuffers in the swapchain ...
   for (auto image : newBackbuffers) {

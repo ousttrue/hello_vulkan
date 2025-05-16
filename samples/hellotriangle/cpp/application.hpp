@@ -33,10 +33,10 @@ public:
   ~VulkanApplication() = default;
 
   static std::shared_ptr<VulkanApplication> create(MaliSDK::Platform *platform,
+                                                   VkFormat format,
                                                    AAssetManager *assetManager);
 
-  void updateSwapchain(AAssetManager *assetManager,
-                       const std::vector<VkImage> &backbuffers,
+  void updateSwapchain(const std::vector<VkImage> &backbuffers,
                        const MaliSDK::SwapchainDimensions &dim);
   void render(unsigned swapchainIndex, float deltaTime);
   void terminate();
@@ -44,10 +44,7 @@ public:
 private:
   Buffer createBuffer(const VkPhysicalDeviceMemoryProperties &props,
                       const void *pInitial, size_t size, VkFlags usage);
-
-  void initRenderPass(VkFormat format);
   void termBackbuffers();
-
   void initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props);
-  void initPipeline(AAssetManager *assetManager);
+  void initPipeline(VkFormat format, AAssetManager *assetManager);
 };

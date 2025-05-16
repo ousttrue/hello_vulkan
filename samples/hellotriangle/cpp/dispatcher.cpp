@@ -21,7 +21,8 @@ void Dispatcher::onPause() { this->active = false; }
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
   pPlatform = MaliSDK::Platform::create(window);
-  pVulkanApp = VulkanApplication::create(pPlatform.get(), assetManager);
+  pVulkanApp = VulkanApplication::create(
+      pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
   this->startTime = getCurrentTime();
 }
 
@@ -40,8 +41,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     auto res = this->pPlatform->acquireNextImage(&index);
     while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
       res = this->pPlatform->acquireNextImage(&index);
-      this->pVulkanApp->updateSwapchain(assetManager,
-                                        this->pPlatform->swapchainImages,
+      this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
                                         this->pPlatform->swapchainDimensions);
     }
     if (res != MaliSDK::RESULT_SUCCESS) {
