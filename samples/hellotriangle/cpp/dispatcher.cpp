@@ -24,13 +24,10 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   pPlatform = Platform::create(window);
   // pVulkanApp = VulkanApplication::create(
   //     pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
-  pPipeline =
-      Pipeline::create(pPlatform->getDevice(),
-                       pPlatform->swapchainDimensions.format, assetManager);
+  pPipeline = Pipeline::create(pPlatform->getDevice(),
+                               pPlatform->surfaceFormat(), assetManager);
   pPipeline->initVertexBuffer(pPlatform->getMemoryProperties());
-  pPlatform->updateSwapchain(pPlatform->swapchainImages,
-                             pPlatform->swapchainDimensions,
-                             pPipeline->renderPass());
+  pPlatform->updateSwapchain(pPipeline->renderPass());
 
   this->startTime = getCurrentTime();
 }
@@ -42,21 +39,31 @@ void Dispatcher::onTermWindow() {
 
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
   if (this->active && this->pPlatform && this->pPipeline) {
-    // swapchain current backbuffer
-    auto backbuffer = nextFrame();
-    if (!backbuffer) {
-      // swapchain error. exit
+    unsigned index;
+    for (auto res = this->pPlatform->acquireNextImage(&index); true;
+         res = this->pPlatform->acquireNextImage(&index)) {
+      if (res == MaliSDK::RESULT_SUCCESS) {
+        break;
+      }
+      if (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+        // Handle Outdated error in acquire.
+        LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+        this->pPlatform->updateSwapchain(this->pPipeline->renderPass());
+        continue;
+      }
+      // error
+      LOGE("Unrecoverable swapchain error.\n");
       return false;
     }
 
-    // render
-    auto cmd = this->pPlatform->beginRender(
-        backbuffer, this->pPlatform->swapchainDimensions.width,
-        this->pPlatform->swapchainDimensions.height);
+    // swapchain current backbuffer
+    auto backbuffer = pPlatform->getBackbuffer(index);
 
-    pPipeline->render(cmd, backbuffer->framebuffer,
-                      this->pPlatform->swapchainDimensions.width,
-                      this->pPlatform->swapchainDimensions.height);
+    // render
+    auto cmd = this->pPlatform->beginRender(backbuffer);
+    auto dim = this->pPlatform->getSwapchainDimesions();
+
+    pPipeline->render(cmd, backbuffer->framebuffer, dim.width, dim.height);
 
     // Submit it to the queue.
     pPlatform->submitSwapchain(cmd);
@@ -74,25 +81,4 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
   }
 
   return true;
-}
-
-std::shared_ptr<class Backbuffer> Dispatcher::nextFrame() {
-  unsigned index;
-  auto res = this->pPlatform->acquireNextImage(&index);
-  while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-    res = this->pPlatform->acquireNextImage(&index);
-    this->pPlatform->updateSwapchain(this->pPlatform->swapchainImages,
-                                      this->pPlatform->swapchainDimensions,
-                                      this->pPipeline->renderPass());
-    // // Handle Outdated error in acquire.
-    // if (res != MaliSDK::RESULT_SUCCESS &&
-    //     res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-    //   return false;
-    // }
-  }
-  if (res != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Unrecoverable swapchain error.\n");
-    return {};
-  }
-  return pPlatform->backbuffers[index];
 }

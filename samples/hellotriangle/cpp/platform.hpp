@@ -10,7 +10,7 @@ struct SwapchainDimensions {
   VkFormat format;
 };
 
-struct Platform {
+class Platform {
   ANativeWindow *pNativeWindow = nullptr;
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice gpu = VK_NULL_HANDLE;
@@ -23,6 +23,13 @@ struct Platform {
   std::vector<std::string> externalLayers;
   PFN_vkDebugReportCallbackEXT externalDebugCallback = nullptr;
   void *pExternalDebugCallbackUserData = nullptr;
+  VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
+
+  MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
+
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  std::vector<VkImage> swapchainImages;
 
   inline void
   addExternalLayers(std::vector<const char *> &activeLayers,
@@ -38,25 +45,35 @@ struct Platform {
     }
   }
 
-  MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
+  Platform() = default;
 
-  VkSurfaceKHR surface = VK_NULL_HANDLE;
-  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   SwapchainDimensions swapchainDimensions;
-  std::vector<VkImage> swapchainImages;
   std::vector<std::shared_ptr<Backbuffer>> backbuffers;
 
-  VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
-
 public:
-  Platform() = default;
   ~Platform();
-
   Platform(Platform &&) = delete;
   void operator=(Platform &&) = delete;
-
   static std::shared_ptr<Platform> create(ANativeWindow *window);
 
+  VkFormat surfaceFormat() const { return swapchainDimensions.format; }
+  std::shared_ptr<Backbuffer> getBackbuffer(uint32_t index) const {
+    return backbuffers[index];
+  }
+  inline VkDevice getDevice() const { return device; }
+  inline const VkPhysicalDeviceMemoryProperties &getMemoryProperties() const {
+    return memoryProperties;
+  }
+  void updateSwapchain(VkRenderPass renderPass);
+  VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer);
+  void submitSwapchain(VkCommandBuffer cmdBuffer);
+  MaliSDK::Result presentImage(unsigned index);
+  MaliSDK::Result acquireNextImage(unsigned *index);
+  SwapchainDimensions getSwapchainDimesions() const {
+    return swapchainDimensions;
+  }
+
+private:
   void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
   inline void addExternalLayer(const char *pName) {
     externalLayers.push_back(pName);
@@ -83,18 +100,12 @@ public:
   }
 
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
-  MaliSDK::Result acquireNextImage(unsigned *index);
-  MaliSDK::Result presentImage(unsigned index);
-  inline VkDevice getDevice() const { return device; }
   inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
   inline VkInstance getInstance() const { return instance; }
   inline VkQueue getGraphicsQueue() const { return queue; }
   inline unsigned getGraphicsQueueIndex() const { return graphicsQueueIndex; }
   inline const VkPhysicalDeviceProperties &getGpuProperties() const {
     return gpuProperties;
-  }
-  inline const VkPhysicalDeviceMemoryProperties &getMemoryProperties() const {
-    return memoryProperties;
   }
   void destroySwapchain();
   MaliSDK::Result initSwapchain(const SwapchainDimensions &swapchain);
@@ -125,7 +136,6 @@ public:
   MaliSDK::FenceManager &getFenceManager() {
     return perFrame[swapchainIndex]->fenceManager;
   }
-  void submitSwapchain(VkCommandBuffer cmdBuffer);
   void submitCommandBuffer(VkCommandBuffer, VkSemaphore acquireSemaphore,
                            VkSemaphore releaseSemaphore);
   VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
@@ -140,9 +150,4 @@ public:
       pFrame->setSecondaryCommandManagersCount(count);
     renderingThreadCount = count;
   }
-
-  void updateSwapchain(const std::vector<VkImage> &backbuffers,
-                       const SwapchainDimensions &dim, VkRenderPass renderPass);
-  VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
-                              uint32_t width, uint32_t height);
 };

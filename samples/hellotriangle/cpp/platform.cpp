@@ -711,8 +711,7 @@ MaliSDK::Result Platform::onPlatformUpdate() {
 }
 
 VkCommandBuffer
-Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
-                      uint32_t width, uint32_t height) {
+Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
   // Request a fresh command buffer.
   VkCommandBuffer cmd = requestPrimaryCommandBuffer();
 
@@ -726,12 +725,7 @@ Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
   return cmd;
 }
 
-void Platform::updateSwapchain(const std::vector<VkImage> &newBackbuffers,
-                               const SwapchainDimensions &dim,
-                               VkRenderPass renderPass) {
-  swapchainDimensions.width = dim.width;
-  swapchainDimensions.height = dim.height;
-
+void Platform::updateSwapchain(VkRenderPass renderPass) {
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
   vkQueueWaitIdle(getGraphicsQueue());
@@ -740,15 +734,15 @@ void Platform::updateSwapchain(const std::vector<VkImage> &newBackbuffers,
   backbuffers.clear();
 
   // For all backbuffers in the swapchain ...
-  for (uint32_t i = 0; i < newBackbuffers.size(); ++i) {
-    auto image = newBackbuffers[i];
+  for (uint32_t i = 0; i < swapchainImages.size(); ++i) {
+    auto image = swapchainImages[i];
     auto backbuffer = std::make_shared<Backbuffer>(device, i);
     backbuffer->image = image;
 
     // Create an image view which we can render into.
     VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = dim.format;
+    view.format = swapchainDimensions.format;
     view.image = image;
     view.subresourceRange.baseMipLevel = 0;
     view.subresourceRange.baseArrayLayer = 0;
@@ -768,8 +762,8 @@ void Platform::updateSwapchain(const std::vector<VkImage> &newBackbuffers,
     fbInfo.renderPass = renderPass;
     fbInfo.attachmentCount = 1;
     fbInfo.pAttachments = &backbuffer->view;
-    fbInfo.width = dim.width;
-    fbInfo.height = dim.height;
+    fbInfo.width = swapchainDimensions.width;
+    fbInfo.height = swapchainDimensions.height;
     fbInfo.layers = 1;
 
     VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,

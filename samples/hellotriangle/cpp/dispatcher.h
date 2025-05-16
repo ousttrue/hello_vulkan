@@ -19,7 +19,4 @@ public:
   void onInitWindow(ANativeWindow *window, AAssetManager *assetManager);
   void onTermWindow();
   bool onFrame(AAssetManager *assetManager);
-
-private:
-  std::shared_ptr<class Backbuffer> nextFrame();
 };
