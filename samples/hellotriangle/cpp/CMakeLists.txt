@@ -3,7 +3,6 @@ add_library(
   ${TARGET} SHARED
   main.cpp
   dispatcher.cpp
-  application.cpp
   platform.cpp
   per_frame.cpp
   fence_manager.cpp

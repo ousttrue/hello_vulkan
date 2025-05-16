@@ -1,5 +1,4 @@
 #include "dispatcher.h"
-#include "application.hpp"
 #include "common.hpp"
 #include "pipeline.hpp"
 #include "platform.hpp"
@@ -23,26 +22,26 @@ void Dispatcher::onPause() { this->active = false; }
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
   pPlatform = MaliSDK::Platform::create(window);
-  pVulkanApp = VulkanApplication::create(
-      pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
+  // pVulkanApp = VulkanApplication::create(
+  //     pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
   pPipeline =
       Pipeline::create(pPlatform->getDevice(),
                        pPlatform->swapchainDimensions.format, assetManager);
   pPipeline->initVertexBuffer(pPlatform->getMemoryProperties());
-  pVulkanApp->updateSwapchain(pPlatform->swapchainImages,
-                              pPlatform->swapchainDimensions,
-                              pPipeline->renderPass());
+  pPlatform->updateSwapchain(pPlatform->swapchainImages,
+                             pPlatform->swapchainDimensions,
+                             pPipeline->renderPass());
 
   this->startTime = getCurrentTime();
 }
 
 void Dispatcher::onTermWindow() {
-  this->pVulkanApp = {};
+  this->pPipeline = {};
   this->pPlatform = {};
 }
 
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
-  if (this->active && this->pPlatform && this->pVulkanApp) {
+  if (this->active && this->pPlatform && this->pPipeline) {
     // swapchain current backbuffer
     auto backbuffer = nextFrame();
     if (!backbuffer) {
@@ -51,7 +50,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     }
 
     // render
-    auto cmd = this->pVulkanApp->beginRender(
+    auto cmd = this->pPlatform->beginRender(
         backbuffer, this->pPlatform->swapchainDimensions.width,
         this->pPlatform->swapchainDimensions.height);
 
@@ -82,7 +81,7 @@ std::shared_ptr<class Backbuffer> Dispatcher::nextFrame() {
   auto res = this->pPlatform->acquireNextImage(&index);
   while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
     res = this->pPlatform->acquireNextImage(&index);
-    this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+    this->pPlatform->updateSwapchain(this->pPlatform->swapchainImages,
                                       this->pPlatform->swapchainDimensions,
                                       this->pPipeline->renderPass());
     // // Handle Outdated error in acquire.
@@ -95,5 +94,5 @@ std::shared_ptr<class Backbuffer> Dispatcher::nextFrame() {
     LOGE("Unrecoverable swapchain error.\n");
     return {};
   }
-  return pVulkanApp->backbuffers[index];
+  return pPlatform->backbuffers[index];
 }

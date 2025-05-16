@@ -46,12 +46,13 @@ struct Platform {
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   SwapchainDimensions swapchainDimensions;
   std::vector<VkImage> swapchainImages;
+  std::vector<std::shared_ptr<Backbuffer>> backbuffers;
 
   VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
 
 public:
   Platform() = default;
-  ~Platform() { terminate(); }
+  ~Platform();
 
   Platform(Platform &&) = delete;
   void operator=(Platform &&) = delete;
@@ -87,7 +88,6 @@ public:
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   Result acquireNextImage(unsigned *index);
   Result presentImage(unsigned index);
-  void terminate();
   inline VkDevice getDevice() const { return device; }
   inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
   inline VkInstance getInstance() const { return instance; }
@@ -142,6 +142,12 @@ public:
       pFrame->setSecondaryCommandManagersCount(count);
     renderingThreadCount = count;
   }
+
+  void updateSwapchain(const std::vector<VkImage> &backbuffers,
+                       const MaliSDK::SwapchainDimensions &dim,
+                       VkRenderPass renderPass);
+  VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
+                              uint32_t width, uint32_t height);
 };
 
 } // namespace MaliSDK

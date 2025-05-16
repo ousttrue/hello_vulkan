@@ -11,6 +11,11 @@ using namespace std;
 #define ENABLE_VALIDATION_LAYERS 1
 #endif
 
+Backbuffer::~Backbuffer() {
+  vkDestroyFramebuffer(_device, framebuffer, nullptr);
+  vkDestroyImageView(_device, view, nullptr);
+}
+
 namespace MaliSDK {
 
 // typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
@@ -113,6 +118,43 @@ static void addSupportedLayers(vector<const char *> &activeLayers,
         break;
       }
     }
+  }
+}
+
+Platform::~Platform() {
+  vkDeviceWaitIdle(device);
+
+  // Tear down backbuffers.
+  // If our swapchain changes, we will call this, and create a new swapchain.
+  vkQueueWaitIdle(getGraphicsQueue());
+
+  // Don't release anything until the GPU is completely idle.
+  if (device)
+    vkDeviceWaitIdle(device);
+
+  delete semaphoreManager;
+  semaphoreManager = nullptr;
+
+  destroySwapchain();
+
+  if (surface) {
+    vkDestroySurfaceKHR(instance, surface, nullptr);
+    surface = VK_NULL_HANDLE;
+  }
+
+  if (device) {
+    vkDestroyDevice(device, nullptr);
+    device = VK_NULL_HANDLE;
+  }
+
+  // if (debug_callback) {
+  //   vkDestroyDebugReportCallbackEXT(instance, debug_callback, nullptr);
+  //   debug_callback = VK_NULL_HANDLE;
+  // }
+
+  if (instance) {
+    vkDestroyInstance(instance, nullptr);
+    instance = VK_NULL_HANDLE;
   }
 }
 
@@ -419,37 +461,6 @@ void Platform::destroySwapchain() {
   }
 }
 
-void Platform::terminate() {
-  // Don't release anything until the GPU is completely idle.
-  if (device)
-    vkDeviceWaitIdle(device);
-
-  delete semaphoreManager;
-  semaphoreManager = nullptr;
-
-  destroySwapchain();
-
-  if (surface) {
-    vkDestroySurfaceKHR(instance, surface, nullptr);
-    surface = VK_NULL_HANDLE;
-  }
-
-  if (device) {
-    vkDestroyDevice(device, nullptr);
-    device = VK_NULL_HANDLE;
-  }
-
-  // if (debug_callback) {
-  //   vkDestroyDebugReportCallbackEXT(instance, debug_callback, nullptr);
-  //   debug_callback = VK_NULL_HANDLE;
-  // }
-
-  if (instance) {
-    vkDestroyInstance(instance, nullptr);
-    instance = VK_NULL_HANDLE;
-  }
-}
-
 Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   VkSurfaceCapabilitiesKHR surfaceProperties;
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
@@ -710,4 +721,72 @@ Result Platform::onPlatformUpdate() {
   return RESULT_SUCCESS;
 }
 
+VkCommandBuffer
+Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
+                               uint32_t width, uint32_t height) {
+  // Request a fresh command buffer.
+  VkCommandBuffer cmd = requestPrimaryCommandBuffer();
+
+  // We will only submit this once before it's recycled.
+  VkCommandBufferBeginInfo beginInfo = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(cmd, &beginInfo);
+
+  return cmd;
+}
+
+void Platform::updateSwapchain(
+    const std::vector<VkImage> &newBackbuffers,
+    const MaliSDK::SwapchainDimensions &dim, VkRenderPass renderPass) {
+  swapchainDimensions.width = dim.width;
+  swapchainDimensions.height = dim.height;
+
+  // Tear down backbuffers.
+  // If our swapchain changes, we will call this, and create a new swapchain.
+  vkQueueWaitIdle(getGraphicsQueue());
+
+  // In case we're reinitializing the swapchain, terminate the old one first.
+  backbuffers.clear();
+
+  // For all backbuffers in the swapchain ...
+  for (uint32_t i = 0; i < newBackbuffers.size(); ++i) {
+    auto image = newBackbuffers[i];
+    auto backbuffer = std::make_shared<Backbuffer>(device, i);
+    backbuffer->image = image;
+
+    // Create an image view which we can render into.
+    VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = dim.format;
+    view.image = image;
+    view.subresourceRange.baseMipLevel = 0;
+    view.subresourceRange.baseArrayLayer = 0;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.layerCount = 1;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.components.r = VK_COMPONENT_SWIZZLE_R;
+    view.components.g = VK_COMPONENT_SWIZZLE_G;
+    view.components.b = VK_COMPONENT_SWIZZLE_B;
+    view.components.a = VK_COMPONENT_SWIZZLE_A;
+
+    VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer->view));
+
+    // Build the framebuffer.
+    VkFramebufferCreateInfo fbInfo = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    fbInfo.renderPass = renderPass;
+    fbInfo.attachmentCount = 1;
+    fbInfo.pAttachments = &backbuffer->view;
+    fbInfo.width = dim.width;
+    fbInfo.height = dim.height;
+    fbInfo.layers = 1;
+
+    VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,
+                                 &backbuffer->framebuffer));
+
+    backbuffers.push_back(backbuffer);
+  }
+}
 } // namespace MaliSDK

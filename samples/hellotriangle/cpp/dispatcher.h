@@ -10,7 +10,6 @@ class Platform;
 
 struct Dispatcher {
   std::shared_ptr<MaliSDK::Platform> pPlatform;
-  std::shared_ptr<class VulkanApplication> pVulkanApp;
   std::shared_ptr<class Pipeline> pPipeline;
   bool active = false;
 
@@ -18,7 +17,7 @@ struct Dispatcher {
   double startTime = 0;
 
 public:
-  bool isReady() const { return this->pVulkanApp && this->active; }
+  bool isReady() const { return this->pPipeline && this->active; }
   void onResume();
   void onPause();
   void onInitWindow(ANativeWindow *window, AAssetManager *assetManager);
