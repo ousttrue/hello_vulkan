@@ -78,9 +78,8 @@ bool Platform::validateExtensions(
 
 std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
   auto ptr = std::shared_ptr<Platform>(new Platform);
-  ptr->setNativeWindow(window);
   LOGI("Creating window!\n");
-  if (ptr->initVulkan() != MaliSDK::RESULT_SUCCESS) {
+  if (ptr->initVulkan(window) != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to create Vulkan window.\n");
     abort();
   }
@@ -144,7 +143,7 @@ Platform::~Platform() {
   }
 }
 
-MaliSDK::Result Platform::initVulkan() {
+MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
   const vector<const char *> requiredInstanceExtensions{
       "VK_KHR_surface", "VK_KHR_android_surface"};
   const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
@@ -363,7 +362,14 @@ MaliSDK::Result Platform::initVulkan() {
     useDeviceExtensions = false;
   }
 
-  surface = createSurface();
+  VkAndroidSurfaceCreateInfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+      .pNext = 0,
+      .flags = 0,
+      .window = window,
+  };
+  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
+
   if (surface == VK_NULL_HANDLE) {
     LOGE("Failed to create surface.");
     return MaliSDK::RESULT_ERROR_GENERIC;
@@ -637,17 +643,6 @@ MaliSDK::Result Platform::presentImage(unsigned index) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   else
     return MaliSDK::RESULT_SUCCESS;
-}
-
-VkSurfaceKHR Platform::createSurface() {
-  VkSurfaceKHR surface;
-
-  VkAndroidSurfaceCreateInfoKHR info = {
-      VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR};
-  info.window = pNativeWindow;
-
-  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
-  return surface;
 }
 
 void Platform::submitSwapchain(VkCommandBuffer cmd) {

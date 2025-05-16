@@ -11,7 +11,6 @@ struct SwapchainDimensions {
 };
 
 class Platform {
-  ANativeWindow *pNativeWindow = nullptr;
   VkInstance instance = VK_NULL_HANDLE;
   VkPhysicalDevice gpu = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
@@ -74,7 +73,6 @@ public:
   }
 
 private:
-  void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
   inline void addExternalLayer(const char *pName) {
     externalLayers.push_back(pName);
   }
@@ -100,10 +98,9 @@ private:
   }
   void destroySwapchain();
   MaliSDK::Result initSwapchain();
-  MaliSDK::Result initVulkan();
+  MaliSDK::Result initVulkan(ANativeWindow *window);
   bool validateExtensions(const std::vector<const char *> &required,
                           const std::vector<VkExtensionProperties> &available);
-  VkSurfaceKHR createSurface();
 
   void onPause() { destroySwapchain(); }
 
