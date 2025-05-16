@@ -32,33 +32,21 @@ void Dispatcher::onTermWindow() {
 }
 
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
-  if (!this->active) {
-    return true;
-  }
-  if (this->pPlatform && this->pVulkanApp) {
+  if (this->active && this->pPlatform && this->pVulkanApp) {
     // swapchain current backbuffer
-    unsigned index;
-    auto res = this->pPlatform->acquireNextImage(&index);
-    while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-      res = this->pPlatform->acquireNextImage(&index);
-      this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
-                                        this->pPlatform->swapchainDimensions);
-    }
-    if (res != MaliSDK::RESULT_SUCCESS) {
-      LOGE("Unrecoverable swapchain error.\n");
+    auto backbuffer = nextFrame();
+    if (!backbuffer) {
+      // swapchain error. exit
       return false;
     }
 
     // render
-    this->pVulkanApp->render(index, 0.0166f);
+    this->pVulkanApp->render(backbuffer,
+                             this->pPlatform->swapchainDimensions.width,
+                             this->pPlatform->swapchainDimensions.height);
 
     // present
-    res = this->pPlatform->presentImage(index);
-    // Handle Outdated error in acquire.
-    if (res != MaliSDK::RESULT_SUCCESS &&
-        res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-      return false;
-    }
+    this->pPlatform->presentImage(backbuffer->index);
 
     frameCount++;
     if (frameCount == 100) {
@@ -68,5 +56,26 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
       startTime = endTime;
     }
   }
+
   return true;
+}
+
+std::shared_ptr<class Backbuffer> Dispatcher::nextFrame() {
+  unsigned index;
+  auto res = this->pPlatform->acquireNextImage(&index);
+  while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+    res = this->pPlatform->acquireNextImage(&index);
+    this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
+                                      this->pPlatform->swapchainDimensions);
+    // // Handle Outdated error in acquire.
+    // if (res != MaliSDK::RESULT_SUCCESS &&
+    //     res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+    //   return false;
+    // }
+  }
+  if (res != MaliSDK::RESULT_SUCCESS) {
+    LOGE("Unrecoverable swapchain error.\n");
+    return {};
+  }
+  return pVulkanApp->backbuffers[index];
 }

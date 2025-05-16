@@ -4,12 +4,6 @@
 #include <android/asset_manager.h>
 #include <android_native_app_glue.h>
 
-struct Backbuffer {
-  VkImage image;
-  VkImageView view;
-  VkFramebuffer framebuffer;
-};
-
 struct Buffer {
   VkBuffer buffer;
   VkDeviceMemory memory;
@@ -19,7 +13,10 @@ class VulkanApplication {
   VkDevice _device;
   MaliSDK::Platform *pContext;
 
-  std::vector<Backbuffer> backbuffers;
+public:
+  std::vector<std::shared_ptr<Backbuffer>> backbuffers;
+
+private:
   unsigned width, height;
   VkRenderPass renderPass;
   VkPipeline pipeline;
@@ -38,7 +35,7 @@ public:
 
   void updateSwapchain(const std::vector<VkImage> &backbuffers,
                        const MaliSDK::SwapchainDimensions &dim);
-  void render(unsigned swapchainIndex, float deltaTime);
+  void render(const std::shared_ptr<Backbuffer> &backbuffer, uint32_t width, uint32_t height);
   void terminate();
 
 private:

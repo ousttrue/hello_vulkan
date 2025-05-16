@@ -391,10 +391,8 @@ void VulkanApplication::initPipeline(VkFormat format,
   vkDestroyShaderModule(_device, shaderStages[1].module, nullptr);
 }
 
-void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
-  // Render to this backbuffer.
-  Backbuffer &backbuffer = backbuffers[swapchainIndex];
-
+void VulkanApplication::render(const std::shared_ptr<Backbuffer> &backbuffer,
+                               uint32_t width, uint32_t height) {
   // Request a fresh command buffer.
   VkCommandBuffer cmd = pContext->requestPrimaryCommandBuffer();
 
@@ -414,7 +412,7 @@ void VulkanApplication::render(unsigned swapchainIndex, float /*deltaTime*/) {
   // Begin the render pass.
   VkRenderPassBeginInfo rpBegin = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
   rpBegin.renderPass = renderPass;
-  rpBegin.framebuffer = backbuffer.framebuffer;
+  rpBegin.framebuffer = backbuffer->framebuffer;
   rpBegin.renderArea.extent.width = width;
   rpBegin.renderArea.extent.height = height;
   rpBegin.clearValueCount = 1;
@@ -468,8 +466,8 @@ void VulkanApplication::termBackbuffers() {
     // Wait until device is idle before teardown.
     vkQueueWaitIdle(pContext->getGraphicsQueue());
     for (auto &backbuffer : backbuffers) {
-      vkDestroyFramebuffer(_device, backbuffer.framebuffer, nullptr);
-      vkDestroyImageView(_device, backbuffer.view, nullptr);
+      vkDestroyFramebuffer(_device, backbuffer->framebuffer, nullptr);
+      vkDestroyImageView(_device, backbuffer->view, nullptr);
     }
     backbuffers.clear();
     vkDestroyRenderPass(_device, renderPass, nullptr);
@@ -499,9 +497,10 @@ void VulkanApplication::updateSwapchain(
   termBackbuffers();
 
   // For all backbuffers in the swapchain ...
-  for (auto image : newBackbuffers) {
-    Backbuffer backbuffer;
-    backbuffer.image = image;
+  for (uint32_t i = 0; i < newBackbuffers.size(); ++i) {
+    auto image = newBackbuffers[i];
+    auto backbuffer = std::make_shared<Backbuffer>(i);
+    backbuffer->image = image;
 
     // Create an image view which we can render into.
     VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -518,20 +517,20 @@ void VulkanApplication::updateSwapchain(
     view.components.b = VK_COMPONENT_SWIZZLE_B;
     view.components.a = VK_COMPONENT_SWIZZLE_A;
 
-    VK_CHECK(vkCreateImageView(_device, &view, nullptr, &backbuffer.view));
+    VK_CHECK(vkCreateImageView(_device, &view, nullptr, &backbuffer->view));
 
     // Build the framebuffer.
     VkFramebufferCreateInfo fbInfo = {
         VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
     fbInfo.renderPass = renderPass;
     fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments = &backbuffer.view;
+    fbInfo.pAttachments = &backbuffer->view;
     fbInfo.width = width;
     fbInfo.height = height;
     fbInfo.layers = 1;
 
     VK_CHECK(vkCreateFramebuffer(_device, &fbInfo, nullptr,
-                                 &backbuffer.framebuffer));
+                                 &backbuffer->framebuffer));
 
     backbuffers.push_back(backbuffer);
   }
