@@ -21,7 +21,7 @@ void Dispatcher::onPause() { this->active = false; }
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  pPlatform = MaliSDK::Platform::create(window);
+  pPlatform = Platform::create(window);
   // pVulkanApp = VulkanApplication::create(
   //     pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
   pPipeline =

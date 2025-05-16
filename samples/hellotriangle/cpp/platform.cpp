@@ -1,4 +1,5 @@
 #include "platform.hpp"
+#include "common.hpp"
 #include <string.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -15,8 +16,6 @@ Backbuffer::~Backbuffer() {
   vkDestroyFramebuffer(_device, framebuffer, nullptr);
   vkDestroyImageView(_device, view, nullptr);
 }
-
-namespace MaliSDK {
 
 // typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
 //     VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
@@ -78,11 +77,7 @@ bool Platform::validateExtensions(
 }
 
 std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
-  auto ptr = std::shared_ptr<MaliSDK::Platform>(new MaliSDK::Platform);
-  if (ptr->initialize() != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Failed to initialize platform.\n");
-    abort();
-  }
+  auto ptr = std::shared_ptr<Platform>(new Platform);
   ptr->setNativeWindow(window);
   auto dim = ptr->getPreferredSwapchain();
   LOGI("Creating window!\n");
@@ -91,14 +86,6 @@ std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
     abort();
   }
   return ptr;
-}
-
-Result Platform::initialize() {
-  // pContext = new Context();
-  // if (!pContext)
-  //   return RESULT_ERROR_OUT_OF_MEMORY;
-
-  return RESULT_SUCCESS;
 }
 
 #define NELEMS(x) (sizeof(x) / sizeof((x)[0]))
@@ -158,7 +145,7 @@ Platform::~Platform() {
   }
 }
 
-Result
+MaliSDK::Result
 Platform::initVulkan(const SwapchainDimensions &swapchain,
                      const vector<const char *> &requiredInstanceExtensions,
                      const vector<const char *> &requiredDeviceExtensions) {
@@ -276,7 +263,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
 
     if (res != VK_SUCCESS) {
       LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
-      return RESULT_ERROR_GENERIC;
+      return MaliSDK::RESULT_ERROR_GENERIC;
     }
 
     VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT{
@@ -295,7 +282,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
               instance, &DebugUtilsMessengerCreateInfoEXT, nullptr,
               &DebugUtilsMessengerEXT) != VK_SUCCESS) {
         LOGE("failed to set up debug messenger!");
-        return RESULT_ERROR_GENERIC;
+        return MaliSDK::RESULT_ERROR_GENERIC;
       }
     }
   }
@@ -305,7 +292,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
 
   if (gpuCount < 1) {
     LOGE("Failed to enumerate Vulkan physical device.\n");
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
   vector<VkPhysicalDevice> gpus(gpuCount);
@@ -338,7 +325,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
                                            queueProperties.data());
   if (queueCount < 1) {
     LOGE("Failed to query number of queues.");
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
   uint32_t deviceExtensionCount;
@@ -379,7 +366,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
   surface = createSurface();
   if (surface == VK_NULL_HANDLE) {
     LOGE("Failed to create surface.");
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
   bool foundQueue = false;
@@ -404,7 +391,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
   if (!foundQueue) {
     LOGE("Did not find suitable queue which supports graphics, compute and "
          "presentation.\n");
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
   static const float one = 1.0f;
@@ -437,18 +424,19 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
 
   vkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
 
-  Result res = initSwapchain(swapchain);
-  if (res != RESULT_SUCCESS) {
+  auto res = initSwapchain(swapchain);
+  if (res != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to init swapchain.");
     return res;
   }
 
   res = onPlatformUpdate();
-  if (FAILED(res))
+  if (res != MaliSDK::RESULT_SUCCESS) {
     return res;
+  }
 
-  semaphoreManager = new SemaphoreManager(device);
-  return RESULT_SUCCESS;
+  semaphoreManager = new MaliSDK::SemaphoreManager(device);
+  return MaliSDK::RESULT_SUCCESS;
 }
 
 void Platform::destroySwapchain() {
@@ -461,7 +449,7 @@ void Platform::destroySwapchain() {
   }
 }
 
-Result Platform::initSwapchain(const SwapchainDimensions &dim) {
+MaliSDK::Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   VkSurfaceCapabilitiesKHR surfaceProperties;
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
                                                      &surfaceProperties));
@@ -479,7 +467,7 @@ Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   } else {
     if (formatCount == 0) {
       LOGE("Surface has no formats.\n");
-      return RESULT_ERROR_GENERIC;
+      return MaliSDK::RESULT_ERROR_GENERIC;
     }
 
     format.format = VK_FORMAT_UNDEFINED;
@@ -583,16 +571,16 @@ Result Platform::initSwapchain(const SwapchainDimensions &dim) {
   VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount,
                                    swapchainImages.data()));
 
-  return RESULT_SUCCESS;
+  return MaliSDK::RESULT_SUCCESS;
 }
 
-Result Platform::acquireNextImage(unsigned *image) {
+MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
   if (swapchain == VK_NULL_HANDLE) {
     // Recreate swapchain.
-    if (SUCCEEDED(initSwapchain(swapchainDimensions)))
-      return RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    if (initSwapchain(swapchainDimensions) == MaliSDK::RESULT_SUCCESS)
+      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
-      return RESULT_ERROR_GENERIC;
+      return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
   auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
@@ -604,14 +592,14 @@ Result Platform::acquireNextImage(unsigned *image) {
     semaphoreManager->addClearedSemaphore(acquireSemaphore);
 
     // Recreate swapchain.
-    if (SUCCEEDED(initSwapchain(swapchainDimensions)))
-      return RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    if (initSwapchain(swapchainDimensions) == MaliSDK::RESULT_SUCCESS)
+      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
-      return RESULT_ERROR_GENERIC;
+      return MaliSDK::RESULT_ERROR_GENERIC;
   } else if (res != VK_SUCCESS) {
     vkQueueWaitIdle(queue);
     semaphoreManager->addClearedSemaphore(acquireSemaphore);
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   } else {
     // Signal the underlying context that we're using this backbuffer now.
     // This will also wait for all fences associated with this swapchain image
@@ -625,11 +613,11 @@ Result Platform::acquireNextImage(unsigned *image) {
     if (oldSemaphore != VK_NULL_HANDLE)
       semaphoreManager->addClearedSemaphore(oldSemaphore);
 
-    return RESULT_SUCCESS;
+    return MaliSDK::RESULT_SUCCESS;
   }
 }
 
-Result Platform::presentImage(unsigned index) {
+MaliSDK::Result Platform::presentImage(unsigned index) {
   VkResult result;
   VkPresentInfoKHR present = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
   present.swapchainCount = 1;
@@ -642,11 +630,11 @@ Result Platform::presentImage(unsigned index) {
   VkResult res = vkQueuePresentKHR(queue, &present);
 
   if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
-    return RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
   else if (res != VK_SUCCESS)
-    return RESULT_ERROR_GENERIC;
+    return MaliSDK::RESULT_ERROR_GENERIC;
   else
-    return RESULT_SUCCESS;
+    return MaliSDK::RESULT_SUCCESS;
 }
 
 VkSurfaceKHR Platform::createSurface() {
@@ -702,7 +690,7 @@ void Platform::submitCommandBuffer(VkCommandBuffer cmd,
   VK_CHECK(vkQueueSubmit(queue, 1, &info, fence));
 }
 
-Result Platform::onPlatformUpdate() {
+MaliSDK::Result Platform::onPlatformUpdate() {
   device = this->getDevice();
   queue = this->getGraphicsQueue();
 
@@ -714,16 +702,17 @@ Result Platform::onPlatformUpdate() {
   // and such.
   perFrame.clear();
   for (unsigned i = 0; i < this->getNumSwapchainImages(); i++)
-    perFrame.emplace_back(new PerFrame(device, this->getGraphicsQueueIndex()));
+    perFrame.emplace_back(
+        new MaliSDK::PerFrame(device, this->getGraphicsQueueIndex()));
 
   setRenderingThreadCount(renderingThreadCount);
 
-  return RESULT_SUCCESS;
+  return MaliSDK::RESULT_SUCCESS;
 }
 
 VkCommandBuffer
 Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
-                               uint32_t width, uint32_t height) {
+                      uint32_t width, uint32_t height) {
   // Request a fresh command buffer.
   VkCommandBuffer cmd = requestPrimaryCommandBuffer();
 
@@ -737,9 +726,9 @@ Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
   return cmd;
 }
 
-void Platform::updateSwapchain(
-    const std::vector<VkImage> &newBackbuffers,
-    const MaliSDK::SwapchainDimensions &dim, VkRenderPass renderPass) {
+void Platform::updateSwapchain(const std::vector<VkImage> &newBackbuffers,
+                               const SwapchainDimensions &dim,
+                               VkRenderPass renderPass) {
   swapchainDimensions.width = dim.width;
   swapchainDimensions.height = dim.height;
 
@@ -789,4 +778,3 @@ void Platform::updateSwapchain(
     backbuffers.push_back(backbuffer);
   }
 }
-} // namespace MaliSDK

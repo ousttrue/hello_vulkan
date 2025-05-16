@@ -4,8 +4,6 @@
 #include "semaphore_manager.hpp"
 #include <vulkan/vulkan.h>
 
-namespace MaliSDK {
-
 struct SwapchainDimensions {
   unsigned width;
   unsigned height;
@@ -40,7 +38,7 @@ struct Platform {
     }
   }
 
-  SemaphoreManager *semaphoreManager = nullptr;
+  MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
 
   VkSurfaceKHR surface = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
@@ -60,7 +58,6 @@ public:
   static std::shared_ptr<Platform> create(ANativeWindow *window);
 
   void setNativeWindow(ANativeWindow *pWindow) { pNativeWindow = pWindow; }
-  Result initialize();
   inline void addExternalLayer(const char *pName) {
     externalLayers.push_back(pName);
   }
@@ -80,14 +77,14 @@ public:
     return chain;
   }
 
-  Result createWindow(const SwapchainDimensions &swapchain) {
+  MaliSDK::Result createWindow(const SwapchainDimensions &swapchain) {
     return initVulkan(swapchain, {"VK_KHR_surface", "VK_KHR_android_surface"},
                       {"VK_KHR_swapchain"});
   }
 
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
-  Result acquireNextImage(unsigned *index);
-  Result presentImage(unsigned index);
+  MaliSDK::Result acquireNextImage(unsigned *index);
+  MaliSDK::Result presentImage(unsigned index);
   inline VkDevice getDevice() const { return device; }
   inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
   inline VkInstance getInstance() const { return instance; }
@@ -100,19 +97,20 @@ public:
     return memoryProperties;
   }
   void destroySwapchain();
-  Result initSwapchain(const SwapchainDimensions &swapchain);
-  Result initVulkan(const SwapchainDimensions &swapchain,
-                    const std::vector<const char *> &instanceExtensions,
-                    const std::vector<const char *> &deviceExtensions);
+  MaliSDK::Result initSwapchain(const SwapchainDimensions &swapchain);
+  MaliSDK::Result
+  initVulkan(const SwapchainDimensions &swapchain,
+             const std::vector<const char *> &instanceExtensions,
+             const std::vector<const char *> &deviceExtensions);
   bool validateExtensions(const std::vector<const char *> &required,
                           const std::vector<VkExtensionProperties> &available);
   VkSurfaceKHR createSurface();
 
   void onPause() { destroySwapchain(); }
 
-  Result onPlatformUpdate();
+  MaliSDK::Result onPlatformUpdate();
   void waitIdle() { vkDeviceWaitIdle(device); }
-  std::vector<std::unique_ptr<PerFrame>> perFrame;
+  std::vector<std::unique_ptr<MaliSDK::PerFrame>> perFrame;
   unsigned swapchainIndex = 0;
   unsigned renderingThreadCount = 0;
   VkCommandBuffer requestPrimaryCommandBuffer() {
@@ -124,7 +122,7 @@ public:
   const VkSemaphore &getSwapchainAcquireSemaphore() const {
     return perFrame[swapchainIndex]->swapchainAcquireSemaphore;
   }
-  FenceManager &getFenceManager() {
+  MaliSDK::FenceManager &getFenceManager() {
     return perFrame[swapchainIndex]->fenceManager;
   }
   void submitSwapchain(VkCommandBuffer cmdBuffer);
@@ -144,10 +142,7 @@ public:
   }
 
   void updateSwapchain(const std::vector<VkImage> &backbuffers,
-                       const MaliSDK::SwapchainDimensions &dim,
-                       VkRenderPass renderPass);
+                       const SwapchainDimensions &dim, VkRenderPass renderPass);
   VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
                               uint32_t width, uint32_t height);
 };
-
-} // namespace MaliSDK

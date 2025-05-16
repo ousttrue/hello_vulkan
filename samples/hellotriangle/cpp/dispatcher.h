@@ -4,12 +4,8 @@
 
 #include <memory>
 
-namespace MaliSDK {
-class Platform;
-} // namespace MaliSDK
-
 struct Dispatcher {
-  std::shared_ptr<MaliSDK::Platform> pPlatform;
+  std::shared_ptr<class Platform> pPlatform;
   std::shared_ptr<class Pipeline> pPipeline;
   bool active = false;
 
