@@ -11,6 +11,7 @@ class Platform;
 struct Dispatcher {
   std::shared_ptr<MaliSDK::Platform> pPlatform;
   std::shared_ptr<class VulkanApplication> pVulkanApp;
+  std::shared_ptr<class Pipeline> pPipeline;
   bool active = false;
 
   unsigned frameCount = 0;

@@ -1,7 +1,9 @@
 #include "dispatcher.h"
 #include "application.hpp"
 #include "common.hpp"
+#include "pipeline.hpp"
 #include "platform.hpp"
+#include <vulkan/vulkan_core.h>
 
 /// @brief Get the current monotonic time in seconds.
 /// @returns Current time.
@@ -23,6 +25,14 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   pPlatform = MaliSDK::Platform::create(window);
   pVulkanApp = VulkanApplication::create(
       pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
+  pPipeline =
+      Pipeline::create(pPlatform->getDevice(),
+                       pPlatform->swapchainDimensions.format, assetManager);
+  pPipeline->initVertexBuffer(pPlatform->getMemoryProperties());
+  pVulkanApp->updateSwapchain(pPlatform->swapchainImages,
+                              pPlatform->swapchainDimensions,
+                              pPipeline->renderPass());
+
   this->startTime = getCurrentTime();
 }
 
@@ -41,9 +51,16 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     }
 
     // render
-    this->pVulkanApp->render(backbuffer,
-                             this->pPlatform->swapchainDimensions.width,
-                             this->pPlatform->swapchainDimensions.height);
+    auto cmd = this->pVulkanApp->beginRender(
+        backbuffer, this->pPlatform->swapchainDimensions.width,
+        this->pPlatform->swapchainDimensions.height);
+
+    pPipeline->render(cmd, backbuffer->framebuffer,
+                      this->pPlatform->swapchainDimensions.width,
+                      this->pPlatform->swapchainDimensions.height);
+
+    // Submit it to the queue.
+    pPlatform->submitSwapchain(cmd);
 
     // present
     this->pPlatform->presentImage(backbuffer->index);
@@ -66,7 +83,8 @@ std::shared_ptr<class Backbuffer> Dispatcher::nextFrame() {
   while (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
     res = this->pPlatform->acquireNextImage(&index);
     this->pVulkanApp->updateSwapchain(this->pPlatform->swapchainImages,
-                                      this->pPlatform->swapchainDimensions);
+                                      this->pPlatform->swapchainDimensions,
+                                      this->pPipeline->renderPass());
     // // Handle Outdated error in acquire.
     // if (res != MaliSDK::RESULT_SUCCESS &&
     //     res != MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {

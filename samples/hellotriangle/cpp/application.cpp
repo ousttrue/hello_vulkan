@@ -2,6 +2,7 @@
 #include "common.hpp"
 #include "pipeline.hpp"
 #include "platform.hpp"
+#include <vulkan/vulkan_core.h>
 
 VulkanApplication::VulkanApplication(VkDevice device,
                                      MaliSDK::Platform *platform)
@@ -14,33 +15,23 @@ VulkanApplication::create(MaliSDK::Platform *platform, VkFormat format,
                           AAssetManager *assetManager) {
   auto ptr = std::shared_ptr<VulkanApplication>(
       new VulkanApplication(platform->getDevice(), platform));
-  ptr->initPipeline(format, assetManager);
-  ptr->updateSwapchain(platform->swapchainImages,
-                       platform->swapchainDimensions);
   return ptr;
 }
 
-void VulkanApplication::initPipeline(VkFormat format,
-                                     AAssetManager *assetManager) {
-  _pipeline = Pipeline::create(_device, format, assetManager);
-  _pipeline->initVertexBuffer(pContext->getMemoryProperties());
-}
-
-void VulkanApplication::render(const std::shared_ptr<Backbuffer> &backbuffer,
+VkCommandBuffer
+VulkanApplication::beginRender(const std::shared_ptr<Backbuffer> &backbuffer,
                                uint32_t width, uint32_t height) {
   // Request a fresh command buffer.
   VkCommandBuffer cmd = pContext->requestPrimaryCommandBuffer();
 
   // We will only submit this once before it's recycled.
   VkCommandBufferBeginInfo beginInfo = {
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
   vkBeginCommandBuffer(cmd, &beginInfo);
 
-  _pipeline->render(cmd, backbuffer->framebuffer, width, height);
-
-  // Submit it to the queue.
-  pContext->submitSwapchain(cmd);
+  return cmd;
 }
 
 void VulkanApplication::termBackbuffers() {
@@ -66,7 +57,7 @@ void VulkanApplication::terminate() {
 
 void VulkanApplication::updateSwapchain(
     const std::vector<VkImage> &newBackbuffers,
-    const MaliSDK::SwapchainDimensions &dim) {
+    const MaliSDK::SwapchainDimensions &dim, VkRenderPass renderPass) {
   width = dim.width;
   height = dim.height;
 
@@ -99,7 +90,7 @@ void VulkanApplication::updateSwapchain(
     // Build the framebuffer.
     VkFramebufferCreateInfo fbInfo = {
         VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    fbInfo.renderPass = _pipeline->renderPass();
+    fbInfo.renderPass = renderPass;
     fbInfo.attachmentCount = 1;
     fbInfo.pAttachments = &backbuffer->view;
     fbInfo.width = width;
