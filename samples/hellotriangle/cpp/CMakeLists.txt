@@ -4,6 +4,7 @@ add_library(
   main.cpp
   dispatcher.cpp
   platform.cpp
+  device_manager.cpp
   per_frame.cpp
   fence_manager.cpp
   semaphore_manager.cpp
