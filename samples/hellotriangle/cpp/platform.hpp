@@ -11,7 +11,8 @@ struct SwapchainDimensions {
 };
 
 class Platform {
-  VkInstance instance = VK_NULL_HANDLE;
+  std::shared_ptr<class DeviceManager> _device;
+
   VkPhysicalDevice gpu = VK_NULL_HANDLE;
   VkDevice device = VK_NULL_HANDLE;
   VkQueue queue = VK_NULL_HANDLE;
@@ -19,30 +20,12 @@ class Platform {
   VkPhysicalDeviceMemoryProperties memoryProperties;
   std::vector<VkQueueFamilyProperties> queueProperties;
   unsigned graphicsQueueIndex;
-  std::vector<std::string> externalLayers;
-  PFN_vkDebugReportCallbackEXT externalDebugCallback = nullptr;
-  void *pExternalDebugCallbackUserData = nullptr;
-  VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
 
   MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
 
   VkSurfaceKHR surface = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   std::vector<VkImage> swapchainImages;
-
-  inline void
-  addExternalLayers(std::vector<const char *> &activeLayers,
-                    const std::vector<VkLayerProperties> &supportedLayers) {
-    for (auto &layer : externalLayers) {
-      for (auto &supportedLayer : supportedLayers) {
-        if (layer == supportedLayer.layerName) {
-          activeLayers.push_back(supportedLayer.layerName);
-          LOGI("Found external layer: %s\n", supportedLayer.layerName);
-          break;
-        }
-      }
-    }
-  }
 
   Platform() = default;
 
@@ -73,24 +56,10 @@ public:
   }
 
 private:
-  inline void addExternalLayer(const char *pName) {
-    externalLayers.push_back(pName);
-  }
-  inline void setExternalDebugCallback(PFN_vkDebugReportCallbackEXT callback,
-                                       void *pUserData) {
-    externalDebugCallback = callback;
-    pExternalDebugCallbackUserData = pUserData;
-  }
-  inline PFN_vkDebugReportCallbackEXT getExternalDebugCallback() const {
-    return externalDebugCallback;
-  }
-  inline void *getExternalDebugCallbackUserData() const {
-    return pExternalDebugCallbackUserData;
-  }
 
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
-  inline VkInstance getInstance() const { return instance; }
+  // inline VkInstance getInstance() const { return instance; }
   inline VkQueue getGraphicsQueue() const { return queue; }
   inline unsigned getGraphicsQueueIndex() const { return graphicsQueueIndex; }
   inline const VkPhysicalDeviceProperties &getGpuProperties() const {
@@ -99,8 +68,6 @@ private:
   void destroySwapchain();
   MaliSDK::Result initSwapchain();
   MaliSDK::Result initVulkan(ANativeWindow *window);
-  bool validateExtensions(const std::vector<const char *> &required,
-                          const std::vector<VkExtensionProperties> &available);
 
   void onPause() { destroySwapchain(); }
 

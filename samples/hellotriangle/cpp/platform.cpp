@@ -17,6 +17,259 @@ Backbuffer::~Backbuffer() {
   vkDestroyImageView(_device, view, nullptr);
 }
 
+static bool
+validateExtensions(const vector<const char *> &required,
+                   const std::vector<VkExtensionProperties> &available) {
+  for (auto extension : required) {
+    bool found = false;
+    for (auto &availableExtension : available) {
+      if (strcmp(availableExtension.extensionName, extension) == 0) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found)
+      return false;
+  }
+
+  return true;
+}
+
+struct DeviceManager {
+  VkInstance Instance;
+
+  DeviceManager(VkInstance instance) : Instance(instance) {}
+
+  ~DeviceManager() {
+    if (Instance) {
+      vkDestroyInstance(Instance, nullptr);
+    }
+  }
+
+  /// create instance and validation layer
+  static std::shared_ptr<DeviceManager> create() {
+    const vector<const char *> requiredInstanceExtensions{
+        "VK_KHR_surface", "VK_KHR_android_surface"};
+
+    uint32_t instanceExtensionCount;
+    vector<const char *> activeInstanceExtensions;
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(
+        nullptr, &instanceExtensionCount, nullptr));
+    vector<VkExtensionProperties> instanceExtensions(instanceExtensionCount);
+    VK_CHECK(vkEnumerateInstanceExtensionProperties(
+        nullptr, &instanceExtensionCount, instanceExtensions.data()));
+    // for (auto &instanceExt : instanceExtensions)
+    //   LOGI("Instance extension: %s\n", instanceExt.extensionName);
+
+    bool useInstanceExtensions = true;
+    if (!validateExtensions(requiredInstanceExtensions, instanceExtensions)) {
+      LOGI("Required instance extensions are missing, will try without.\n");
+      useInstanceExtensions = false;
+    } else
+      activeInstanceExtensions = requiredInstanceExtensions;
+
+    bool haveDebugReport = false;
+    for (auto &ext : instanceExtensions) {
+      if (strcmp(ext.extensionName, "VK_EXT_debug_utils") == 0) {
+        haveDebugReport = true;
+        useInstanceExtensions = true;
+        activeInstanceExtensions.push_back("VK_EXT_debug_utils");
+        break;
+      }
+    }
+
+    VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    app.pApplicationName = "Mali SDK";
+    app.applicationVersion = 0;
+    app.pEngineName = "Mali SDK";
+    app.engineVersion = 0;
+    app.apiVersion = VK_MAKE_VERSION(1, 0, 24);
+
+    VkInstanceCreateInfo instanceInfo = {
+        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    instanceInfo.pApplicationInfo = &app;
+    if (useInstanceExtensions) {
+      instanceInfo.enabledExtensionCount = activeInstanceExtensions.size();
+      instanceInfo.ppEnabledExtensionNames = activeInstanceExtensions.data();
+    }
+
+    // Create the Vulkan instance
+
+    // for (auto name : activeLayers) {
+    //   LOGI("[layer] %s", name);
+    // }
+    // for (auto name : activeInstanceExtensions) {
+    //   LOGI("[instance extension] %s", name);
+    // }
+    VkInstance instance;
+    VkResult res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+
+    // Try to fall back to compatible Vulkan versions if the driver is using
+    // older, but compatible API versions.
+    if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
+      app.apiVersion = VK_MAKE_VERSION(1, 0, 1);
+      res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+      if (res == VK_SUCCESS) {
+        LOGI("Created Vulkan instance with API version 1.0.1.\n");
+      }
+    }
+    if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
+      app.apiVersion = VK_MAKE_VERSION(1, 0, 2);
+      res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+      if (res == VK_SUCCESS)
+        LOGI("Created Vulkan instance with API version 1.0.2.\n");
+    }
+    if (res != VK_SUCCESS) {
+      LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
+      return {};
+    }
+
+    auto ptr = std::shared_ptr<DeviceManager>(new DeviceManager(instance));
+    return ptr;
+  }
+};
+
+MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
+
+  _device = DeviceManager::create();
+  if (!_device) {
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  uint32_t gpuCount = 0;
+  VK_CHECK(vkEnumeratePhysicalDevices(_device->Instance, &gpuCount, nullptr));
+
+  if (gpuCount < 1) {
+    LOGE("Failed to enumerate Vulkan physical device.\n");
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  vector<VkPhysicalDevice> gpus(gpuCount);
+  VK_CHECK(
+      vkEnumeratePhysicalDevices(_device->Instance, &gpuCount, gpus.data()));
+
+  gpu = VK_NULL_HANDLE;
+  for (auto device : gpus) {
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(device, &properties);
+
+    // If we have multiple GPUs in our system, try to find a Mali device.
+    if (strstr(properties.deviceName, "Mali")) {
+      gpu = device;
+      LOGI("Found ARM Mali physical device: %s.\n", properties.deviceName);
+      break;
+    }
+  }
+
+  // Fallback to the first GPU we find in the system.
+  if (gpu == VK_NULL_HANDLE)
+    gpu = gpus.front();
+
+  vkGetPhysicalDeviceProperties(gpu, &gpuProperties);
+  vkGetPhysicalDeviceMemoryProperties(gpu, &memoryProperties);
+
+  uint32_t queueCount;
+  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount, nullptr);
+  queueProperties.resize(queueCount);
+  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount,
+                                           queueProperties.data());
+  if (queueCount < 1) {
+    LOGE("Failed to query number of queues.");
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  uint32_t deviceExtensionCount;
+  VK_CHECK(vkEnumerateDeviceExtensionProperties(
+      gpu, nullptr, &deviceExtensionCount, nullptr));
+  vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+  VK_CHECK(vkEnumerateDeviceExtensionProperties(
+      gpu, nullptr, &deviceExtensionCount, deviceExtensions.data()));
+
+  // for (auto &deviceExt : deviceExtensions)
+  //   LOGI("Device extension: %s\n", deviceExt.extensionName);
+  const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
+  bool useDeviceExtensions = true;
+  if (!validateExtensions(requiredDeviceExtensions, deviceExtensions)) {
+    LOGI("Required device extensions are missing, will try without.\n");
+    useDeviceExtensions = false;
+  }
+
+  VkAndroidSurfaceCreateInfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+      .pNext = 0,
+      .flags = 0,
+      .window = window,
+  };
+  VK_CHECK(
+      vkCreateAndroidSurfaceKHR(_device->Instance, &info, nullptr, &surface));
+
+  if (surface == VK_NULL_HANDLE) {
+    LOGE("Failed to create surface.");
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  bool foundQueue = false;
+  for (unsigned i = 0; i < queueCount; i++) {
+    VkBool32 supportsPresent;
+
+    // There must exist at least one queue that has graphics and compute
+    // support.
+    const VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+
+    vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supportsPresent);
+
+    // We want a queue which supports all of graphics, compute and presentation.
+    if (((queueProperties[i].queueFlags & required) == required) &&
+        supportsPresent) {
+      graphicsQueueIndex = i;
+      foundQueue = true;
+      break;
+    }
+  }
+
+  if (!foundQueue) {
+    LOGE("Did not find suitable queue which supports graphics, compute and "
+         "presentation.\n");
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  static const float one = 1.0f;
+  VkDeviceQueueCreateInfo queueInfo = {
+      VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+  queueInfo.queueFamilyIndex = graphicsQueueIndex;
+  queueInfo.queueCount = 1;
+  queueInfo.pQueuePriorities = &one;
+
+  VkPhysicalDeviceFeatures features = {false};
+  VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+  deviceInfo.queueCreateInfoCount = 1;
+  deviceInfo.pQueueCreateInfos = &queueInfo;
+  if (useDeviceExtensions) {
+    deviceInfo.enabledExtensionCount = requiredDeviceExtensions.size();
+    deviceInfo.ppEnabledExtensionNames = requiredDeviceExtensions.data();
+  }
+
+  deviceInfo.pEnabledFeatures = &features;
+
+  VK_CHECK(vkCreateDevice(gpu, &deviceInfo, nullptr, &device));
+
+  vkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
+
+  auto _res = initSwapchain();
+  if (_res != MaliSDK::RESULT_SUCCESS) {
+    LOGE("Failed to init swapchain.");
+    return _res;
+  }
+
+  _res = onPlatformUpdate();
+  if (_res != MaliSDK::RESULT_SUCCESS) {
+    return _res;
+  }
+
+  semaphoreManager = new MaliSDK::SemaphoreManager(device);
+  return MaliSDK::RESULT_SUCCESS;
+}
 // typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
 //     VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
 //     VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
@@ -55,25 +308,6 @@ static VkResult CreateDebugUtilsMessengerEXT(
   } else {
     return VK_ERROR_EXTENSION_NOT_PRESENT;
   }
-}
-
-bool Platform::validateExtensions(
-    const vector<const char *> &required,
-    const std::vector<VkExtensionProperties> &available) {
-  for (auto extension : required) {
-    bool found = false;
-    for (auto &availableExtension : available) {
-      if (strcmp(availableExtension.extensionName, extension) == 0) {
-        found = true;
-        break;
-      }
-    }
-
-    if (!found)
-      return false;
-  }
-
-  return true;
 }
 
 std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
@@ -123,7 +357,7 @@ Platform::~Platform() {
   destroySwapchain();
 
   if (surface) {
-    vkDestroySurfaceKHR(instance, surface, nullptr);
+    vkDestroySurfaceKHR(_device->Instance, surface, nullptr);
     surface = VK_NULL_HANDLE;
   }
 
@@ -136,313 +370,6 @@ Platform::~Platform() {
   //   vkDestroyDebugReportCallbackEXT(instance, debug_callback, nullptr);
   //   debug_callback = VK_NULL_HANDLE;
   // }
-
-  if (instance) {
-    vkDestroyInstance(instance, nullptr);
-    instance = VK_NULL_HANDLE;
-  }
-}
-
-MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
-  const vector<const char *> requiredInstanceExtensions{
-      "VK_KHR_surface", "VK_KHR_android_surface"};
-  const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
-
-  uint32_t instanceExtensionCount;
-  vector<const char *> activeInstanceExtensions;
-  VK_CHECK(vkEnumerateInstanceExtensionProperties(
-      nullptr, &instanceExtensionCount, nullptr));
-  vector<VkExtensionProperties> instanceExtensions(instanceExtensionCount);
-  VK_CHECK(vkEnumerateInstanceExtensionProperties(
-      nullptr, &instanceExtensionCount, instanceExtensions.data()));
-  // for (auto &instanceExt : instanceExtensions)
-  //   LOGI("Instance extension: %s\n", instanceExt.extensionName);
-
-#if ENABLE_VALIDATION_LAYERS
-  uint32_t instanceLayerCount;
-  VK_CHECK(vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
-  vector<VkLayerProperties> instanceLayers(instanceLayerCount);
-  VK_CHECK(vkEnumerateInstanceLayerProperties(&instanceLayerCount,
-                                              instanceLayers.data()));
-
-  // A layer could have VK_EXT_debug_report extension.
-  for (auto &layer : instanceLayers) {
-    uint32_t count;
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(layer.layerName, &count,
-                                                    nullptr));
-    vector<VkExtensionProperties> extensions(count);
-    VK_CHECK(vkEnumerateInstanceExtensionProperties(layer.layerName, &count,
-                                                    extensions.data()));
-    for (auto &ext : extensions)
-      instanceExtensions.push_back(ext);
-  }
-
-  // On desktop, the LunarG loader exposes a meta-layer that combines all
-  // relevant validation layers.
-  vector<const char *> activeLayers;
-
-  // On Android, add all relevant layers one by one.
-  if (activeLayers.empty()) {
-    addSupportedLayers(activeLayers, instanceLayers, pValidationLayers,
-                       NELEMS(pValidationLayers));
-  }
-
-  if (activeLayers.empty())
-    LOGI("Did not find validation layers.\n");
-  else
-    LOGI("Found validation layers!\n");
-
-  addExternalLayers(activeLayers, instanceLayers);
-#endif
-
-  bool useInstanceExtensions = true;
-  if (!validateExtensions(requiredInstanceExtensions, instanceExtensions)) {
-    LOGI("Required instance extensions are missing, will try without.\n");
-    useInstanceExtensions = false;
-  } else
-    activeInstanceExtensions = requiredInstanceExtensions;
-
-  bool haveDebugReport = false;
-  for (auto &ext : instanceExtensions) {
-    if (strcmp(ext.extensionName, "VK_EXT_debug_utils") == 0) {
-      haveDebugReport = true;
-      useInstanceExtensions = true;
-      activeInstanceExtensions.push_back("VK_EXT_debug_utils");
-      break;
-    }
-  }
-
-  VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-  app.pApplicationName = "Mali SDK";
-  app.applicationVersion = 0;
-  app.pEngineName = "Mali SDK";
-  app.engineVersion = 0;
-  app.apiVersion = VK_MAKE_VERSION(1, 0, 24);
-
-  VkInstanceCreateInfo instanceInfo = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-  instanceInfo.pApplicationInfo = &app;
-  if (useInstanceExtensions) {
-    instanceInfo.enabledExtensionCount = activeInstanceExtensions.size();
-    instanceInfo.ppEnabledExtensionNames = activeInstanceExtensions.data();
-  }
-
-#if ENABLE_VALIDATION_LAYERS
-  if (!activeLayers.empty()) {
-    instanceInfo.enabledLayerCount = activeLayers.size();
-    instanceInfo.ppEnabledLayerNames = activeLayers.data();
-    LOGI("Using Vulkan instance validation layers.\n");
-  }
-#endif
-
-  // Create the Vulkan instance
-  {
-    for (auto name : activeLayers) {
-      LOGI("[layer] %s", name);
-    }
-    for (auto name : activeInstanceExtensions) {
-      LOGI("[instance extension] %s", name);
-    }
-    VkResult res = vkCreateInstance(&instanceInfo, nullptr, &instance);
-
-    // Try to fall back to compatible Vulkan versions if the driver is using
-    // older, but compatible API versions.
-    if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
-      app.apiVersion = VK_MAKE_VERSION(1, 0, 1);
-      res = vkCreateInstance(&instanceInfo, nullptr, &instance);
-      if (res == VK_SUCCESS)
-        LOGI("Created Vulkan instance with API version 1.0.1.\n");
-    }
-
-    if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
-      app.apiVersion = VK_MAKE_VERSION(1, 0, 2);
-      res = vkCreateInstance(&instanceInfo, nullptr, &instance);
-      if (res == VK_SUCCESS)
-        LOGI("Created Vulkan instance with API version 1.0.2.\n");
-    }
-
-    if (res != VK_SUCCESS) {
-      LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
-      return MaliSDK::RESULT_ERROR_GENERIC;
-    }
-
-    VkDebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT{
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-        .pfnUserCallback = debugCallback,
-    };
-
-    if (activeLayers.size()) {
-      if (CreateDebugUtilsMessengerEXT(
-              instance, &DebugUtilsMessengerCreateInfoEXT, nullptr,
-              &DebugUtilsMessengerEXT) != VK_SUCCESS) {
-        LOGE("failed to set up debug messenger!");
-        return MaliSDK::RESULT_ERROR_GENERIC;
-      }
-    }
-  }
-
-  uint32_t gpuCount = 0;
-  VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
-
-  if (gpuCount < 1) {
-    LOGE("Failed to enumerate Vulkan physical device.\n");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  vector<VkPhysicalDevice> gpus(gpuCount);
-  VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, gpus.data()));
-
-  gpu = VK_NULL_HANDLE;
-  for (auto device : gpus) {
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
-
-    // If we have multiple GPUs in our system, try to find a Mali device.
-    if (strstr(properties.deviceName, "Mali")) {
-      gpu = device;
-      LOGI("Found ARM Mali physical device: %s.\n", properties.deviceName);
-      break;
-    }
-  }
-
-  // Fallback to the first GPU we find in the system.
-  if (gpu == VK_NULL_HANDLE)
-    gpu = gpus.front();
-
-  vkGetPhysicalDeviceProperties(gpu, &gpuProperties);
-  vkGetPhysicalDeviceMemoryProperties(gpu, &memoryProperties);
-
-  uint32_t queueCount;
-  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount, nullptr);
-  queueProperties.resize(queueCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount,
-                                           queueProperties.data());
-  if (queueCount < 1) {
-    LOGE("Failed to query number of queues.");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  uint32_t deviceExtensionCount;
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, nullptr));
-  vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, deviceExtensions.data()));
-
-#if ENABLE_VALIDATION_LAYERS
-  uint32_t deviceLayerCount;
-  VK_CHECK(vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount, nullptr));
-  vector<VkLayerProperties> deviceLayers(deviceLayerCount);
-  VK_CHECK(vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount,
-                                            deviceLayers.data()));
-
-  activeLayers.clear();
-  // On desktop, the LunarG loader exposes a meta-layer that combines all
-  // relevant validation layers.
-
-  // On Android, add all relevant layers one by one.
-  if (activeLayers.empty()) {
-    addSupportedLayers(activeLayers, deviceLayers, pValidationLayers,
-                       NELEMS(pValidationLayers));
-  }
-  addExternalLayers(activeLayers, deviceLayers);
-#endif
-
-  // for (auto &deviceExt : deviceExtensions)
-  //   LOGI("Device extension: %s\n", deviceExt.extensionName);
-
-  bool useDeviceExtensions = true;
-  if (!validateExtensions(requiredDeviceExtensions, deviceExtensions)) {
-    LOGI("Required device extensions are missing, will try without.\n");
-    useDeviceExtensions = false;
-  }
-
-  VkAndroidSurfaceCreateInfoKHR info = {
-      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
-      .pNext = 0,
-      .flags = 0,
-      .window = window,
-  };
-  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &surface));
-
-  if (surface == VK_NULL_HANDLE) {
-    LOGE("Failed to create surface.");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  bool foundQueue = false;
-  for (unsigned i = 0; i < queueCount; i++) {
-    VkBool32 supportsPresent;
-
-    // There must exist at least one queue that has graphics and compute
-    // support.
-    const VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-
-    vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supportsPresent);
-
-    // We want a queue which supports all of graphics, compute and presentation.
-    if (((queueProperties[i].queueFlags & required) == required) &&
-        supportsPresent) {
-      graphicsQueueIndex = i;
-      foundQueue = true;
-      break;
-    }
-  }
-
-  if (!foundQueue) {
-    LOGE("Did not find suitable queue which supports graphics, compute and "
-         "presentation.\n");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  static const float one = 1.0f;
-  VkDeviceQueueCreateInfo queueInfo = {
-      VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-  queueInfo.queueFamilyIndex = graphicsQueueIndex;
-  queueInfo.queueCount = 1;
-  queueInfo.pQueuePriorities = &one;
-
-  VkPhysicalDeviceFeatures features = {false};
-  VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-  deviceInfo.queueCreateInfoCount = 1;
-  deviceInfo.pQueueCreateInfos = &queueInfo;
-  if (useDeviceExtensions) {
-    deviceInfo.enabledExtensionCount = requiredDeviceExtensions.size();
-    deviceInfo.ppEnabledExtensionNames = requiredDeviceExtensions.data();
-  }
-
-#if ENABLE_VALIDATION_LAYERS
-  if (!activeLayers.empty()) {
-    deviceInfo.enabledLayerCount = activeLayers.size();
-    deviceInfo.ppEnabledLayerNames = activeLayers.data();
-    LOGI("Using Vulkan device validation layers.\n");
-  }
-#endif
-
-  deviceInfo.pEnabledFeatures = &features;
-
-  VK_CHECK(vkCreateDevice(gpu, &deviceInfo, nullptr, &device));
-
-  vkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
-
-  auto res = initSwapchain();
-  if (res != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Failed to init swapchain.");
-    return res;
-  }
-
-  res = onPlatformUpdate();
-  if (res != MaliSDK::RESULT_SUCCESS) {
-    return res;
-  }
-
-  semaphoreManager = new MaliSDK::SemaphoreManager(device);
-  return MaliSDK::RESULT_SUCCESS;
 }
 
 void Platform::destroySwapchain() {
