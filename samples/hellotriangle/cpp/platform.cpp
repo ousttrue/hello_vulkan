@@ -79,9 +79,8 @@ bool Platform::validateExtensions(
 std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
   auto ptr = std::shared_ptr<Platform>(new Platform);
   ptr->setNativeWindow(window);
-  auto dim = ptr->getPreferredSwapchain();
   LOGI("Creating window!\n");
-  if (ptr->createWindow(dim) != MaliSDK::RESULT_SUCCESS) {
+  if (ptr->initVulkan() != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to create Vulkan window.\n");
     abort();
   }
@@ -145,10 +144,11 @@ Platform::~Platform() {
   }
 }
 
-MaliSDK::Result
-Platform::initVulkan(const SwapchainDimensions &swapchain,
-                     const vector<const char *> &requiredInstanceExtensions,
-                     const vector<const char *> &requiredDeviceExtensions) {
+MaliSDK::Result Platform::initVulkan() {
+  const vector<const char *> requiredInstanceExtensions{
+      "VK_KHR_surface", "VK_KHR_android_surface"};
+  const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
+
   uint32_t instanceExtensionCount;
   vector<const char *> activeInstanceExtensions;
   VK_CHECK(vkEnumerateInstanceExtensionProperties(
@@ -424,7 +424,7 @@ Platform::initVulkan(const SwapchainDimensions &swapchain,
 
   vkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
 
-  auto res = initSwapchain(swapchain);
+  auto res = initSwapchain();
   if (res != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to init swapchain.");
     return res;
@@ -449,7 +449,7 @@ void Platform::destroySwapchain() {
   }
 }
 
-MaliSDK::Result Platform::initSwapchain(const SwapchainDimensions &dim) {
+MaliSDK::Result Platform::initSwapchain() {
   VkSurfaceCapabilitiesKHR surfaceProperties;
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
                                                      &surfaceProperties));
@@ -461,16 +461,13 @@ MaliSDK::Result Platform::initSwapchain(const SwapchainDimensions &dim) {
                                        formats.data());
 
   VkSurfaceFormatKHR format;
-  if (formatCount == 1 && formats[0].format == VK_FORMAT_UNDEFINED) {
+  format.format = VK_FORMAT_UNDEFINED;
+  if (formatCount == 0) {
+    LOGE("Surface has no formats.\n");
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  } else if (formatCount == 1) {
     format = formats[0];
-    format.format = dim.format;
   } else {
-    if (formatCount == 0) {
-      LOGE("Surface has no formats.\n");
-      return MaliSDK::RESULT_ERROR_GENERIC;
-    }
-
-    format.format = VK_FORMAT_UNDEFINED;
     for (auto &candidate : formats) {
       switch (candidate.format) {
       // Favor UNORM formats as the samples are not written for sRGB currently.
@@ -487,19 +484,24 @@ MaliSDK::Result Platform::initSwapchain(const SwapchainDimensions &dim) {
       if (format.format != VK_FORMAT_UNDEFINED)
         break;
     }
+  }
 
-    if (format.format == VK_FORMAT_UNDEFINED)
-      format = formats[0];
+  if (format.format == VK_FORMAT_UNDEFINED) {
+    LOGE("VK_FORMAT_UNDEFINED");
+    abort();
   }
 
   VkExtent2D swapchainSize;
   // -1u is a magic value (in Vulkan specification) which means there's no fixed
   // size.
   if (surfaceProperties.currentExtent.width == -1u) {
-    swapchainSize.width = dim.width;
-    swapchainSize.height = dim.height;
-  } else
+    LOGE("-1 size");
+    abort();
+    // swapchainSize.width = dim.width;
+    // swapchainSize.height = dim.height;
+  } else {
     swapchainSize = surfaceProperties.currentExtent;
+  }
 
   // FIFO must be supported by all implementations.
   VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -577,7 +579,7 @@ MaliSDK::Result Platform::initSwapchain(const SwapchainDimensions &dim) {
 MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
   if (swapchain == VK_NULL_HANDLE) {
     // Recreate swapchain.
-    if (initSwapchain(swapchainDimensions) == MaliSDK::RESULT_SUCCESS)
+    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
       return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
       return MaliSDK::RESULT_ERROR_GENERIC;
@@ -592,7 +594,7 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
     semaphoreManager->addClearedSemaphore(acquireSemaphore);
 
     // Recreate swapchain.
-    if (initSwapchain(swapchainDimensions) == MaliSDK::RESULT_SUCCESS)
+    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
       return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
     else
       return MaliSDK::RESULT_ERROR_GENERIC;

@@ -89,15 +89,6 @@ private:
   inline void *getExternalDebugCallbackUserData() const {
     return pExternalDebugCallbackUserData;
   }
-  SwapchainDimensions getPreferredSwapchain() const {
-    SwapchainDimensions chain = {1280, 720, VK_FORMAT_B8G8R8A8_UNORM};
-    return chain;
-  }
-
-  MaliSDK::Result createWindow(const SwapchainDimensions &swapchain) {
-    return initVulkan(swapchain, {"VK_KHR_surface", "VK_KHR_android_surface"},
-                      {"VK_KHR_swapchain"});
-  }
 
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
@@ -108,11 +99,8 @@ private:
     return gpuProperties;
   }
   void destroySwapchain();
-  MaliSDK::Result initSwapchain(const SwapchainDimensions &swapchain);
-  MaliSDK::Result
-  initVulkan(const SwapchainDimensions &swapchain,
-             const std::vector<const char *> &instanceExtensions,
-             const std::vector<const char *> &deviceExtensions);
+  MaliSDK::Result initSwapchain();
+  MaliSDK::Result initVulkan();
   bool validateExtensions(const std::vector<const char *> &required,
                           const std::vector<VkExtensionProperties> &available);
   VkSurfaceKHR createSurface();
