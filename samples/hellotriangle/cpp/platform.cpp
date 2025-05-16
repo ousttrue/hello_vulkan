@@ -36,12 +36,80 @@ validateExtensions(const vector<const char *> &required,
   return true;
 }
 
+struct PhysicalDevice {
+  VkPhysicalDevice Gpu = VK_NULL_HANDLE;
+  VkPhysicalDeviceProperties Properties;
+  VkPhysicalDeviceMemoryProperties MemoryProperties;
+  std::vector<VkQueueFamilyProperties> QueueProperties;
+  uint32_t SelectedQueueFamilyIndex = -1;
+
+  bool SelectQueueFamily(VkPhysicalDevice gpu, VkSurfaceKHR surface) {
+    Gpu = gpu;
+
+    vkGetPhysicalDeviceProperties(Gpu, &Properties);
+    vkGetPhysicalDeviceMemoryProperties(Gpu, &MemoryProperties);
+
+    uint32_t queueCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(Gpu, &queueCount, nullptr);
+    if (queueCount < 1) {
+      LOGE("Failed to query number of queues.");
+      return false;
+    }
+
+    QueueProperties.resize(queueCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(Gpu, &queueCount,
+                                             QueueProperties.data());
+
+    bool foundQueue = false;
+    for (uint32_t i = 0; i < queueCount; i++) {
+      VkBool32 supportsPresent;
+      vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supportsPresent);
+
+      // We want a queue which supports all of graphics, compute and
+      // presentation.
+
+      // There must exist at least one queue that has graphics and compute
+      // support.
+      const VkQueueFlags required =
+          VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+
+      if (((QueueProperties[i].queueFlags & required) == required) &&
+          supportsPresent) {
+        SelectedQueueFamilyIndex = i;
+        foundQueue = true;
+        break;
+      }
+    }
+
+    if (!foundQueue) {
+      LOGE("Did not find suitable queue which supports graphics, compute and "
+           "presentation.\n");
+      return false;
+    }
+
+    return true;
+  }
+};
+
 struct DeviceManager {
   VkInstance Instance;
+  VkSurfaceKHR Surface = VK_NULL_HANDLE;
+  std::vector<VkPhysicalDevice> Gpus;
+  std::vector<VkPhysicalDeviceProperties> GpuProps;
+  PhysicalDevice Selected = {};
+  // created logical device
+  VkDevice Device = VK_NULL_HANDLE;
+  VkQueue Queue = VK_NULL_HANDLE;
 
   DeviceManager(VkInstance instance) : Instance(instance) {}
 
   ~DeviceManager() {
+    if (Device) {
+      vkDestroyDevice(Device, nullptr);
+    }
+    if (Surface) {
+      vkDestroySurfaceKHR(Instance, Surface, nullptr);
+    }
     if (Instance) {
       vkDestroyInstance(Instance, nullptr);
     }
@@ -128,6 +196,101 @@ struct DeviceManager {
     auto ptr = std::shared_ptr<DeviceManager>(new DeviceManager(instance));
     return ptr;
   }
+
+  bool createSurfaceFromAndroid(ANativeWindow *window) {
+    VkAndroidSurfaceCreateInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+        .pNext = 0,
+        .flags = 0,
+        .window = window,
+    };
+    if (vkCreateAndroidSurfaceKHR(Instance, &info, nullptr, &Surface) !=
+        VK_SUCCESS) {
+      LOGE("vkCreateAndroidSurfaceKHR");
+      return false;
+    }
+
+    return true;
+  }
+
+  VkPhysicalDevice selectGpu() {
+    uint32_t gpuCount = 0;
+    if (vkEnumeratePhysicalDevices(Instance, &gpuCount, nullptr) !=
+        VK_SUCCESS) {
+      LOGE("vkEnumeratePhysicalDevices");
+      return VK_NULL_HANDLE;
+    }
+    if (gpuCount < 1) {
+      LOGE("vkEnumeratePhysicalDevices: no device");
+      return VK_NULL_HANDLE;
+    }
+    Gpus.resize(gpuCount);
+    if (vkEnumeratePhysicalDevices(Instance, &gpuCount, Gpus.data()) !=
+        VK_SUCCESS) {
+      LOGE("vkEnumeratePhysicalDevices");
+      return VK_NULL_HANDLE;
+    }
+    GpuProps.resize(gpuCount);
+    for (uint32_t i = 0; i < gpuCount; ++i) {
+      vkGetPhysicalDeviceProperties(Gpus[i], &GpuProps[i]);
+      LOGI("[gpu: %02d] %s", i, GpuProps[i].deviceName);
+    }
+    if (gpuCount > 1) {
+      LOGI("select 1st device");
+    }
+    if (!Selected.SelectQueueFamily(Gpus[0], Surface)) {
+      return VK_NULL_HANDLE;
+    }
+
+    return Selected.Gpu;
+  }
+
+  bool createLogicalDevice() {
+    uint32_t deviceExtensionCount;
+    VK_CHECK(vkEnumerateDeviceExtensionProperties(
+        Selected.Gpu, nullptr, &deviceExtensionCount, nullptr));
+    vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+    VK_CHECK(vkEnumerateDeviceExtensionProperties(
+        Selected.Gpu, nullptr, &deviceExtensionCount, deviceExtensions.data()));
+    // for (auto &deviceExt : deviceExtensions)
+    //   LOGI("Device extension: %s\n", deviceExt.extensionName);
+    const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
+    bool useDeviceExtensions = true;
+    if (!validateExtensions(requiredDeviceExtensions, deviceExtensions)) {
+      LOGI("Required device extensions are missing, will try without.\n");
+      useDeviceExtensions = false;
+    }
+
+    static const float one = 1.0f;
+    VkDeviceQueueCreateInfo queueInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = 0,
+        .flags = 0,
+        .queueFamilyIndex = Selected.SelectedQueueFamilyIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &one,
+    };
+
+    VkPhysicalDeviceFeatures features = {false};
+    VkDeviceCreateInfo deviceInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queueInfo,
+        .enabledExtensionCount =
+            static_cast<uint32_t>(requiredDeviceExtensions.size()),
+        .ppEnabledExtensionNames = requiredDeviceExtensions.data(),
+        .pEnabledFeatures = &features,
+    };
+
+    if (vkCreateDevice(Selected.Gpu, &deviceInfo, nullptr, &Device) !=
+        VK_SUCCESS) {
+      return false;
+    }
+
+    vkGetDeviceQueue(Device, Selected.SelectedQueueFamilyIndex, 0, &Queue);
+
+    return true;
+  }
 };
 
 MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
@@ -136,125 +299,16 @@ MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
   if (!_device) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  uint32_t gpuCount = 0;
-  VK_CHECK(vkEnumeratePhysicalDevices(_device->Instance, &gpuCount, nullptr));
-
-  if (gpuCount < 1) {
-    LOGE("Failed to enumerate Vulkan physical device.\n");
+  if (!_device->createSurfaceFromAndroid(window)) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  vector<VkPhysicalDevice> gpus(gpuCount);
-  VK_CHECK(
-      vkEnumeratePhysicalDevices(_device->Instance, &gpuCount, gpus.data()));
-
-  gpu = VK_NULL_HANDLE;
-  for (auto device : gpus) {
-    VkPhysicalDeviceProperties properties;
-    vkGetPhysicalDeviceProperties(device, &properties);
-
-    // If we have multiple GPUs in our system, try to find a Mali device.
-    if (strstr(properties.deviceName, "Mali")) {
-      gpu = device;
-      LOGI("Found ARM Mali physical device: %s.\n", properties.deviceName);
-      break;
-    }
-  }
-
-  // Fallback to the first GPU we find in the system.
-  if (gpu == VK_NULL_HANDLE)
-    gpu = gpus.front();
-
-  vkGetPhysicalDeviceProperties(gpu, &gpuProperties);
-  vkGetPhysicalDeviceMemoryProperties(gpu, &memoryProperties);
-
-  uint32_t queueCount;
-  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount, nullptr);
-  queueProperties.resize(queueCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueCount,
-                                           queueProperties.data());
-  if (queueCount < 1) {
-    LOGE("Failed to query number of queues.");
+  auto gpu = _device->selectGpu();
+  if (!gpu) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  uint32_t deviceExtensionCount;
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, nullptr));
-  vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, deviceExtensions.data()));
-
-  // for (auto &deviceExt : deviceExtensions)
-  //   LOGI("Device extension: %s\n", deviceExt.extensionName);
-  const vector<const char *> requiredDeviceExtensions{"VK_KHR_swapchain"};
-  bool useDeviceExtensions = true;
-  if (!validateExtensions(requiredDeviceExtensions, deviceExtensions)) {
-    LOGI("Required device extensions are missing, will try without.\n");
-    useDeviceExtensions = false;
-  }
-
-  VkAndroidSurfaceCreateInfoKHR info = {
-      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
-      .pNext = 0,
-      .flags = 0,
-      .window = window,
-  };
-  VK_CHECK(
-      vkCreateAndroidSurfaceKHR(_device->Instance, &info, nullptr, &surface));
-
-  if (surface == VK_NULL_HANDLE) {
-    LOGE("Failed to create surface.");
+  if (!_device->createLogicalDevice()) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  bool foundQueue = false;
-  for (unsigned i = 0; i < queueCount; i++) {
-    VkBool32 supportsPresent;
-
-    // There must exist at least one queue that has graphics and compute
-    // support.
-    const VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-
-    vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supportsPresent);
-
-    // We want a queue which supports all of graphics, compute and presentation.
-    if (((queueProperties[i].queueFlags & required) == required) &&
-        supportsPresent) {
-      graphicsQueueIndex = i;
-      foundQueue = true;
-      break;
-    }
-  }
-
-  if (!foundQueue) {
-    LOGE("Did not find suitable queue which supports graphics, compute and "
-         "presentation.\n");
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  static const float one = 1.0f;
-  VkDeviceQueueCreateInfo queueInfo = {
-      VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-  queueInfo.queueFamilyIndex = graphicsQueueIndex;
-  queueInfo.queueCount = 1;
-  queueInfo.pQueuePriorities = &one;
-
-  VkPhysicalDeviceFeatures features = {false};
-  VkDeviceCreateInfo deviceInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-  deviceInfo.queueCreateInfoCount = 1;
-  deviceInfo.pQueueCreateInfos = &queueInfo;
-  if (useDeviceExtensions) {
-    deviceInfo.enabledExtensionCount = requiredDeviceExtensions.size();
-    deviceInfo.ppEnabledExtensionNames = requiredDeviceExtensions.data();
-  }
-
-  deviceInfo.pEnabledFeatures = &features;
-
-  VK_CHECK(vkCreateDevice(gpu, &deviceInfo, nullptr, &device));
-
-  vkGetDeviceQueue(device, graphicsQueueIndex, 0, &queue);
 
   auto _res = initSwapchain();
   if (_res != MaliSDK::RESULT_SUCCESS) {
@@ -267,9 +321,10 @@ MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
     return _res;
   }
 
-  semaphoreManager = new MaliSDK::SemaphoreManager(device);
+  semaphoreManager = new MaliSDK::SemaphoreManager(_device->Device);
   return MaliSDK::RESULT_SUCCESS;
 }
+
 // typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
 //     VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
 //     VkDebugUtilsMessageTypeFlagsEXT                  messageTypes,
@@ -312,13 +367,14 @@ static VkResult CreateDebugUtilsMessengerEXT(
 
 std::shared_ptr<Platform> Platform::create(ANativeWindow *window) {
   auto ptr = std::shared_ptr<Platform>(new Platform);
-  LOGI("Creating window!\n");
   if (ptr->initVulkan(window) != MaliSDK::RESULT_SUCCESS) {
     LOGE("Failed to create Vulkan window.\n");
     abort();
   }
   return ptr;
 }
+
+VkDevice Platform::getDevice() const { return _device->Device; }
 
 #define NELEMS(x) (sizeof(x) / sizeof((x)[0]))
 static const char *pValidationLayers[] = {
@@ -341,30 +397,17 @@ static void addSupportedLayers(vector<const char *> &activeLayers,
 }
 
 Platform::~Platform() {
-  vkDeviceWaitIdle(device);
+  // Don't release anything until the GPU is completely idle.
+  vkDeviceWaitIdle(_device->Device);
 
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
-  vkQueueWaitIdle(getGraphicsQueue());
-
-  // Don't release anything until the GPU is completely idle.
-  if (device)
-    vkDeviceWaitIdle(device);
+  // vkQueueWaitIdle(getGraphicsQueue());
 
   delete semaphoreManager;
   semaphoreManager = nullptr;
 
   destroySwapchain();
-
-  if (surface) {
-    vkDestroySurfaceKHR(_device->Instance, surface, nullptr);
-    surface = VK_NULL_HANDLE;
-  }
-
-  if (device) {
-    vkDestroyDevice(device, nullptr);
-    device = VK_NULL_HANDLE;
-  }
 
   // if (debug_callback) {
   //   vkDestroyDebugReportCallbackEXT(instance, debug_callback, nullptr);
@@ -373,24 +416,28 @@ Platform::~Platform() {
 }
 
 void Platform::destroySwapchain() {
-  if (device)
-    vkDeviceWaitIdle(device);
-
   if (swapchain) {
-    vkDestroySwapchainKHR(device, swapchain, nullptr);
+    vkDestroySwapchainKHR(_device->Device, swapchain, nullptr);
     swapchain = VK_NULL_HANDLE;
   }
 }
 
+const VkPhysicalDeviceMemoryProperties &Platform::getMemoryProperties() const {
+  return _device->Selected.MemoryProperties;
+}
+
 MaliSDK::Result Platform::initSwapchain() {
+  VkPhysicalDevice gpu = _device->Selected.Gpu;
+
   VkSurfaceCapabilitiesKHR surfaceProperties;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
+  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, _device->Surface,
                                                      &surfaceProperties));
 
   uint32_t formatCount;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount, nullptr);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, _device->Surface, &formatCount,
+                                       nullptr);
   vector<VkSurfaceFormatKHR> formats(formatCount);
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount,
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, _device->Surface, &formatCount,
                                        formats.data());
 
   VkSurfaceFormatKHR format;
@@ -476,7 +523,7 @@ MaliSDK::Result Platform::initSwapchain() {
     composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
 
   VkSwapchainCreateInfoKHR info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
-  info.surface = surface;
+  info.surface = _device->Surface;
   info.minImageCount = desiredSwapchainImages;
   info.imageFormat = format.format;
   info.imageColorSpace = format.colorSpace;
@@ -491,6 +538,7 @@ MaliSDK::Result Platform::initSwapchain() {
   info.clipped = true;
   info.oldSwapchain = oldSwapchain;
 
+  auto device = _device->Device;
   VK_CHECK(vkCreateSwapchainKHR(device, &info, nullptr, &swapchain));
 
   if (oldSwapchain != VK_NULL_HANDLE)
@@ -518,6 +566,8 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
       return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
+  auto device = _device->Device;
+  auto queue = _device->Queue;
   auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
   VkResult res = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
                                        acquireSemaphore, VK_NULL_HANDLE, image);
@@ -562,7 +612,7 @@ MaliSDK::Result Platform::presentImage(unsigned index) {
   present.waitSemaphoreCount = 1;
   present.pWaitSemaphores = &getSwapchainReleaseSemaphore();
 
-  VkResult res = vkQueuePresentKHR(queue, &present);
+  VkResult res = vkQueuePresentKHR(_device->Queue, &present);
 
   if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
     return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
@@ -583,8 +633,8 @@ void Platform::submitSwapchain(VkCommandBuffer cmd) {
     VkSemaphore releaseSemaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(
-        vkCreateSemaphore(device, &semaphoreInfo, nullptr, &releaseSemaphore));
+    VK_CHECK(vkCreateSemaphore(_device->Device, &semaphoreInfo, nullptr,
+                               &releaseSemaphore));
     perFrame[swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
   }
 
@@ -611,14 +661,11 @@ void Platform::submitCommandBuffer(VkCommandBuffer cmd,
   info.signalSemaphoreCount = releaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
   info.pSignalSemaphores = &releaseSemaphore;
 
-  VK_CHECK(vkQueueSubmit(queue, 1, &info, fence));
+  VK_CHECK(vkQueueSubmit(_device->Queue, 1, &info, fence));
 }
 
 MaliSDK::Result Platform::onPlatformUpdate() {
-  device = this->getDevice();
-  queue = this->getGraphicsQueue();
-
-  waitIdle();
+  // waitIdle();
 
   // Initialize per-frame resources.
   // Every swapchain image has its own command pool and fence manager.
@@ -626,8 +673,8 @@ MaliSDK::Result Platform::onPlatformUpdate() {
   // and such.
   perFrame.clear();
   for (unsigned i = 0; i < this->getNumSwapchainImages(); i++)
-    perFrame.emplace_back(
-        new MaliSDK::PerFrame(device, this->getGraphicsQueueIndex()));
+    perFrame.emplace_back(new MaliSDK::PerFrame(
+        _device->Device, _device->Selected.SelectedQueueFamilyIndex));
 
   setRenderingThreadCount(renderingThreadCount);
 
@@ -652,10 +699,12 @@ Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
 void Platform::updateSwapchain(VkRenderPass renderPass) {
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
-  vkQueueWaitIdle(getGraphicsQueue());
+  vkQueueWaitIdle(_device->Queue);
 
   // In case we're reinitializing the swapchain, terminate the old one first.
   backbuffers.clear();
+
+  auto device = _device->Device;
 
   // For all backbuffers in the swapchain ...
   for (uint32_t i = 0; i < swapchainImages.size(); ++i) {
@@ -695,4 +744,11 @@ void Platform::updateSwapchain(VkRenderPass renderPass) {
 
     backbuffers.push_back(backbuffer);
   }
+}
+
+void Platform::setRenderingThreadCount(unsigned count) {
+  vkQueueWaitIdle(_device->Queue);
+  for (auto &pFrame : perFrame)
+    pFrame->setSecondaryCommandManagersCount(count);
+  renderingThreadCount = count;
 }

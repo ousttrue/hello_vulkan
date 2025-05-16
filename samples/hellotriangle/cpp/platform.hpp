@@ -13,17 +13,8 @@ struct SwapchainDimensions {
 class Platform {
   std::shared_ptr<class DeviceManager> _device;
 
-  VkPhysicalDevice gpu = VK_NULL_HANDLE;
-  VkDevice device = VK_NULL_HANDLE;
-  VkQueue queue = VK_NULL_HANDLE;
-  VkPhysicalDeviceProperties gpuProperties;
-  VkPhysicalDeviceMemoryProperties memoryProperties;
-  std::vector<VkQueueFamilyProperties> queueProperties;
-  unsigned graphicsQueueIndex;
-
   MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
 
-  VkSurfaceKHR surface = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   std::vector<VkImage> swapchainImages;
 
@@ -42,10 +33,8 @@ public:
   std::shared_ptr<Backbuffer> getBackbuffer(uint32_t index) const {
     return backbuffers[index];
   }
-  inline VkDevice getDevice() const { return device; }
-  inline const VkPhysicalDeviceMemoryProperties &getMemoryProperties() const {
-    return memoryProperties;
-  }
+  VkDevice getDevice() const;
+  const VkPhysicalDeviceMemoryProperties &getMemoryProperties() const;
   void updateSwapchain(VkRenderPass renderPass);
   VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer);
   void submitSwapchain(VkCommandBuffer cmdBuffer);
@@ -56,15 +45,7 @@ public:
   }
 
 private:
-
   unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
-  inline VkPhysicalDevice getPhysicalDevice() const { return gpu; }
-  // inline VkInstance getInstance() const { return instance; }
-  inline VkQueue getGraphicsQueue() const { return queue; }
-  inline unsigned getGraphicsQueueIndex() const { return graphicsQueueIndex; }
-  inline const VkPhysicalDeviceProperties &getGpuProperties() const {
-    return gpuProperties;
-  }
   void destroySwapchain();
   MaliSDK::Result initSwapchain();
   MaliSDK::Result initVulkan(ANativeWindow *window);
@@ -72,7 +53,7 @@ private:
   void onPause() { destroySwapchain(); }
 
   MaliSDK::Result onPlatformUpdate();
-  void waitIdle() { vkDeviceWaitIdle(device); }
+  // void waitIdle() { vkDeviceWaitIdle(device); }
   std::vector<std::unique_ptr<MaliSDK::PerFrame>> perFrame;
   unsigned swapchainIndex = 0;
   unsigned renderingThreadCount = 0;
@@ -96,10 +77,5 @@ private:
     return perFrame[swapchainIndex]->setSwapchainAcquireSemaphore(
         acquireSemaphore);
   }
-  void setRenderingThreadCount(unsigned count) {
-    vkQueueWaitIdle(queue);
-    for (auto &pFrame : perFrame)
-      pFrame->setSecondaryCommandManagersCount(count);
-    renderingThreadCount = count;
-  }
+  void setRenderingThreadCount(unsigned count) ;
 };
