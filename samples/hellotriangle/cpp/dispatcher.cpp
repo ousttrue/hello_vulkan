@@ -24,8 +24,9 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   pPlatform = Platform::create(window);
   // pVulkanApp = VulkanApplication::create(
   //     pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
-  pPipeline = Pipeline::create(pPlatform->getDevice(),
-                               pPlatform->surfaceFormat(), assetManager);
+  pPipeline =
+      Pipeline::create(pPlatform->getDevice(),
+                       pPlatform->_swapchain->surfaceFormat(), assetManager);
   pPipeline->initVertexBuffer(pPlatform->getMemoryProperties());
   pPlatform->updateSwapchain(pPipeline->renderPass());
 
@@ -59,7 +60,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     }
 
     // swapchain current backbuffer
-    auto backbuffer = pPlatform->getBackbuffer(index);
+    auto backbuffer = pPlatform->_swapchain->getBackbuffer(index);
 
     // render
     auto cmd = this->pPlatform->beginRender(backbuffer);
@@ -71,7 +72,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     };
     vkBeginCommandBuffer(cmd, &beginInfo);
 
-    auto dim = this->pPlatform->getSwapchainDimesions();
+    auto dim = this->pPlatform->_swapchain->getSwapchainDimesions();
 
     pPipeline->render(cmd, backbuffer->framebuffer, dim.width, dim.height);
 

@@ -35,5 +35,4 @@ struct DeviceManager {
   bool createSurfaceFromAndroid(ANativeWindow *window);
   VkPhysicalDevice selectGpu();
   bool createLogicalDevice(const std::vector<const char *> &layers);
-  VkSurfaceFormatKHR getSurfaceFormat() const;
 };
