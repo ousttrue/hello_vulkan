@@ -29,8 +29,7 @@ public:
   create(VkDevice device, VkFormat format, AAssetManager *assetManager,
          const VkPhysicalDeviceMemoryProperties &props);
   VkRenderPass renderPass() const { return _renderPass; }
-  void render(VkCommandBuffer cmd, VkFramebuffer framebuffer, uint32_t width,
-              uint32_t height);
+  void render(VkCommandBuffer cmd, VkFramebuffer framebuffer, VkExtent2D size);
 
   void initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props);
 };

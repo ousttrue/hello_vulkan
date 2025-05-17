@@ -6,18 +6,14 @@
 
 #include <vector>
 
-struct SwapchainDimensions {
-  unsigned width;
-  unsigned height;
-  VkFormat format;
-};
-
 class SwapchainManager {
-  VkDevice Device;
+  VkDevice _device;
   VkQueue GraphicsQueue;
   VkQueue PresentationQueue;
   VkSwapchainKHR Swapchain;
-  SwapchainDimensions swapchainDimensions;
+  // SwapchainDimensions swapchainDimensions;
+  VkExtent2D _size;
+  VkFormat _format;
 
   std::vector<VkImage> swapchainImages;
   std::vector<std::shared_ptr<Backbuffer>> backbuffers;
@@ -27,7 +23,7 @@ class SwapchainManager {
 
   SwapchainManager(VkDevice device, VkQueue graphicsQueue,
                    VkQueue presentaionQueue, VkSwapchainKHR swapchain)
-      : Device(device), GraphicsQueue(graphicsQueue),
+      : _device(device), GraphicsQueue(graphicsQueue),
         PresentationQueue(presentaionQueue), Swapchain(swapchain) {}
 
 public:
@@ -38,10 +34,7 @@ public:
          VkQueue presentaionQueue, VkRenderPass renderPass,
          VkSwapchainKHR oldSwapchain);
   VkSwapchainKHR Handle() const { return Swapchain; }
-
-  SwapchainDimensions getSwapchainDimesions() const {
-    return swapchainDimensions;
-  }
+  VkExtent2D size() const { return _size; }
 
   std::shared_ptr<Backbuffer> getBackbuffer(uint32_t index) const {
     return backbuffers[index];

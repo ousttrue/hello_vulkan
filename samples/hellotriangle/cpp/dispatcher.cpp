@@ -74,10 +74,9 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     };
     vkBeginCommandBuffer(cmd, &beginInfo);
 
-    auto dim = this->_swapchain->getSwapchainDimesions();
+    auto size = this->_swapchain->size();
 
-    this->_pipeline->render(cmd, backbuffer->framebuffer, dim.width,
-                            dim.height);
+    this->_pipeline->render(cmd, backbuffer->framebuffer, size);
 
     // Submit it to the queue.
     this->_swapchain->submitSwapchain(cmd);

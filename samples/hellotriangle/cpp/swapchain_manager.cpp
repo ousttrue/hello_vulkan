@@ -3,7 +3,7 @@
 #include "device_manager.hpp"
 
 SwapchainManager::~SwapchainManager() {
-  vkDestroySwapchainKHR(Device, Swapchain, nullptr);
+  vkDestroySwapchainKHR(_device, Swapchain, nullptr);
 }
 
 // VkSwapchainKHR oldSwapchain = swapchain;
@@ -95,9 +95,8 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
 
   auto ptr = std::shared_ptr<SwapchainManager>(
       new SwapchainManager(device, graphicsQueue, presentaionQueue, swapchain));
-  ptr->swapchainDimensions.width = swapchainSize.width;
-  ptr->swapchainDimensions.height = swapchainSize.height;
-  ptr->swapchainDimensions.format = format.format;
+  ptr->_size = swapchainSize;
+  ptr->_format = format.format;
 
   uint32_t imageCount;
   VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr));
@@ -124,31 +123,34 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     backbuffer->image = image;
 
     // Create an image view which we can render into.
-    VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = ptr->swapchainDimensions.format;
-    view.image = image;
-    view.subresourceRange.baseMipLevel = 0;
-    view.subresourceRange.baseArrayLayer = 0;
-    view.subresourceRange.levelCount = 1;
-    view.subresourceRange.layerCount = 1;
-    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view.components.r = VK_COMPONENT_SWIZZLE_R;
-    view.components.g = VK_COMPONENT_SWIZZLE_G;
-    view.components.b = VK_COMPONENT_SWIZZLE_B;
-    view.components.a = VK_COMPONENT_SWIZZLE_A;
+    VkImageViewCreateInfo view = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = ptr->_format,
+        .components = {.r = VK_COMPONENT_SWIZZLE_R,
+                       .g = VK_COMPONENT_SWIZZLE_G,
+                       .b = VK_COMPONENT_SWIZZLE_B,
+                       .a = VK_COMPONENT_SWIZZLE_A},
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
+    };
 
     VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer->view));
 
     // Build the framebuffer.
     VkFramebufferCreateInfo fbInfo = {
-        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    fbInfo.renderPass = renderPass;
-    fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments = &backbuffer->view;
-    fbInfo.width = ptr->swapchainDimensions.width;
-    fbInfo.height = ptr->swapchainDimensions.height;
-    fbInfo.layers = 1;
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = renderPass,
+        .attachmentCount = 1,
+        .pAttachments = &backbuffer->view,
+        .width = ptr->_size.width,
+        .height = ptr->_size.height,
+        .layers = 1,
+    };
 
     VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,
                                  &backbuffer->framebuffer));
@@ -213,7 +215,7 @@ void SwapchainManager::submitSwapchain(VkCommandBuffer cmd) {
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VK_CHECK(
-        vkCreateSemaphore(Device, &semaphoreInfo, nullptr, &releaseSemaphore));
+        vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &releaseSemaphore));
     perFrame[swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
   }
 

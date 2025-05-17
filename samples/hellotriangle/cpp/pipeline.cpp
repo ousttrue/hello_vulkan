@@ -386,7 +386,7 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
 }
 
 void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
-                      uint32_t width, uint32_t height) {
+                      VkExtent2D size) {
 
   // Set clear color values.
   VkClearValue clearValue{
@@ -407,7 +407,7 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = _renderPass,
       .framebuffer = framebuffer,
-      .renderArea = {.extent = {.width = width, .height = height}},
+      .renderArea = {.extent = size},
       .clearValueCount = 1,
       .pClearValues = &clearValue,
   };
@@ -423,8 +423,8 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
   VkViewport vp = {0};
   vp.x = 0.0f;
   vp.y = 0.0f;
-  vp.width = float(width);
-  vp.height = float(height);
+  vp.width = float(size.width);
+  vp.height = float(size.height);
   vp.minDepth = 0.0f;
   vp.maxDepth = 1.0f;
   vkCmdSetViewport(cmd, 0, 1, &vp);
@@ -432,8 +432,7 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
   // Scissor box
   VkRect2D scissor;
   memset(&scissor, 0, sizeof(scissor));
-  scissor.extent.width = width;
-  scissor.extent.height = height;
+  scissor.extent = size;
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   // Bind vertex buffer.
