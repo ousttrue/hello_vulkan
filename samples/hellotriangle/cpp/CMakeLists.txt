@@ -7,7 +7,6 @@ add_library(
   device_manager.cpp
   swapchain_manager.cpp
   backbuffer.cpp
-  per_frame.cpp
   fence_manager.cpp
   semaphore_manager.cpp
   command_buffer_manager.cpp

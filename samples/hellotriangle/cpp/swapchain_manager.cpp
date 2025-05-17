@@ -104,59 +104,19 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount,
                                    ptr->_swapchainImages.data()));
 
-  // Initialize per-frame resources.
-  // Every swapchain image has its own command pool and fence manager.
-  // This makes it very easy to keep track of when we can reset command buffers
-  // and such.
-  ptr->_perFrame.clear();
-  for (unsigned i = 0; i < ptr->_swapchainImages.size(); i++)
-    ptr->_perFrame.emplace_back(new PerFrame(device, graphicsQueueIndex));
-  ptr->setRenderingThreadCount(ptr->_renderingThreadCount);
-
-  // In case we're reinitializing the swapchain, terminate the old one first.
-  ptr->_backbuffers.clear();
-
   // For all backbuffers in the swapchain ...
   for (uint32_t i = 0; i < ptr->_swapchainImages.size(); ++i) {
     auto image = ptr->_swapchainImages[i];
-    auto backbuffer = std::make_shared<Backbuffer>(device, i);
-    backbuffer->image = image;
-
-    // Create an image view which we can render into.
-    VkImageViewCreateInfo view = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = ptr->_format,
-        .components = {.r = VK_COMPONENT_SWIZZLE_R,
-                       .g = VK_COMPONENT_SWIZZLE_G,
-                       .b = VK_COMPONENT_SWIZZLE_B,
-                       .a = VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1},
-    };
-
-    VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer->view));
-
-    // Build the framebuffer.
-    VkFramebufferCreateInfo fbInfo = {
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = renderPass,
-        .attachmentCount = 1,
-        .pAttachments = &backbuffer->view,
-        .width = ptr->_size.width,
-        .height = ptr->_size.height,
-        .layers = 1,
-    };
-
-    VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,
-                                 &backbuffer->framebuffer));
-
+    auto p = new Backbuffer(i, device, graphicsQueueIndex, image, format.format,
+                            swapchainSize, renderPass);
+    auto backbuffer = std::shared_ptr<Backbuffer>(p);
+    // uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
+    //              VkImage image, VkFormat format, VkExtent2D size,
+    //              VkRenderPass renderPass
     ptr->_backbuffers.push_back(backbuffer);
   }
+
+  ptr->setRenderingThreadCount(ptr->_renderingThreadCount);
 
   return ptr;
 }
@@ -167,7 +127,7 @@ void SwapchainManager::submitCommandBuffer(VkCommandBuffer cmd,
   // All queue submissions get a fence that CPU will wait
   // on for synchronization purposes.
   VkFence fence =
-      _perFrame[_swapchainIndex]->fenceManager.requestClearedFence();
+      _backbuffers[_swapchainIndex]->_fenceManager.requestClearedFence();
 
   VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
   info.commandBufferCount = 1;
@@ -188,7 +148,8 @@ bool SwapchainManager::presentImage(unsigned index) {
   VkPresentInfoKHR present = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &_perFrame[_swapchainIndex]->swapchainReleaseSemaphore,
+      .pWaitSemaphores =
+          &_backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore,
       .swapchainCount = 1,
       .pSwapchains = &_swapchain,
       .pImageIndices = &index,
@@ -210,33 +171,36 @@ void SwapchainManager::submitSwapchain(VkCommandBuffer cmd) {
   // successfully been waited on.
   // If we aren't using acquire semaphores, we aren't using release semaphores
   // either.
-  if (_perFrame[_swapchainIndex]->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
-      _perFrame[_swapchainIndex]->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
+  if (_backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore ==
+          VK_NULL_HANDLE &&
+      _backbuffers[_swapchainIndex]->_swapchainAcquireSemaphore !=
+          VK_NULL_HANDLE) {
     VkSemaphore releaseSemaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VK_CHECK(
         vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &releaseSemaphore));
-    _perFrame[_swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
+    _backbuffers[_swapchainIndex]->setSwapchainReleaseSemaphore(
+        releaseSemaphore);
   }
 
-  submitCommandBuffer(cmd,
-                      _perFrame[_swapchainIndex]->swapchainAcquireSemaphore,
-                      _perFrame[_swapchainIndex]->swapchainReleaseSemaphore);
+  submitCommandBuffer(
+      cmd, _backbuffers[_swapchainIndex]->_swapchainAcquireSemaphore,
+      _backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore);
 }
 
 VkCommandBuffer
 SwapchainManager::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
   // Request a fresh command buffer.
   VkCommandBuffer cmd =
-      _perFrame[_swapchainIndex]->commandManager.requestCommandBuffer();
+      _backbuffers[_swapchainIndex]->_commandManager.requestCommandBuffer();
 
   return cmd;
 }
 
 void SwapchainManager::setRenderingThreadCount(unsigned count) {
   // vkQueueWaitIdle(_device->Queue);
-  for (auto &pFrame : _perFrame)
+  for (auto &pFrame : _backbuffers)
     pFrame->setSecondaryCommandManagersCount(count);
   _renderingThreadCount = count;
 }

@@ -76,13 +76,13 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
 
     auto size = this->_swapchain->size();
 
-    this->_pipeline->render(cmd, backbuffer->framebuffer, size);
+    this->_pipeline->render(cmd, backbuffer->_framebuffer, size);
 
     // Submit it to the queue.
     this->_swapchain->submitSwapchain(cmd);
 
     // present
-    this->_swapchain->presentImage(backbuffer->index);
+    this->_swapchain->presentImage(backbuffer->_index);
 
     _frameCount++;
     if (_frameCount == 100) {

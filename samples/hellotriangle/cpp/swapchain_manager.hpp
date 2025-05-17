@@ -1,6 +1,5 @@
 #pragma once
 #include "backbuffer.hpp"
-#include "per_frame.hpp"
 
 #include <vulkan/vulkan.h>
 
@@ -15,8 +14,7 @@ class SwapchainManager {
   VkFormat _format;
 
   std::vector<VkImage> _swapchainImages;
-  std::vector<std::shared_ptr<Backbuffer>> _backbuffers;
-  std::vector<std::unique_ptr<PerFrame>> _perFrame;
+  std::vector<std::shared_ptr<class Backbuffer>> _backbuffers;
   unsigned _swapchainIndex = 0;
   unsigned _renderingThreadCount = 0;
 
@@ -47,8 +45,8 @@ private:
 public:
   VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
     _swapchainIndex = index;
-    _perFrame[_swapchainIndex]->beginFrame();
-    return _perFrame[_swapchainIndex]->setSwapchainAcquireSemaphore(
+    _backbuffers[_swapchainIndex]->beginFrame();
+    return _backbuffers[_swapchainIndex]->setSwapchainAcquireSemaphore(
         acquireSemaphore);
   }
   VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer);
