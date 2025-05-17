@@ -121,29 +121,6 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   return ptr;
 }
 
-void SwapchainManager::submitCommandBuffer(VkCommandBuffer cmd,
-                                           VkSemaphore acquireSemaphore,
-                                           VkSemaphore releaseSemaphore) {
-  // All queue submissions get a fence that CPU will wait
-  // on for synchronization purposes.
-  VkFence fence =
-      _backbuffers[_swapchainIndex]->_fenceManager.requestClearedFence();
-
-  VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
-  info.commandBufferCount = 1;
-  info.pCommandBuffers = &cmd;
-
-  const VkPipelineStageFlags waitStage =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  info.waitSemaphoreCount = acquireSemaphore != VK_NULL_HANDLE ? 1 : 0;
-  info.pWaitSemaphores = &acquireSemaphore;
-  info.pWaitDstStageMask = &waitStage;
-  info.signalSemaphoreCount = releaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
-  info.pSignalSemaphores = &releaseSemaphore;
-
-  VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &info, fence));
-}
-
 bool SwapchainManager::presentImage(unsigned index) {
   VkPresentInfoKHR present = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -184,9 +161,7 @@ void SwapchainManager::submitSwapchain(VkCommandBuffer cmd) {
         releaseSemaphore);
   }
 
-  submitCommandBuffer(
-      cmd, _backbuffers[_swapchainIndex]->_swapchainAcquireSemaphore,
-      _backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore);
+  _backbuffers[_swapchainIndex]->submitCommandBuffer(_graphicsQueue, cmd);
 }
 
 VkCommandBuffer

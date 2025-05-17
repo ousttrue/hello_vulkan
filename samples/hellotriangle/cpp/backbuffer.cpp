@@ -82,3 +82,28 @@ void Backbuffer::beginFrame() {
     pManager->beginFrame();
   }
 }
+
+void Backbuffer::submitCommandBuffer(VkQueue graphicsQueue,
+                                     VkCommandBuffer cmd) {
+  // All queue submissions get a fence that CPU will wait
+  // on for synchronization purposes.
+  VkFence fence =
+      // _backbuffers[_swapchainIndex]->
+      _fenceManager.requestClearedFence();
+
+  VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+  info.commandBufferCount = 1;
+  info.pCommandBuffers = &cmd;
+
+  const VkPipelineStageFlags waitStage =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  info.waitSemaphoreCount =
+      _swapchainAcquireSemaphore != VK_NULL_HANDLE ? 1 : 0;
+  info.pWaitSemaphores = &_swapchainAcquireSemaphore;
+  info.pWaitDstStageMask = &waitStage;
+  info.signalSemaphoreCount =
+      _swapchainReleaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
+  info.pSignalSemaphores = &_swapchainReleaseSemaphore;
+
+  VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &info, fence));
+}

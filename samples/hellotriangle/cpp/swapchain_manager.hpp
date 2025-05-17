@@ -38,8 +38,6 @@ public:
   }
 
 private:
-  void submitCommandBuffer(VkCommandBuffer, VkSemaphore acquireSemaphore,
-                           VkSemaphore releaseSemaphore);
   void setRenderingThreadCount(unsigned count);
 
 public:
