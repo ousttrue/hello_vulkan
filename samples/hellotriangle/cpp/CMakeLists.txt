@@ -4,7 +4,6 @@ add_library(
   main.cpp
   extensions.cpp
   dispatcher.cpp
-  platform.cpp
   device_manager.cpp
   swapchain_manager.cpp
   backbuffer.cpp

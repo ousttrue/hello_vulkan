@@ -4,19 +4,30 @@
 
 #include <memory>
 
-struct Dispatcher {
-  std::shared_ptr<class Platform> pPlatform;
-  std::shared_ptr<class Pipeline> pPipeline;
-  bool active = false;
+#include "common.hpp"
 
-  unsigned frameCount = 0;
-  double startTime = 0;
+struct Dispatcher {
+  bool _active = false;
+
+  std::shared_ptr<class DeviceManager> _device;
+  std::shared_ptr<class Pipeline> _pipeline;
+  std::shared_ptr<class SemaphoreManager> _semaphoreManager;
+  std::shared_ptr<class SwapchainManager> _swapchain;
+
+  unsigned _frameCount = 0;
+  double _startTime = 0;
 
 public:
-  bool isReady() const { return this->pPipeline && this->active; }
+  bool isReady() const { return _pipeline && _active; }
   void onResume();
   void onPause();
   void onInitWindow(ANativeWindow *window, AAssetManager *assetManager);
   void onTermWindow();
   bool onFrame(AAssetManager *assetManager);
+
+private:
+  std::shared_ptr<class Backbuffer> getBackbuffer(VkRenderPass renderPass);
+  MaliSDK::Result acquireNextImage(unsigned *index, VkRenderPass renderPass);
+  MaliSDK::Result initSwapchain(VkRenderPass renderPass);
+  MaliSDK::Result initVulkan(ANativeWindow *window);
 };

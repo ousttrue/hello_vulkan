@@ -150,8 +150,9 @@ Pipeline::~Pipeline() {
   vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
-std::shared_ptr<Pipeline> Pipeline::create(VkDevice device, VkFormat format,
-                                           AAssetManager *assetManager) {
+std::shared_ptr<Pipeline>
+Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
+                 const VkPhysicalDeviceMemoryProperties &props) {
   //
   // RenderPass
   //
@@ -378,6 +379,9 @@ std::shared_ptr<Pipeline> Pipeline::create(VkDevice device, VkFormat format,
 
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline(
       device, renderPass, pipelineLayout, pipeline, pipelineCache));
+
+  ptr->initVertexBuffer(props);
+
   return ptr;
 }
 
