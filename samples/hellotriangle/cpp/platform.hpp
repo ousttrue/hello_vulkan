@@ -45,30 +45,15 @@ public:
   }
 
 private:
-  unsigned getNumSwapchainImages() const { return swapchainImages.size(); }
   void destroySwapchain();
-  MaliSDK::Result initSwapchain(const VkSurfaceCapabilitiesKHR &surfaceProperties);
+  MaliSDK::Result
+  initSwapchain(const VkSurfaceCapabilitiesKHR &surfaceProperties);
   MaliSDK::Result initVulkan(ANativeWindow *window);
-
-  void onPause() { destroySwapchain(); }
-
   MaliSDK::Result onPlatformUpdate();
-  // void waitIdle() { vkDeviceWaitIdle(device); }
+
   std::vector<std::unique_ptr<MaliSDK::PerFrame>> perFrame;
   unsigned swapchainIndex = 0;
   unsigned renderingThreadCount = 0;
-  VkCommandBuffer requestPrimaryCommandBuffer() {
-    return perFrame[swapchainIndex]->commandManager.requestCommandBuffer();
-  }
-  const VkSemaphore &getSwapchainReleaseSemaphore() const {
-    return perFrame[swapchainIndex]->swapchainReleaseSemaphore;
-  }
-  const VkSemaphore &getSwapchainAcquireSemaphore() const {
-    return perFrame[swapchainIndex]->swapchainAcquireSemaphore;
-  }
-  MaliSDK::FenceManager &getFenceManager() {
-    return perFrame[swapchainIndex]->fenceManager;
-  }
   void submitCommandBuffer(VkCommandBuffer, VkSemaphore acquireSemaphore,
                            VkSemaphore releaseSemaphore);
   VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
@@ -77,5 +62,5 @@ private:
     return perFrame[swapchainIndex]->setSwapchainAcquireSemaphore(
         acquireSemaphore);
   }
-  void setRenderingThreadCount(unsigned count) ;
+  void setRenderingThreadCount(unsigned count);
 };

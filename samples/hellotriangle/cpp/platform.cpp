@@ -237,17 +237,17 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
 }
 
 MaliSDK::Result Platform::presentImage(unsigned index) {
-  VkResult result;
-  VkPresentInfoKHR present = {VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
-  present.swapchainCount = 1;
-  present.pSwapchains = &swapchain;
-  present.pImageIndices = &index;
-  present.pResults = &result;
-  present.waitSemaphoreCount = 1;
-  present.pWaitSemaphores = &getSwapchainReleaseSemaphore();
+  VkPresentInfoKHR present = {
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &perFrame[swapchainIndex]->swapchainReleaseSemaphore,
+      .swapchainCount = 1,
+      .pSwapchains = &swapchain,
+      .pImageIndices = &index,
+      .pResults = nullptr,
+  };
 
   VkResult res = vkQueuePresentKHR(_device->Queue, &present);
-
   if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
     return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
   else if (res != VK_SUCCESS)
@@ -262,8 +262,8 @@ void Platform::submitSwapchain(VkCommandBuffer cmd) {
   // successfully been waited on.
   // If we aren't using acquire semaphores, we aren't using release semaphores
   // either.
-  if (getSwapchainReleaseSemaphore() == VK_NULL_HANDLE &&
-      getSwapchainAcquireSemaphore() != VK_NULL_HANDLE) {
+  if (perFrame[swapchainIndex]->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
+      perFrame[swapchainIndex]->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
     VkSemaphore releaseSemaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -272,8 +272,8 @@ void Platform::submitSwapchain(VkCommandBuffer cmd) {
     perFrame[swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
   }
 
-  submitCommandBuffer(cmd, getSwapchainAcquireSemaphore(),
-                      getSwapchainReleaseSemaphore());
+  submitCommandBuffer(cmd, perFrame[swapchainIndex]->swapchainAcquireSemaphore,
+                      perFrame[swapchainIndex]->swapchainReleaseSemaphore);
 }
 
 void Platform::submitCommandBuffer(VkCommandBuffer cmd,
@@ -281,7 +281,7 @@ void Platform::submitCommandBuffer(VkCommandBuffer cmd,
                                    VkSemaphore releaseSemaphore) {
   // All queue submissions get a fence that CPU will wait
   // on for synchronization purposes.
-  VkFence fence = getFenceManager().requestClearedFence();
+  VkFence fence = perFrame[swapchainIndex]->fenceManager.requestClearedFence();
 
   VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
   info.commandBufferCount = 1;
@@ -306,7 +306,7 @@ MaliSDK::Result Platform::onPlatformUpdate() {
   // This makes it very easy to keep track of when we can reset command buffers
   // and such.
   perFrame.clear();
-  for (unsigned i = 0; i < this->getNumSwapchainImages(); i++)
+  for (unsigned i = 0; i < swapchainImages.size(); i++)
     perFrame.emplace_back(new MaliSDK::PerFrame(
         _device->Device, _device->Selected.SelectedQueueFamilyIndex));
 
@@ -318,14 +318,8 @@ MaliSDK::Result Platform::onPlatformUpdate() {
 VkCommandBuffer
 Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
   // Request a fresh command buffer.
-  VkCommandBuffer cmd = requestPrimaryCommandBuffer();
-
-  // We will only submit this once before it's recycled.
-  VkCommandBufferBeginInfo beginInfo = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(cmd, &beginInfo);
+  VkCommandBuffer cmd =
+      perFrame[swapchainIndex]->commandManager.requestCommandBuffer();
 
   return cmd;
 }

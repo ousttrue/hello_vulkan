@@ -63,6 +63,14 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
 
     // render
     auto cmd = this->pPlatform->beginRender(backbuffer);
+
+    // We will only submit this once before it's recycled.
+    VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cmd, &beginInfo);
+
     auto dim = this->pPlatform->getSwapchainDimesions();
 
     pPipeline->render(cmd, backbuffer->framebuffer, dim.width, dim.height);
