@@ -12,8 +12,9 @@ SwapchainManager::~SwapchainManager() {
 // VkSwapchainKHR oldSwapchain = swapchain;
 std::shared_ptr<SwapchainManager>
 SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
-                         VkDevice device, VkQueue presentaionQueue,
-                         VkSwapchainKHR oldSwapchain) {
+                         VkDevice device, uint32_t graphicsQueueIndex,
+                         VkQueue graphicsQueue, VkQueue presentaionQueue,
+                         VkRenderPass renderPass, VkSwapchainKHR oldSwapchain) {
   VkSurfaceFormatKHR format = DeviceManager::getSurfaceFormat(gpu, surface);
   if (format.format == VK_FORMAT_UNDEFINED) {
     LOGE("VK_FORMAT_UNDEFINED");
@@ -96,7 +97,7 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   // }
 
   auto ptr = std::shared_ptr<SwapchainManager>(
-      new SwapchainManager(device, presentaionQueue, swapchain));
+      new SwapchainManager(device, graphicsQueue, presentaionQueue, swapchain));
   ptr->swapchainDimensions.width = swapchainSize.width;
   ptr->swapchainDimensions.height = swapchainSize.height;
   ptr->swapchainDimensions.format = format.format;
@@ -107,11 +108,62 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount,
                                    ptr->swapchainImages.data()));
 
+  // Initialize per-frame resources.
+  // Every swapchain image has its own command pool and fence manager.
+  // This makes it very easy to keep track of when we can reset command buffers
+  // and such.
+  ptr->perFrame.clear();
+  for (unsigned i = 0; i < ptr->swapchainImages.size(); i++)
+    ptr->perFrame.emplace_back(
+        new MaliSDK::PerFrame(device, graphicsQueueIndex));
+  ptr->setRenderingThreadCount(ptr->renderingThreadCount);
+
+  // In case we're reinitializing the swapchain, terminate the old one first.
+  ptr->backbuffers.clear();
+
+  // For all backbuffers in the swapchain ...
+  for (uint32_t i = 0; i < ptr->swapchainImages.size(); ++i) {
+    auto image = ptr->swapchainImages[i];
+    auto backbuffer = std::make_shared<Backbuffer>(device, i);
+    backbuffer->image = image;
+
+    // Create an image view which we can render into.
+    VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = ptr->swapchainDimensions.format;
+    view.image = image;
+    view.subresourceRange.baseMipLevel = 0;
+    view.subresourceRange.baseArrayLayer = 0;
+    view.subresourceRange.levelCount = 1;
+    view.subresourceRange.layerCount = 1;
+    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    view.components.r = VK_COMPONENT_SWIZZLE_R;
+    view.components.g = VK_COMPONENT_SWIZZLE_G;
+    view.components.b = VK_COMPONENT_SWIZZLE_B;
+    view.components.a = VK_COMPONENT_SWIZZLE_A;
+
+    VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer->view));
+
+    // Build the framebuffer.
+    VkFramebufferCreateInfo fbInfo = {
+        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    fbInfo.renderPass = renderPass;
+    fbInfo.attachmentCount = 1;
+    fbInfo.pAttachments = &backbuffer->view;
+    fbInfo.width = ptr->swapchainDimensions.width;
+    fbInfo.height = ptr->swapchainDimensions.height;
+    fbInfo.layers = 1;
+
+    VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,
+                                 &backbuffer->framebuffer));
+
+    ptr->backbuffers.push_back(backbuffer);
+  }
+
   return ptr;
 }
 
-void SwapchainManager::submitCommandBuffer(VkQueue graphicsQueue,
-                                           VkCommandBuffer cmd,
+void SwapchainManager::submitCommandBuffer(VkCommandBuffer cmd,
                                            VkSemaphore acquireSemaphore,
                                            VkSemaphore releaseSemaphore) {
   // All queue submissions get a fence that CPU will wait
@@ -130,7 +182,7 @@ void SwapchainManager::submitCommandBuffer(VkQueue graphicsQueue,
   info.signalSemaphoreCount = releaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
   info.pSignalSemaphores = &releaseSemaphore;
 
-  VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &info, fence));
+  VK_CHECK(vkQueueSubmit(GraphicsQueue, 1, &info, fence));
 }
 
 bool SwapchainManager::presentImage(unsigned index) {
@@ -156,38 +208,31 @@ bool SwapchainManager::presentImage(unsigned index) {
 ///
 /// Platform
 ///
-void Platform::submitSwapchain(VkCommandBuffer cmd) {
+void SwapchainManager::submitSwapchain(VkCommandBuffer cmd) {
   // For the first frames, we will create a release semaphore.
   // This can be reused every frame. Semaphores are reset when they have been
   // successfully been waited on.
   // If we aren't using acquire semaphores, we aren't using release semaphores
   // either.
-  if (_swapchain->perFrame[_swapchain->swapchainIndex]
-              ->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-              ->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
+  if (perFrame[swapchainIndex]->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
+      perFrame[swapchainIndex]->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
     VkSemaphore releaseSemaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(vkCreateSemaphore(_device->Device, &semaphoreInfo, nullptr,
-                               &releaseSemaphore));
-    _swapchain->perFrame[_swapchain->swapchainIndex]
-        ->setSwapchainReleaseSemaphore(releaseSemaphore);
+    VK_CHECK(
+        vkCreateSemaphore(Device, &semaphoreInfo, nullptr, &releaseSemaphore));
+    perFrame[swapchainIndex]->setSwapchainReleaseSemaphore(releaseSemaphore);
   }
 
-  _swapchain->submitCommandBuffer(
-      _device->Queue, cmd,
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-          ->swapchainAcquireSemaphore,
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-          ->swapchainReleaseSemaphore);
+  submitCommandBuffer(cmd, perFrame[swapchainIndex]->swapchainAcquireSemaphore,
+                      perFrame[swapchainIndex]->swapchainReleaseSemaphore);
 }
 
 VkCommandBuffer
-Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
+SwapchainManager::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
   // Request a fresh command buffer.
-  VkCommandBuffer cmd = _swapchain->perFrame[_swapchain->swapchainIndex]
-                            ->commandManager.requestCommandBuffer();
+  VkCommandBuffer cmd =
+      perFrame[swapchainIndex]->commandManager.requestCommandBuffer();
 
   return cmd;
 }
@@ -260,71 +305,12 @@ const VkPhysicalDeviceMemoryProperties &Platform::getMemoryProperties() const {
 
 MaliSDK::Result Platform::initSwapchain(VkRenderPass renderPass) {
   _swapchain = SwapchainManager::create(
-      _device->Selected.Gpu, _device->Surface, _device->Device, _device->Queue,
-      _swapchain ? _swapchain->Swapchain : nullptr);
+      _device->Selected.Gpu, _device->Surface, _device->Device,
+      _device->Selected.SelectedQueueFamilyIndex, _device->Queue,
+      _device->Queue, renderPass, _swapchain ? _swapchain->Handle() : nullptr);
   if (!_swapchain) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  // Initialize per-frame resources.
-  // Every swapchain image has its own command pool and fence manager.
-  // This makes it very easy to keep track of when we can reset command buffers
-  // and such.
-  _swapchain->perFrame.clear();
-  for (unsigned i = 0; i < _swapchain->swapchainImages.size(); i++)
-    _swapchain->perFrame.emplace_back(new MaliSDK::PerFrame(
-        _device->Device, _device->Selected.SelectedQueueFamilyIndex));
-  _swapchain->setRenderingThreadCount(_swapchain->renderingThreadCount);
-
-  // updateSwapchain(renderPass);
-  // Tear down backbuffers.
-  // If our swapchain changes, we will call this, and create a new swapchain.
-  vkQueueWaitIdle(_device->Queue);
-
-  // In case we're reinitializing the swapchain, terminate the old one first.
-  _swapchain->backbuffers.clear();
-
-  auto device = _device->Device;
-
-  // For all backbuffers in the swapchain ...
-  for (uint32_t i = 0; i < _swapchain->swapchainImages.size(); ++i) {
-    auto image = _swapchain->swapchainImages[i];
-    auto backbuffer = std::make_shared<Backbuffer>(device, i);
-    backbuffer->image = image;
-
-    // Create an image view which we can render into.
-    VkImageViewCreateInfo view = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    view.format = _swapchain->swapchainDimensions.format;
-    view.image = image;
-    view.subresourceRange.baseMipLevel = 0;
-    view.subresourceRange.baseArrayLayer = 0;
-    view.subresourceRange.levelCount = 1;
-    view.subresourceRange.layerCount = 1;
-    view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    view.components.r = VK_COMPONENT_SWIZZLE_R;
-    view.components.g = VK_COMPONENT_SWIZZLE_G;
-    view.components.b = VK_COMPONENT_SWIZZLE_B;
-    view.components.a = VK_COMPONENT_SWIZZLE_A;
-
-    VK_CHECK(vkCreateImageView(device, &view, nullptr, &backbuffer->view));
-
-    // Build the framebuffer.
-    VkFramebufferCreateInfo fbInfo = {
-        VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-    fbInfo.renderPass = renderPass;
-    fbInfo.attachmentCount = 1;
-    fbInfo.pAttachments = &backbuffer->view;
-    fbInfo.width = _swapchain->swapchainDimensions.width;
-    fbInfo.height = _swapchain->swapchainDimensions.height;
-    fbInfo.layers = 1;
-
-    VK_CHECK(vkCreateFramebuffer(device, &fbInfo, nullptr,
-                                 &backbuffer->framebuffer));
-
-    _swapchain->backbuffers.push_back(backbuffer);
-  }
-
   return MaliSDK::RESULT_SUCCESS;
 }
 
@@ -341,9 +327,8 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image,
   auto device = _device->Device;
   auto queue = _device->Queue;
   auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
-  VkResult res =
-      vkAcquireNextImageKHR(device, _swapchain->Swapchain, UINT64_MAX,
-                            acquireSemaphore, VK_NULL_HANDLE, image);
+  VkResult res = vkAcquireNextImageKHR(device, _swapchain->Handle(), UINT64_MAX,
+                                       acquireSemaphore, VK_NULL_HANDLE, image);
 
   if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
     vkQueueWaitIdle(queue);
@@ -373,4 +358,25 @@ MaliSDK::Result Platform::acquireNextImage(unsigned *image,
 
     return MaliSDK::RESULT_SUCCESS;
   }
+}
+
+std::shared_ptr<Backbuffer> Platform::getBackbuffer(VkRenderPass renderPass) {
+  unsigned index;
+  for (auto res = this->acquireNextImage(&index, renderPass); true;
+       res = this->acquireNextImage(&index, renderPass)) {
+    if (res == MaliSDK::RESULT_SUCCESS) {
+      break;
+    }
+    if (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
+      // Handle Outdated error in acquire.
+      LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+      continue;
+    }
+    // error
+    LOGE("Unrecoverable swapchain error.\n");
+    return {};
+  }
+
+  // swapchain current backbuffer
+  return _swapchain->getBackbuffer(index);
 }

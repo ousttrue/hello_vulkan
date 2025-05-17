@@ -42,29 +42,10 @@ void Dispatcher::onTermWindow() {
 
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
   if (this->active && this->pPlatform && this->pPipeline) {
-    unsigned index;
-    for (auto res = this->pPlatform->acquireNextImage(
-             &index, this->pPipeline->renderPass());
-         true; res = this->pPlatform->acquireNextImage(
-                   &index, this->pPipeline->renderPass())) {
-      if (res == MaliSDK::RESULT_SUCCESS) {
-        break;
-      }
-      if (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
-        // Handle Outdated error in acquire.
-        LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-        continue;
-      }
-      // error
-      LOGE("Unrecoverable swapchain error.\n");
-      return false;
-    }
-
-    // swapchain current backbuffer
-    auto backbuffer = pPlatform->_swapchain->getBackbuffer(index);
+    auto backbuffer = pPlatform->getBackbuffer(this->pPipeline->renderPass());
 
     // render
-    auto cmd = this->pPlatform->beginRender(backbuffer);
+    auto cmd = this->pPlatform->_swapchain->beginRender(backbuffer);
 
     // We will only submit this once before it's recycled.
     VkCommandBufferBeginInfo beginInfo = {
@@ -78,7 +59,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     pPipeline->render(cmd, backbuffer->framebuffer, dim.width, dim.height);
 
     // Submit it to the queue.
-    pPlatform->submitSwapchain(cmd);
+    pPlatform->_swapchain->submitSwapchain(cmd);
 
     // present
     this->pPlatform->_swapchain->presentImage(backbuffer->index);
