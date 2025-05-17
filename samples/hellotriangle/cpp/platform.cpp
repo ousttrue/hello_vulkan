@@ -5,41 +5,6 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-static VkSurfaceFormatKHR getSurfaceFormat(VkPhysicalDevice gpu,
-                                           VkSurfaceKHR surface) {
-  uint32_t formatCount;
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount, nullptr);
-  std::vector<VkSurfaceFormatKHR> formats(formatCount);
-  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount,
-                                       formats.data());
-
-  if (formatCount == 0) {
-    LOGE("Surface has no formats.\n");
-    // return MaliSDK::RESULT_ERROR_GENERIC;
-    return {
-        .format = VK_FORMAT_UNDEFINED,
-    };
-  } else if (formatCount == 1) {
-    return formats[0];
-  } else {
-    for (auto &candidate : formats) {
-      switch (candidate.format) {
-      // Favor UNORM formats as the samples are not written for sRGB currently.
-      case VK_FORMAT_R8G8B8A8_UNORM:
-      case VK_FORMAT_B8G8R8A8_UNORM:
-      case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-        return candidate;
-
-      default:
-        break;
-      }
-    }
-    return {
-        .format = VK_FORMAT_UNDEFINED,
-    };
-  }
-}
-
 SwapchainManager::~SwapchainManager() {
   vkDestroySwapchainKHR(Device, Swapchain, nullptr);
 }
@@ -47,8 +12,9 @@ SwapchainManager::~SwapchainManager() {
 // VkSwapchainKHR oldSwapchain = swapchain;
 std::shared_ptr<SwapchainManager>
 SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
-                         VkDevice device, VkSwapchainKHR oldSwapchain) {
-  VkSurfaceFormatKHR format = getSurfaceFormat(gpu, surface);
+                         VkDevice device, VkQueue presentaionQueue,
+                         VkSwapchainKHR oldSwapchain) {
+  VkSurfaceFormatKHR format = DeviceManager::getSurfaceFormat(gpu, surface);
   if (format.format == VK_FORMAT_UNDEFINED) {
     LOGE("VK_FORMAT_UNDEFINED");
     abort();
@@ -130,7 +96,7 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   // }
 
   auto ptr = std::shared_ptr<SwapchainManager>(
-      new SwapchainManager(device, swapchain));
+      new SwapchainManager(device, presentaionQueue, swapchain));
   ptr->swapchainDimensions.width = swapchainSize.width;
   ptr->swapchainDimensions.height = swapchainSize.height;
   ptr->swapchainDimensions.format = format.format;
@@ -167,6 +133,65 @@ void SwapchainManager::submitCommandBuffer(VkQueue graphicsQueue,
   VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &info, fence));
 }
 
+bool SwapchainManager::presentImage(unsigned index) {
+  VkPresentInfoKHR present = {
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &perFrame[swapchainIndex]->swapchainReleaseSemaphore,
+      .swapchainCount = 1,
+      .pSwapchains = &Swapchain,
+      .pImageIndices = &index,
+      .pResults = nullptr,
+  };
+
+  VkResult res = vkQueuePresentKHR(PresentationQueue, &present);
+  if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
+    return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
+  else if (res != VK_SUCCESS)
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  else
+    return MaliSDK::RESULT_SUCCESS;
+}
+
+///
+/// Platform
+///
+void Platform::submitSwapchain(VkCommandBuffer cmd) {
+  // For the first frames, we will create a release semaphore.
+  // This can be reused every frame. Semaphores are reset when they have been
+  // successfully been waited on.
+  // If we aren't using acquire semaphores, we aren't using release semaphores
+  // either.
+  if (_swapchain->perFrame[_swapchain->swapchainIndex]
+              ->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
+      _swapchain->perFrame[_swapchain->swapchainIndex]
+              ->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
+    VkSemaphore releaseSemaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VK_CHECK(vkCreateSemaphore(_device->Device, &semaphoreInfo, nullptr,
+                               &releaseSemaphore));
+    _swapchain->perFrame[_swapchain->swapchainIndex]
+        ->setSwapchainReleaseSemaphore(releaseSemaphore);
+  }
+
+  _swapchain->submitCommandBuffer(
+      _device->Queue, cmd,
+      _swapchain->perFrame[_swapchain->swapchainIndex]
+          ->swapchainAcquireSemaphore,
+      _swapchain->perFrame[_swapchain->swapchainIndex]
+          ->swapchainReleaseSemaphore);
+}
+
+VkCommandBuffer
+Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
+  // Request a fresh command buffer.
+  VkCommandBuffer cmd = _swapchain->perFrame[_swapchain->swapchainIndex]
+                            ->commandManager.requestCommandBuffer();
+
+  return cmd;
+}
+
 void SwapchainManager::setRenderingThreadCount(unsigned count) {
   // vkQueueWaitIdle(_device->Queue);
   for (auto &pFrame : perFrame)
@@ -201,17 +226,6 @@ MaliSDK::Result Platform::initVulkan(ANativeWindow *window) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
 
-  auto _res = initSwapchain();
-  if (_res != MaliSDK::RESULT_SUCCESS) {
-    LOGE("Failed to init swapchain.");
-    return _res;
-  }
-
-  _res = onPlatformUpdate();
-  if (_res != MaliSDK::RESULT_SUCCESS) {
-    return _res;
-  }
-
   semaphoreManager = new MaliSDK::SemaphoreManager(_device->Device);
   return MaliSDK::RESULT_SUCCESS;
 }
@@ -244,113 +258,13 @@ const VkPhysicalDeviceMemoryProperties &Platform::getMemoryProperties() const {
   return _device->Selected.MemoryProperties;
 }
 
-MaliSDK::Result Platform::initSwapchain() {
+MaliSDK::Result Platform::initSwapchain(VkRenderPass renderPass) {
   _swapchain = SwapchainManager::create(
-      _device->Selected.Gpu, _device->Surface, _device->Device,
+      _device->Selected.Gpu, _device->Surface, _device->Device, _device->Queue,
       _swapchain ? _swapchain->Swapchain : nullptr);
   if (!_swapchain) {
     return MaliSDK::RESULT_ERROR_GENERIC;
   }
-
-  return MaliSDK::RESULT_SUCCESS;
-}
-
-MaliSDK::Result Platform::acquireNextImage(unsigned *image) {
-  if (!_swapchain) {
-    // Recreate swapchain.
-    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
-      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
-    else
-      return MaliSDK::RESULT_ERROR_GENERIC;
-  }
-
-  auto device = _device->Device;
-  auto queue = _device->Queue;
-  auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
-  VkResult res =
-      vkAcquireNextImageKHR(device, _swapchain->Swapchain, UINT64_MAX,
-                            acquireSemaphore, VK_NULL_HANDLE, image);
-
-  if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
-    vkQueueWaitIdle(queue);
-    semaphoreManager->addClearedSemaphore(acquireSemaphore);
-
-    // Recreate swapchain.
-    if (initSwapchain() == MaliSDK::RESULT_SUCCESS)
-      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
-    else
-      return MaliSDK::RESULT_ERROR_GENERIC;
-  } else if (res != VK_SUCCESS) {
-    vkQueueWaitIdle(queue);
-    semaphoreManager->addClearedSemaphore(acquireSemaphore);
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  } else {
-    // Signal the underlying context that we're using this backbuffer now.
-    // This will also wait for all fences associated with this swapchain image
-    // to complete first.
-    // When submitting command buffer that writes to swapchain, we need to wait
-    // for this semaphore first.
-    // Also, delete the older semaphore.
-    auto oldSemaphore = _swapchain->beginFrame(*image, acquireSemaphore);
-
-    // Recycle the old semaphore back into the semaphore manager.
-    if (oldSemaphore != VK_NULL_HANDLE)
-      semaphoreManager->addClearedSemaphore(oldSemaphore);
-
-    return MaliSDK::RESULT_SUCCESS;
-  }
-}
-
-MaliSDK::Result Platform::presentImage(unsigned index) {
-  VkPresentInfoKHR present = {
-      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-      .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &_swapchain->perFrame[_swapchain->swapchainIndex]
-                              ->swapchainReleaseSemaphore,
-      .swapchainCount = 1,
-      .pSwapchains = &_swapchain->Swapchain,
-      .pImageIndices = &index,
-      .pResults = nullptr,
-  };
-
-  VkResult res = vkQueuePresentKHR(_device->Queue, &present);
-  if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
-    return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
-  else if (res != VK_SUCCESS)
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  else
-    return MaliSDK::RESULT_SUCCESS;
-}
-
-void Platform::submitSwapchain(VkCommandBuffer cmd) {
-  // For the first frames, we will create a release semaphore.
-  // This can be reused every frame. Semaphores are reset when they have been
-  // successfully been waited on.
-  // If we aren't using acquire semaphores, we aren't using release semaphores
-  // either.
-  if (_swapchain->perFrame[_swapchain->swapchainIndex]
-              ->swapchainReleaseSemaphore == VK_NULL_HANDLE &&
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-              ->swapchainAcquireSemaphore != VK_NULL_HANDLE) {
-    VkSemaphore releaseSemaphore;
-    VkSemaphoreCreateInfo semaphoreInfo = {
-        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(vkCreateSemaphore(_device->Device, &semaphoreInfo, nullptr,
-                               &releaseSemaphore));
-    _swapchain->perFrame[_swapchain->swapchainIndex]
-        ->setSwapchainReleaseSemaphore(releaseSemaphore);
-  }
-
-  _swapchain->submitCommandBuffer(
-      _device->Queue, cmd,
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-          ->swapchainAcquireSemaphore,
-      _swapchain->perFrame[_swapchain->swapchainIndex]
-          ->swapchainReleaseSemaphore);
-}
-
-MaliSDK::Result Platform::onPlatformUpdate() {
-  // waitIdle();
 
   // Initialize per-frame resources.
   // Every swapchain image has its own command pool and fence manager.
@@ -360,22 +274,9 @@ MaliSDK::Result Platform::onPlatformUpdate() {
   for (unsigned i = 0; i < _swapchain->swapchainImages.size(); i++)
     _swapchain->perFrame.emplace_back(new MaliSDK::PerFrame(
         _device->Device, _device->Selected.SelectedQueueFamilyIndex));
-
   _swapchain->setRenderingThreadCount(_swapchain->renderingThreadCount);
 
-  return MaliSDK::RESULT_SUCCESS;
-}
-
-VkCommandBuffer
-Platform::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
-  // Request a fresh command buffer.
-  VkCommandBuffer cmd = _swapchain->perFrame[_swapchain->swapchainIndex]
-                            ->commandManager.requestCommandBuffer();
-
-  return cmd;
-}
-
-void Platform::updateSwapchain(VkRenderPass renderPass) {
+  // updateSwapchain(renderPass);
   // Tear down backbuffers.
   // If our swapchain changes, we will call this, and create a new swapchain.
   vkQueueWaitIdle(_device->Queue);
@@ -422,5 +323,54 @@ void Platform::updateSwapchain(VkRenderPass renderPass) {
                                  &backbuffer->framebuffer));
 
     _swapchain->backbuffers.push_back(backbuffer);
+  }
+
+  return MaliSDK::RESULT_SUCCESS;
+}
+
+MaliSDK::Result Platform::acquireNextImage(unsigned *image,
+                                           VkRenderPass renderPass) {
+  if (!_swapchain) {
+    // Recreate swapchain.
+    if (initSwapchain(renderPass) == MaliSDK::RESULT_SUCCESS)
+      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    else
+      return MaliSDK::RESULT_ERROR_GENERIC;
+  }
+
+  auto device = _device->Device;
+  auto queue = _device->Queue;
+  auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
+  VkResult res =
+      vkAcquireNextImageKHR(device, _swapchain->Swapchain, UINT64_MAX,
+                            acquireSemaphore, VK_NULL_HANDLE, image);
+
+  if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
+    vkQueueWaitIdle(queue);
+    semaphoreManager->addClearedSemaphore(acquireSemaphore);
+
+    // Recreate swapchain.
+    if (initSwapchain(renderPass) == MaliSDK::RESULT_SUCCESS)
+      return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
+    else
+      return MaliSDK::RESULT_ERROR_GENERIC;
+  } else if (res != VK_SUCCESS) {
+    vkQueueWaitIdle(queue);
+    semaphoreManager->addClearedSemaphore(acquireSemaphore);
+    return MaliSDK::RESULT_ERROR_GENERIC;
+  } else {
+    // Signal the underlying context that we're using this backbuffer now.
+    // This will also wait for all fences associated with this swapchain image
+    // to complete first.
+    // When submitting command buffer that writes to swapchain, we need to wait
+    // for this semaphore first.
+    // Also, delete the older semaphore.
+    auto oldSemaphore = _swapchain->beginFrame(*image, acquireSemaphore);
+
+    // Recycle the old semaphore back into the semaphore manager.
+    if (oldSemaphore != VK_NULL_HANDLE)
+      semaphoreManager->addClearedSemaphore(oldSemaphore);
+
+    return MaliSDK::RESULT_SUCCESS;
   }
 }

@@ -12,6 +12,7 @@ struct SwapchainDimensions {
 
 struct SwapchainManager {
   VkDevice Device;
+  VkQueue PresentationQueue;
   VkSwapchainKHR Swapchain;
   SwapchainDimensions swapchainDimensions;
 
@@ -21,22 +22,24 @@ struct SwapchainManager {
   unsigned swapchainIndex = 0;
   unsigned renderingThreadCount = 0;
 
-  SwapchainManager(VkDevice device, VkSwapchainKHR swapchain)
-      : Device(device), Swapchain(swapchain) {}
+  SwapchainManager(VkDevice device, VkQueue presentaionQueue,
+                   VkSwapchainKHR swapchain)
+      : Device(device), PresentationQueue(presentaionQueue),
+        Swapchain(swapchain) {}
   ~SwapchainManager();
-  static std::shared_ptr<SwapchainManager> create(VkPhysicalDevice gpu,
-                                                  VkSurfaceKHR surface,
-                                                  VkDevice device,
-                                                  VkSwapchainKHR oldSwapchain);
+  static std::shared_ptr<SwapchainManager>
+  create(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkDevice device,
+         VkQueue presentaionQueue, VkSwapchainKHR oldSwapchain);
 
-  VkFormat surfaceFormat() const { return swapchainDimensions.format; }
+  // VkFormat surfaceFormat() const { return swapchainDimensions.format; }
   std::shared_ptr<Backbuffer> getBackbuffer(uint32_t index) const {
     return backbuffers[index];
   }
   SwapchainDimensions getSwapchainDimesions() const {
     return swapchainDimensions;
   }
-  void submitCommandBuffer(VkQueue graphicsQueue, VkCommandBuffer, VkSemaphore acquireSemaphore,
+  void submitCommandBuffer(VkQueue graphicsQueue, VkCommandBuffer,
+                           VkSemaphore acquireSemaphore,
                            VkSemaphore releaseSemaphore);
   VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
     swapchainIndex = index;
@@ -45,15 +48,17 @@ struct SwapchainManager {
         acquireSemaphore);
   }
   void setRenderingThreadCount(unsigned count);
+
+  bool presentImage(unsigned index);
 };
 
 class Platform {
-  std::shared_ptr<class DeviceManager> _device;
   MaliSDK::SemaphoreManager *semaphoreManager = nullptr;
 
   Platform() = default;
 
 public:
+  std::shared_ptr<class DeviceManager> _device;
   std::shared_ptr<class SwapchainManager> _swapchain;
   ~Platform();
   Platform(Platform &&) = delete;
@@ -62,15 +67,12 @@ public:
 
   VkDevice getDevice() const;
   const VkPhysicalDeviceMemoryProperties &getMemoryProperties() const;
-  void updateSwapchain(VkRenderPass renderPass);
+
   VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer);
   void submitSwapchain(VkCommandBuffer cmdBuffer);
-  MaliSDK::Result presentImage(unsigned index);
-  MaliSDK::Result acquireNextImage(unsigned *index);
+  MaliSDK::Result acquireNextImage(unsigned *index, VkRenderPass renderPass);
 
 private:
-  MaliSDK::Result
-  initSwapchain();
+  MaliSDK::Result initSwapchain(VkRenderPass renderPass);
   MaliSDK::Result initVulkan(ANativeWindow *window);
-  MaliSDK::Result onPlatformUpdate();
 };

@@ -224,3 +224,40 @@ bool DeviceManager::createLogicalDevice(
 
   return true;
 }
+
+VkSurfaceFormatKHR DeviceManager::getSurfaceFormat(VkPhysicalDevice gpu,
+                                           VkSurfaceKHR surface) {
+  uint32_t formatCount;
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount, nullptr);
+  std::vector<VkSurfaceFormatKHR> formats(formatCount);
+  vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount,
+                                       formats.data());
+
+  if (formatCount == 0) {
+    LOGE("Surface has no formats.\n");
+    // return MaliSDK::RESULT_ERROR_GENERIC;
+    return {
+        .format = VK_FORMAT_UNDEFINED,
+    };
+  } else if (formatCount == 1) {
+    return formats[0];
+  } else {
+    for (auto &candidate : formats) {
+      switch (candidate.format) {
+      // Favor UNORM formats as the samples are not written for sRGB currently.
+      case VK_FORMAT_R8G8B8A8_UNORM:
+      case VK_FORMAT_B8G8R8A8_UNORM:
+      case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+        return candidate;
+
+      default:
+        break;
+      }
+    }
+    return {
+        .format = VK_FORMAT_UNDEFINED,
+    };
+  }
+}
+
+

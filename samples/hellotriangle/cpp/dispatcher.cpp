@@ -1,5 +1,6 @@
 #include "dispatcher.h"
 #include "common.hpp"
+#include "device_manager.hpp"
 #include "pipeline.hpp"
 #include "platform.hpp"
 #include <vulkan/vulkan_core.h>
@@ -24,11 +25,10 @@ void Dispatcher::onInitWindow(ANativeWindow *window,
   pPlatform = Platform::create(window);
   // pVulkanApp = VulkanApplication::create(
   //     pPlatform.get(), pPlatform->swapchainDimensions.format, assetManager);
-  pPipeline =
-      Pipeline::create(pPlatform->getDevice(),
-                       pPlatform->_swapchain->surfaceFormat(), assetManager);
+  pPipeline = Pipeline::create(pPlatform->getDevice(),
+                               pPlatform->_device->getSurfaceFormat().format,
+                               assetManager);
   pPipeline->initVertexBuffer(pPlatform->getMemoryProperties());
-  pPlatform->updateSwapchain(pPipeline->renderPass());
 
   this->startTime = getCurrentTime();
 }
@@ -43,15 +43,16 @@ void Dispatcher::onTermWindow() {
 bool Dispatcher::onFrame(AAssetManager *assetManager) {
   if (this->active && this->pPlatform && this->pPipeline) {
     unsigned index;
-    for (auto res = this->pPlatform->acquireNextImage(&index); true;
-         res = this->pPlatform->acquireNextImage(&index)) {
+    for (auto res = this->pPlatform->acquireNextImage(
+             &index, this->pPipeline->renderPass());
+         true; res = this->pPlatform->acquireNextImage(
+                   &index, this->pPipeline->renderPass())) {
       if (res == MaliSDK::RESULT_SUCCESS) {
         break;
       }
       if (res == MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN) {
         // Handle Outdated error in acquire.
         LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-        this->pPlatform->updateSwapchain(this->pPipeline->renderPass());
         continue;
       }
       // error
@@ -80,7 +81,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     pPlatform->submitSwapchain(cmd);
 
     // present
-    this->pPlatform->presentImage(backbuffer->index);
+    this->pPlatform->_swapchain->presentImage(backbuffer->index);
 
     frameCount++;
     if (frameCount == 100) {
