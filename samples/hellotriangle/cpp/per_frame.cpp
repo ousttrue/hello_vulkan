@@ -1,7 +1,5 @@
 #include "per_frame.hpp"
 
-namespace MaliSDK {
-
 PerFrame::PerFrame(VkDevice device, unsigned graphicsQueueIndex)
     : device(device), fenceManager(device),
       commandManager(device, VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -42,5 +40,3 @@ void PerFrame::beginFrame() {
   for (auto &pManager : secondaryCommandManagers)
     pManager->beginFrame();
 }
-
-} // namespace MaliSDK

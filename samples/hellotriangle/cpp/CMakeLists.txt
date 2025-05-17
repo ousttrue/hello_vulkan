@@ -6,6 +6,8 @@ add_library(
   dispatcher.cpp
   platform.cpp
   device_manager.cpp
+  swapchain_manager.cpp
+  backbuffer.cpp
   per_frame.cpp
   fence_manager.cpp
   semaphore_manager.cpp

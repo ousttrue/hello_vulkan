@@ -2,8 +2,6 @@
 #include "command_buffer_manager.hpp"
 #include "fence_manager.hpp"
 
-namespace MaliSDK {
-
 struct PerFrame {
   PerFrame(VkDevice device, unsigned graphicsQueueIndex);
   ~PerFrame();
@@ -21,5 +19,3 @@ struct PerFrame {
   VkSemaphore swapchainReleaseSemaphore = VK_NULL_HANDLE;
   unsigned queueIndex;
 };
-
-} // namespace MaliSDK

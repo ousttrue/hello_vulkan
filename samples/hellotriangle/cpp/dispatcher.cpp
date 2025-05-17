@@ -3,6 +3,7 @@
 #include "device_manager.hpp"
 #include "pipeline.hpp"
 #include "platform.hpp"
+#include "swapchain_manager.hpp"
 #include <vulkan/vulkan_core.h>
 
 /// @brief Get the current monotonic time in seconds.

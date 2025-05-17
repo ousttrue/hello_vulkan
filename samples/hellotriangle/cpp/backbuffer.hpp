@@ -8,6 +8,6 @@ struct Backbuffer {
   VkImageView view;
   VkFramebuffer framebuffer;
 
-  Backbuffer(VkDevice device, uint32_t i) : _device(device), index(i) {}
+  Backbuffer(VkDevice device, uint32_t i);
   ~Backbuffer();
 };
