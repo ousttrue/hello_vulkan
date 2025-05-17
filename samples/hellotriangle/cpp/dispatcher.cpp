@@ -70,7 +70,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     _swapchain = SwapchainManager::create(
         _device->Selected.Gpu, _device->Surface, _device->Device,
         _device->Selected.SelectedQueueFamilyIndex, _device->Queue,
-        _device->Queue, _pipeline->renderPass(), nullptr);
+        _pipeline->renderPass(), nullptr);
     if (!_swapchain) {
       // error ?
       LOGE("no swapchain");
@@ -99,31 +99,11 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
   // When submitting command buffer that writes to swapchain, we need to wait
   // for this semaphore first.
   // Also, delete the older semaphore.
-  backbuffer->beginFrame();
-  auto oldSemaphore =
-      backbuffer->setSwapchainAcquireSemaphore(acquireSemaphore);
-
+  auto [oldSemaphore, cmd] = backbuffer->beginFrame(acquireSemaphore);
   _swapchain->addClearedSemaphore(oldSemaphore);
-
-  // render
-  auto cmd = this->_swapchain->beginRender(backbuffer);
-
-  // We will only submit this once before it's recycled.
-  VkCommandBufferBeginInfo beginInfo = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(cmd, &beginInfo);
-
-  auto size = this->_swapchain->size();
-
-  this->_pipeline->render(cmd, backbuffer->framebuffer(), size);
-
-  // Submit it to the queue.
-  this->_swapchain->submitSwapchain(cmd);
-
-  // present
-  this->_swapchain->presentImage(backbuffer->index());
+  _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
+  res = backbuffer->endFrame(_device->Queue, cmd, _device->Queue,
+                             _swapchain->handle());
 
   _frameCount++;
   if (_frameCount == 100) {

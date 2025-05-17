@@ -1,11 +1,11 @@
 #include "backbuffer.hpp"
 #include "common.hpp"
+#include <vulkan/vulkan_core.h>
 
 Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
                        VkImage image, VkFormat format, VkExtent2D size,
                        VkRenderPass renderPass)
-    : _index(i), _device(device), _graphicsQueueIndex(graphicsQueueIndex),
-      _fenceManager(device),
+    : _index(i), _device(device), _fenceManager(device),
       _commandManager(device, VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                       graphicsQueueIndex) {
 
@@ -53,38 +53,49 @@ Backbuffer::~Backbuffer() {
   vkDestroyImageView(_device, _view, nullptr);
 }
 
-void Backbuffer::setSecondaryCommandManagersCount(unsigned count) {
-  _secondaryCommandManagers.clear();
-  for (unsigned i = 0; i < count; i++) {
-    _secondaryCommandManagers.emplace_back(new CommandBufferManager(
-        _device, VK_COMMAND_BUFFER_LEVEL_SECONDARY, _graphicsQueueIndex));
-  }
-}
-
-VkSemaphore
-Backbuffer::setSwapchainAcquireSemaphore(VkSemaphore acquireSemaphore) {
+std::tuple<VkSemaphore, VkCommandBuffer>
+Backbuffer::beginFrame(VkSemaphore acquireSemaphore) {
   VkSemaphore ret = _swapchainAcquireSemaphore;
-  _swapchainAcquireSemaphore = acquireSemaphore;
-  return ret;
-}
-
-void Backbuffer::setSwapchainReleaseSemaphore(VkSemaphore releaseSemaphore) {
-  if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
-    vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
-  }
-  _swapchainReleaseSemaphore = releaseSemaphore;
-}
-
-void Backbuffer::beginFrame() {
   _fenceManager.beginFrame();
   _commandManager.beginFrame();
-  for (auto &pManager : _secondaryCommandManagers) {
-    pManager->beginFrame();
-  }
+  _swapchainAcquireSemaphore = acquireSemaphore;
+  // return ret;
+  // Request a fresh command buffer.
+  auto cmd = _commandManager.requestCommandBuffer();
+
+  // We will only submit this once before it's recycled.
+  VkCommandBufferBeginInfo beginInfo = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(cmd, &beginInfo);
+
+  // return cmd;
+  return {ret, cmd};
 }
 
-void Backbuffer::submitCommandBuffer(VkQueue graphicsQueue,
-                                     VkCommandBuffer cmd) {
+VkResult Backbuffer::endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
+                              VkQueue presentationQueue,
+                              VkSwapchainKHR swapchain) {
+  // For the first frames, we will create a release semaphore.
+  // This can be reused every frame. Semaphores are reset when they have been
+  // successfully been waited on.
+  // If we aren't using acquire semaphores, we aren't using release semaphores
+  // either.
+  if (_swapchainReleaseSemaphore == VK_NULL_HANDLE &&
+      _swapchainAcquireSemaphore != VK_NULL_HANDLE) {
+    VkSemaphore releaseSemaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VK_CHECK(
+        vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &releaseSemaphore));
+    // setSwapchainReleaseSemaphore(releaseSemaphore);
+    if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
+      vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
+    }
+    _swapchainReleaseSemaphore = releaseSemaphore;
+  }
+
   // All queue submissions get a fence that CPU will wait
   // on for synchronization purposes.
   VkFence fence =
@@ -106,4 +117,16 @@ void Backbuffer::submitCommandBuffer(VkQueue graphicsQueue,
   info.pSignalSemaphores = &_swapchainReleaseSemaphore;
 
   VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &info, fence));
+
+  VkPresentInfoKHR present = {
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &_swapchainReleaseSemaphore,
+      .swapchainCount = 1,
+      .pSwapchains = &swapchain,
+      .pImageIndices = &_index,
+      .pResults = nullptr,
+  };
+
+  return vkQueuePresentKHR(presentationQueue, &present);
 }

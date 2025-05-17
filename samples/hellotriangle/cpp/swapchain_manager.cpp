@@ -2,12 +2,12 @@
 #include "common.hpp"
 #include "device_manager.hpp"
 #include "semaphore_manager.hpp"
+#include <vulkan/vulkan_core.h>
 
-SwapchainManager::SwapchainManager(VkDevice device, VkQueue graphicsQueue,
-                                   VkQueue presentaionQueue,
+SwapchainManager::SwapchainManager(VkDevice device, VkQueue presentaionQueue,
                                    VkSwapchainKHR swapchain)
-    : _device(device), _graphicsQueue(graphicsQueue),
-      _presentationQueue(presentaionQueue), _swapchain(swapchain) {
+    : _device(device), _presentationQueue(presentaionQueue),
+      _swapchain(swapchain) {
   _semaphoreManager = std::make_shared<SemaphoreManager>(_device);
 }
 
@@ -15,12 +15,11 @@ SwapchainManager::~SwapchainManager() {
   vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 }
 
-// VkSwapchainKHR oldSwapchain = swapchain;
 std::shared_ptr<SwapchainManager>
 SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
                          VkDevice device, uint32_t graphicsQueueIndex,
-                         VkQueue graphicsQueue, VkQueue presentaionQueue,
-                         VkRenderPass renderPass, VkSwapchainKHR oldSwapchain) {
+                         VkQueue presentaionQueue, VkRenderPass renderPass,
+                         VkSwapchainKHR oldSwapchain) {
   VkSurfaceFormatKHR format = DeviceManager::getSurfaceFormat(gpu, surface);
   if (format.format == VK_FORMAT_UNDEFINED) {
     LOGE("VK_FORMAT_UNDEFINED");
@@ -35,8 +34,6 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     // fixed size.
     LOGE("-1 size");
     abort();
-    // swapchainSize.width = dim.width;
-    // swapchainSize.height = dim.height;
   }
   auto swapchainSize = surfaceProperties.currentExtent;
 
@@ -98,12 +95,8 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   VkSwapchainKHR swapchain;
   VK_CHECK(vkCreateSwapchainKHR(device, &info, nullptr, &swapchain));
 
-  // if (oldSwapchain != VK_NULL_HANDLE){
-  //   vkDestroySwapchainKHR(device, oldSwapchain, nullptr);
-  // }
-
   auto ptr = std::shared_ptr<SwapchainManager>(
-      new SwapchainManager(device, graphicsQueue, presentaionQueue, swapchain));
+      new SwapchainManager(device, presentaionQueue, swapchain));
   ptr->_size = swapchainSize;
   ptr->_format = format.format;
 
@@ -121,8 +114,6 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     auto backbuffer = std::shared_ptr<Backbuffer>(p);
     ptr->_backbuffers.push_back(backbuffer);
   }
-
-  ptr->setRenderingThreadCount(ptr->_renderingThreadCount);
 
   return ptr;
 }
@@ -145,65 +136,6 @@ SwapchainManager::AcquireNext() {
 void SwapchainManager::sync(VkQueue queue, VkSemaphore acquireSemaphore) {
   vkQueueWaitIdle(queue);
   _semaphoreManager->addClearedSemaphore(acquireSemaphore);
-}
-
-bool SwapchainManager::presentImage(unsigned index) {
-  VkPresentInfoKHR present = {
-      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-      .waitSemaphoreCount = 1,
-      .pWaitSemaphores =
-          &_backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore,
-      .swapchainCount = 1,
-      .pSwapchains = &_swapchain,
-      .pImageIndices = &index,
-      .pResults = nullptr,
-  };
-
-  VkResult res = vkQueuePresentKHR(_presentationQueue, &present);
-  if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
-    return MaliSDK::RESULT_ERROR_OUTDATED_SWAPCHAIN;
-  else if (res != VK_SUCCESS)
-    return MaliSDK::RESULT_ERROR_GENERIC;
-  else
-    return MaliSDK::RESULT_SUCCESS;
-}
-
-void SwapchainManager::submitSwapchain(VkCommandBuffer cmd) {
-  // For the first frames, we will create a release semaphore.
-  // This can be reused every frame. Semaphores are reset when they have been
-  // successfully been waited on.
-  // If we aren't using acquire semaphores, we aren't using release semaphores
-  // either.
-  if (_backbuffers[_swapchainIndex]->_swapchainReleaseSemaphore ==
-          VK_NULL_HANDLE &&
-      _backbuffers[_swapchainIndex]->_swapchainAcquireSemaphore !=
-          VK_NULL_HANDLE) {
-    VkSemaphore releaseSemaphore;
-    VkSemaphoreCreateInfo semaphoreInfo = {
-        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(
-        vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &releaseSemaphore));
-    _backbuffers[_swapchainIndex]->setSwapchainReleaseSemaphore(
-        releaseSemaphore);
-  }
-
-  _backbuffers[_swapchainIndex]->submitCommandBuffer(_graphicsQueue, cmd);
-}
-
-VkCommandBuffer
-SwapchainManager::beginRender(const std::shared_ptr<Backbuffer> &backbuffer) {
-  // Request a fresh command buffer.
-  VkCommandBuffer cmd =
-      _backbuffers[_swapchainIndex]->_commandManager.requestCommandBuffer();
-
-  return cmd;
-}
-
-void SwapchainManager::setRenderingThreadCount(unsigned count) {
-  // vkQueueWaitIdle(_device->Queue);
-  for (auto &pFrame : _backbuffers)
-    pFrame->setSecondaryCommandManagersCount(count);
-  _renderingThreadCount = count;
 }
 
 void SwapchainManager::addClearedSemaphore(VkSemaphore semaphore) {

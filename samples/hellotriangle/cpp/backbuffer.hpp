@@ -7,14 +7,11 @@
 class Backbuffer {
   uint32_t _index;
   VkDevice _device;
-  uint32_t _graphicsQueueIndex;
   VkImageView _view;
   VkFramebuffer _framebuffer;
   FenceManager _fenceManager;
-
-public:
   CommandBufferManager _commandManager;
-  std::vector<std::unique_ptr<CommandBufferManager>> _secondaryCommandManagers;
+
   VkSemaphore _swapchainAcquireSemaphore = VK_NULL_HANDLE;
   VkSemaphore _swapchainReleaseSemaphore = VK_NULL_HANDLE;
 
@@ -23,13 +20,13 @@ public:
              VkImage image, VkFormat format, VkExtent2D size,
              VkRenderPass renderPass);
   ~Backbuffer();
-  uint32_t index() const { return _index; }
+
   VkFramebuffer framebuffer() const { return _framebuffer; }
+  std::tuple<VkSemaphore, VkCommandBuffer>
+  beginFrame(VkSemaphore acquireSemaphore);
+  VkResult endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
+                    VkQueue presentationQueue, VkSwapchainKHR swapchain);
 
-  void beginFrame();
-  VkSemaphore setSwapchainAcquireSemaphore(VkSemaphore acquireSemaphore);
+private:
   void setSwapchainReleaseSemaphore(VkSemaphore releaseSemaphore);
-  void setSecondaryCommandManagersCount(unsigned count);
-
-  void submitCommandBuffer(VkQueue graphicsQueue, VkCommandBuffer);
 };
