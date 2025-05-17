@@ -17,11 +17,10 @@ class SwapchainManager {
   std::vector<std::shared_ptr<class Backbuffer>> _backbuffers;
   unsigned _swapchainIndex = 0;
   unsigned _renderingThreadCount = 0;
+  std::shared_ptr<class SemaphoreManager> _semaphoreManager;
 
   SwapchainManager(VkDevice device, VkQueue graphicsQueue,
-                   VkQueue presentaionQueue, VkSwapchainKHR swapchain)
-      : _device(device), _graphicsQueue(graphicsQueue),
-        _presentationQueue(presentaionQueue), _swapchain(swapchain) {}
+                   VkQueue presentaionQueue, VkSwapchainKHR swapchain);
 
 public:
   ~SwapchainManager();
@@ -30,23 +29,15 @@ public:
          uint32_t graphicsQueueIndex, VkQueue graphicsQueue,
          VkQueue presentaionQueue, VkRenderPass renderPass,
          VkSwapchainKHR oldSwapchain);
-  VkSwapchainKHR Handle() const { return _swapchain; }
+  std::tuple<VkResult, VkSemaphore, std::shared_ptr<Backbuffer>> AcquireNext();
+  void sync(VkQueue queue, VkSemaphore acquireSemaphore);
+  void addClearedSemaphore(VkSemaphore semaphore);
   VkExtent2D size() const { return _size; }
-
-  std::shared_ptr<Backbuffer> getBackbuffer(uint32_t index) const {
-    return _backbuffers[index];
-  }
 
 private:
   void setRenderingThreadCount(unsigned count);
 
 public:
-  VkSemaphore beginFrame(unsigned index, VkSemaphore acquireSemaphore) {
-    _swapchainIndex = index;
-    _backbuffers[_swapchainIndex]->beginFrame();
-    return _backbuffers[_swapchainIndex]->setSwapchainAcquireSemaphore(
-        acquireSemaphore);
-  }
   VkCommandBuffer beginRender(const std::shared_ptr<Backbuffer> &backbuffer);
   void submitSwapchain(VkCommandBuffer cmdBuffer);
   bool presentImage(unsigned index);

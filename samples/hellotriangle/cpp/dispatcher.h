@@ -4,14 +4,11 @@
 
 #include <memory>
 
-#include "common.hpp"
-
 struct Dispatcher {
   bool _active = false;
 
   std::shared_ptr<class DeviceManager> _device;
   std::shared_ptr<class Pipeline> _pipeline;
-  std::shared_ptr<class SemaphoreManager> _semaphoreManager;
   std::shared_ptr<class SwapchainManager> _swapchain;
 
   unsigned _frameCount = 0;
@@ -24,10 +21,4 @@ public:
   void onInitWindow(ANativeWindow *window, AAssetManager *assetManager);
   void onTermWindow();
   bool onFrame(AAssetManager *assetManager);
-
-private:
-  std::shared_ptr<class Backbuffer> getBackbuffer(VkRenderPass renderPass);
-  MaliSDK::Result acquireNextImage(unsigned *index, VkRenderPass renderPass);
-  MaliSDK::Result initSwapchain(VkRenderPass renderPass);
-  MaliSDK::Result initVulkan(ANativeWindow *window);
 };

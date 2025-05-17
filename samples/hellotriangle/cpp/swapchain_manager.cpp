@@ -1,6 +1,15 @@
 #include "swapchain_manager.hpp"
 #include "common.hpp"
 #include "device_manager.hpp"
+#include "semaphore_manager.hpp"
+
+SwapchainManager::SwapchainManager(VkDevice device, VkQueue graphicsQueue,
+                                   VkQueue presentaionQueue,
+                                   VkSwapchainKHR swapchain)
+    : _device(device), _graphicsQueue(graphicsQueue),
+      _presentationQueue(presentaionQueue), _swapchain(swapchain) {
+  _semaphoreManager = std::make_shared<SemaphoreManager>(_device);
+}
 
 SwapchainManager::~SwapchainManager() {
   vkDestroySwapchainKHR(_device, _swapchain, nullptr);
@@ -110,15 +119,32 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     auto p = new Backbuffer(i, device, graphicsQueueIndex, image, format.format,
                             swapchainSize, renderPass);
     auto backbuffer = std::shared_ptr<Backbuffer>(p);
-    // uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
-    //              VkImage image, VkFormat format, VkExtent2D size,
-    //              VkRenderPass renderPass
     ptr->_backbuffers.push_back(backbuffer);
   }
 
   ptr->setRenderingThreadCount(ptr->_renderingThreadCount);
 
   return ptr;
+}
+
+std::tuple<VkResult, VkSemaphore, std::shared_ptr<Backbuffer>>
+SwapchainManager::AcquireNext() {
+  auto acquireSemaphore = _semaphoreManager->getClearedSemaphore();
+  uint32_t index;
+  VkResult res =
+      vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX, acquireSemaphore,
+                            VK_NULL_HANDLE, &index);
+  if (res == VK_SUCCESS) {
+    _swapchainIndex = index;
+    return {res, acquireSemaphore, _backbuffers[_swapchainIndex]};
+  } else {
+    return {res, acquireSemaphore, {}};
+  }
+}
+
+void SwapchainManager::sync(VkQueue queue, VkSemaphore acquireSemaphore) {
+  vkQueueWaitIdle(queue);
+  _semaphoreManager->addClearedSemaphore(acquireSemaphore);
 }
 
 bool SwapchainManager::presentImage(unsigned index) {
@@ -178,4 +204,11 @@ void SwapchainManager::setRenderingThreadCount(unsigned count) {
   for (auto &pFrame : _backbuffers)
     pFrame->setSecondaryCommandManagersCount(count);
   _renderingThreadCount = count;
+}
+
+void SwapchainManager::addClearedSemaphore(VkSemaphore semaphore) {
+  // Recycle the old semaphore back into the semaphore manager.
+  if (semaphore != VK_NULL_HANDLE) {
+    _semaphoreManager->addClearedSemaphore(semaphore);
+  }
 }
