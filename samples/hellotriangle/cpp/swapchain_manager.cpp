@@ -1,5 +1,5 @@
 #include "swapchain_manager.hpp"
-#include "common.hpp"
+#include "logger.hpp"
 #include "device_manager.hpp"
 #include "semaphore_manager.hpp"
 #include <vulkan/vulkan_core.h>
@@ -27,8 +27,11 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   }
 
   VkSurfaceCapabilitiesKHR surfaceProperties;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface,
-                                                     &surfaceProperties));
+  if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+          gpu, surface, &surfaceProperties) != VK_SUCCESS) {
+    LOGE("vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    abort();
+  }
   if (surfaceProperties.currentExtent.width == -1u) {
     // -1u is a magic value (in Vulkan specification) which means there's no
     // fixed size.
@@ -93,7 +96,10 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   };
 
   VkSwapchainKHR swapchain;
-  VK_CHECK(vkCreateSwapchainKHR(device, &info, nullptr, &swapchain));
+  if (vkCreateSwapchainKHR(device, &info, nullptr, &swapchain) != VK_SUCCESS) {
+    LOGE("vkCreateSwapchainKHR");
+    abort();
+  }
 
   auto ptr = std::shared_ptr<SwapchainManager>(
       new SwapchainManager(device, presentaionQueue, swapchain));
@@ -101,10 +107,17 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   ptr->_format = format.format;
 
   uint32_t imageCount;
-  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr));
+  if (vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr) !=
+      VK_SUCCESS) {
+    LOGE("vkGetSwapchainImagesKHR");
+    abort();
+  }
   ptr->_swapchainImages.resize(imageCount);
-  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount,
-                                   ptr->_swapchainImages.data()));
+  if (vkGetSwapchainImagesKHR(device, swapchain, &imageCount,
+                              ptr->_swapchainImages.data()) != VK_SUCCESS) {
+    LOGE("vkGetSwapchainImagesKHR");
+    abort();
+  }
 
   // For all backbuffers in the swapchain ...
   for (uint32_t i = 0; i < ptr->_swapchainImages.size(); ++i) {

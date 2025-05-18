@@ -1,4 +1,4 @@
-#include "common.hpp"
+#include "logger.hpp"
 #include "dispatcher.h"
 
 #include <magic_enum/magic_enum.hpp>

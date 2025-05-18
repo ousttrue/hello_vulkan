@@ -1,5 +1,5 @@
 #include "backbuffer.hpp"
-#include "common.hpp"
+#include "logger.hpp"
 #include <vulkan/vulkan_core.h>
 
 Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
@@ -26,7 +26,10 @@ Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
                            .layerCount = 1},
   };
 
-  VK_CHECK(vkCreateImageView(_device, &view, nullptr, &_view));
+  if (vkCreateImageView(_device, &view, nullptr, &_view) != VK_SUCCESS) {
+    LOGE("vkCreateImageView");
+    abort();
+  }
 
   // Build the framebuffer.
   VkFramebufferCreateInfo fbInfo = {
@@ -39,7 +42,11 @@ Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
       .layers = 1,
   };
 
-  VK_CHECK(vkCreateFramebuffer(_device, &fbInfo, nullptr, &_framebuffer));
+  if (vkCreateFramebuffer(_device, &fbInfo, nullptr, &_framebuffer) !=
+      VK_SUCCESS) {
+    LOGE("vkCreateFramebuffer");
+    abort();
+  }
 }
 
 Backbuffer::~Backbuffer() {
@@ -87,8 +94,11 @@ VkResult Backbuffer::endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
     VkSemaphore releaseSemaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    VK_CHECK(
-        vkCreateSemaphore(_device, &semaphoreInfo, nullptr, &releaseSemaphore));
+    if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr,
+                          &releaseSemaphore) != VK_SUCCESS) {
+      LOGE("vkCreateSemaphore");
+      abort();
+    }
     // setSwapchainReleaseSemaphore(releaseSemaphore);
     if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
       vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
@@ -116,7 +126,10 @@ VkResult Backbuffer::endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
       _swapchainReleaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
   info.pSignalSemaphores = &_swapchainReleaseSemaphore;
 
-  VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &info, fence));
+  if (vkQueueSubmit(graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
+    LOGE("vkQueueSubmit");
+    abort();
+  }
 
   VkPresentInfoKHR present = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,

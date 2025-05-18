@@ -1,7 +1,8 @@
 #include "pipeline.hpp"
-#include "common.hpp"
+#include "logger.hpp"
 #include "math.hpp"
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 struct Vertex {
   glm::vec4 position;
@@ -53,6 +54,7 @@ inline std::vector<T> readBinaryFile(AAssetManager *assetManager,
 static VkShaderModule loadShaderModule(VkDevice device,
                                        const std::vector<uint32_t> &buffer) {
   if (buffer.empty()) {
+    LOGE("no data");
     return VK_NULL_HANDLE;
   }
 
@@ -62,7 +64,11 @@ static VkShaderModule loadShaderModule(VkDevice device,
   moduleInfo.pCode = buffer.data();
 
   VkShaderModule shaderModule;
-  VK_CHECK(vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule));
+  if (vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule) !=
+      VK_SUCCESS) {
+    LOGE("vkCreateShaderModule");
+    return VK_NULL_HANDLE;
+  }
   return shaderModule;
 }
 
@@ -101,7 +107,10 @@ static Buffer createBuffer(VkDevice device,
   info.size = size;
 
   Buffer buffer;
-  VK_CHECK(vkCreateBuffer(device, &info, nullptr, &buffer.buffer));
+  if (vkCreateBuffer(device, &info, nullptr, &buffer.buffer) != VK_SUCCESS) {
+    LOGE("vkCreateBuffer");
+    abort();
+  }
 
   // Ask device about its memory requirements.
   VkMemoryRequirements memReqs;
@@ -117,7 +126,10 @@ static Buffer createBuffer(VkDevice device,
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
   // Allocate memory.
-  VK_CHECK(vkAllocateMemory(device, &alloc, nullptr, &buffer.memory));
+  if (vkAllocateMemory(device, &alloc, nullptr, &buffer.memory) != VK_SUCCESS) {
+    LOGE("vkAllocateMemory");
+    abort();
+  }
 
   // Buffers are not backed by memory, so bind our memory explicitly to the
   // buffer.
@@ -126,7 +138,10 @@ static Buffer createBuffer(VkDevice device,
   // Map the memory and dump data in there.
   if (pInitialData) {
     void *pData;
-    VK_CHECK(vkMapMemory(device, buffer.memory, 0, size, 0, &pData));
+    if (vkMapMemory(device, buffer.memory, 0, size, 0, &pData) != VK_SUCCESS) {
+      LOGE("vkMapMemory");
+      abort();
+    }
     memcpy(pData, pInitialData, size);
     vkUnmapMemory(device, buffer.memory);
   }
@@ -211,7 +226,10 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
       .dependencyCount = 1,
       .pDependencies = &dependency,
   };
-  VK_CHECK(vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass));
+  if (vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass) != VK_SUCCESS) {
+    LOGE("vkCreateRenderPass");
+    abort();
+  }
 
   //
   // Pipeline
@@ -220,8 +238,11 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
   VkPipelineCacheCreateInfo pipelineCacheInfo = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
   };
-  VK_CHECK(vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr,
-                                 &pipelineCache));
+  if (vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr,
+                            &pipelineCache) != VK_SUCCESS) {
+    LOGE("vkCreatePipelineCache");
+    abort();
+  }
 
   // Load our SPIR-V shaders.
   VkPipelineShaderStageCreateInfo shaderStages[2] = {
@@ -343,8 +364,11 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
   VkPipelineLayoutCreateInfo layoutInfo = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
   };
-  VK_CHECK(
-      vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout));
+  if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) !=
+      VK_SUCCESS) {
+    LOGE("vkCreatePipelineLayout");
+    abort();
+  }
 
   // Specify we will use triangle lists to draw geometry.
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
@@ -370,8 +394,11 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
       .renderPass = renderPass,
   };
 
-  VK_CHECK(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipe, nullptr,
-                                     &pipeline));
+  if (vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipe, nullptr,
+                                &pipeline) != VK_SUCCESS) {
+    LOGE("vkCreateGraphicsPipelines");
+    return {};
+  }
 
   // Pipeline is baked, we can delete the shader modules now.
   vkDestroyShaderModule(device, shaderStages[0].module, nullptr);
@@ -446,7 +473,10 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
   vkCmdEndRenderPass(cmd);
 
   // Complete the command buffer.
-  VK_CHECK(vkEndCommandBuffer(cmd));
+  if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+    LOGE("vkEndCommandBuffer");
+    abort();
+  }
 }
 
 void Pipeline::initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props) {

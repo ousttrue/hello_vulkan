@@ -1,5 +1,6 @@
 #include "semaphore_manager.hpp"
-#include "common.hpp"
+#include "logger.hpp"
+#include <vulkan/vulkan_core.h>
 
 SemaphoreManager::SemaphoreManager(VkDevice vkDevice) : device(vkDevice) {}
 
@@ -16,7 +17,10 @@ VkSemaphore SemaphoreManager::getClearedSemaphore() {
   if (recycledSemaphores.empty()) {
     VkSemaphoreCreateInfo info = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     VkSemaphore semaphore;
-    VK_CHECK(vkCreateSemaphore(device, &info, nullptr, &semaphore));
+    if (vkCreateSemaphore(device, &info, nullptr, &semaphore) != VK_SUCCESS) {
+      LOGE("vkCreateSemaphore");
+      abort();
+    }
     return semaphore;
   } else {
     auto semaphore = recycledSemaphores.back();

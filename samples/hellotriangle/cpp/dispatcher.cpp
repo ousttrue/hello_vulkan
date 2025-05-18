@@ -1,5 +1,5 @@
 #include "dispatcher.h"
-#include "common.hpp"
+#include "logger.hpp"
 #include "device_manager.hpp"
 #include "pipeline.hpp"
 #include "swapchain_manager.hpp"

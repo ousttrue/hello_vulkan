@@ -1,5 +1,6 @@
 #include "command_buffer_manager.hpp"
-#include "common.hpp"
+#include "logger.hpp"
+#include <vulkan/vulkan_core.h>
 
 CommandBufferManager::CommandBufferManager(VkDevice vkDevice,
                                            VkCommandBufferLevel bufferLevel,
@@ -10,7 +11,10 @@ CommandBufferManager::CommandBufferManager(VkDevice vkDevice,
       .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
       .queueFamilyIndex = graphicsQueueIndex,
   };
-  VK_CHECK(vkCreateCommandPool(_device, &info, nullptr, &_pool));
+  if (vkCreateCommandPool(_device, &info, nullptr, &_pool) != VK_SUCCESS) {
+    LOGE("vkCreateCommandPool");
+    abort();
+  }
 }
 
 CommandBufferManager::~CommandBufferManager() {
@@ -34,7 +38,10 @@ VkCommandBuffer CommandBufferManager::requestCommandBuffer() {
         .commandBufferCount = 1,
     };
     VkCommandBuffer ret = VK_NULL_HANDLE;
-    VK_CHECK(vkAllocateCommandBuffers(_device, &info, &ret));
+    if (vkAllocateCommandBuffers(_device, &info, &ret) != VK_SUCCESS) {
+      LOGE("vkAllocateCommandBuffers");
+      abort();
+    }
     _buffers.push_back(ret);
   }
   return _buffers[_count++];

@@ -1,5 +1,6 @@
 #include "extensions.hpp"
-#include "common.hpp"
+#include "logger.hpp"
+#include <vulkan/vulkan_core.h>
 
 // typedef VkBool32 (VKAPI_PTR *PFN_vkDebugUtilsMessengerCallbackEXT)(
 //     VkDebugUtilsMessageSeverityFlagBitsEXT           messageSeverity,
@@ -83,20 +84,34 @@ InstanceExtensionManager::InstanceExtensionManager(
     const std::vector<const char *> &requiredExtensions) {
 
   uint32_t instanceLayerCount;
-  VK_CHECK(vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr));
+  if (vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr) !=
+      VK_SUCCESS) {
+    LOGE("vkEnumerateInstanceLayerProperties");
+    abort();
+  }
   InstanceLayers.resize(instanceLayerCount);
-  VK_CHECK(vkEnumerateInstanceLayerProperties(&instanceLayerCount,
-                                              InstanceLayers.data()));
+  if (vkEnumerateInstanceLayerProperties(&instanceLayerCount,
+                                         InstanceLayers.data()) != VK_SUCCESS) {
+    LOGE("vkEnumerateInstanceLayerProperties");
+    abort();
+  }
   for (auto layer : requiredLayers) {
     pushLayer(layer);
   }
 
   uint32_t instanceExtensionCount;
-  VK_CHECK(vkEnumerateInstanceExtensionProperties(
-      nullptr, &instanceExtensionCount, nullptr));
+  if (vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount,
+                                             nullptr) != VK_SUCCESS) {
+    LOGE("vkEnumerateInstanceExtensionProperties");
+    abort();
+  }
   InstanceExtensions.resize(instanceExtensionCount);
-  VK_CHECK(vkEnumerateInstanceExtensionProperties(
-      nullptr, &instanceExtensionCount, InstanceExtensions.data()));
+  if (vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount,
+                                             InstanceExtensions.data()) !=
+      VK_SUCCESS) {
+    LOGE("vkEnumerateInstanceExtensionProperties");
+    abort();
+  }
   for (auto extension : requiredExtensions) {
     pushExtension(extension);
   }
@@ -134,20 +149,34 @@ DeviceExtensionManager::DeviceExtensionManager(
     const std::vector<const char *> &requiredExtensions) {
 
   uint32_t deviceLayerCount;
-  VK_CHECK(vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount, nullptr));
+  if (vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount, nullptr) !=
+      VK_SUCCESS) {
+    LOGE("vkEnumerateDeviceLayerProperties");
+    abort();
+  }
   DeviceLayers.resize(deviceLayerCount);
-  VK_CHECK(vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount,
-                                            DeviceLayers.data()));
+  if (vkEnumerateDeviceLayerProperties(gpu, &deviceLayerCount,
+                                       DeviceLayers.data()) != VK_SUCCESS) {
+    LOGE("vkEnumerateDeviceLayerProperties");
+    abort();
+  }
   for (auto layer : requiredLayers) {
     pushLayer(layer);
   }
 
   uint32_t deviceExtensionCount;
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, nullptr));
+  if (vkEnumerateDeviceExtensionProperties(gpu, nullptr, &deviceExtensionCount,
+                                           nullptr) != VK_SUCCESS) {
+    LOGE("vkEnumerateDeviceExtensionProperties");
+    abort();
+  }
   DeviceExtensions.resize(deviceExtensionCount);
-  VK_CHECK(vkEnumerateDeviceExtensionProperties(
-      gpu, nullptr, &deviceExtensionCount, DeviceExtensions.data()));
+  if (vkEnumerateDeviceExtensionProperties(gpu, nullptr, &deviceExtensionCount,
+                                           DeviceExtensions.data()) !=
+      VK_SUCCESS) {
+    LOGE("vkEnumerateDeviceExtensionProperties");
+    abort();
+  }
   for (auto extension : requiredExtensions) {
     pushExtension(extension);
   }
