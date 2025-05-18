@@ -1,19 +1,31 @@
 # VkSurfaceKHR
 
-## Android
+OS の Windows システムに依存して作成する。
 
-### dependencies
+## dependencies
 
 :::tip Vulkan
 - `VkInstance Instance`
-- `VK_KHR_android_surface`
 :::
 
-:::tip OS
+:::tip android
+- `VK_KHR_android_surface`
 - `ANativeWindow *window`
 :::
 
+:::tip windows
+- `VK_KHR_win32_surface`
+- `HINSTANCE`
+- `HWND`
+:::
+
+:::tip glfw
+glfwGetRequiredInstanceExtensions 
+:::
+
 ### code
+
+android 例
 
 ```cpp
   ANativeWindow *window;
@@ -34,23 +46,4 @@
 
   vkDestroySurfaceKHR(Instance, Surface, nullptr);
 ```
-
-## Windows
-
-### dependencies
-
-:::tip Vulkan
-- `VkInstance Instance`
-- `VK_KHR_win32_surface`
-:::
-
-:::tip OS
-- `HINSTANCE`
-- `HWND`
-:::
-
-- glfwGetRequiredInstanceExtensions 
-
-### code
-
 

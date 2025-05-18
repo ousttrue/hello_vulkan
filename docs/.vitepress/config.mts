@@ -33,8 +33,9 @@ export default defineConfig({
             items: [
               { text: 'instance', link: '/vulkan/initialization/instance' },
               { text: 'surface', link: '/vulkan/initialization/surface' },
-              { text: 'device', link: '/vulkan/instance' },
-              { text: 'swapchain', link: '/vulkan/swapchain' },
+              { text: 'device', link: '/vulkan/initialization/device' },
+              { text: 'pipeline', link: '/vulkan/initialization/pipeline' },
+              { text: 'swapchain', link: '/vulkan/initialization/swapchain' },
             ],
           },
           {

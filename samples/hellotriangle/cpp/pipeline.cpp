@@ -71,83 +71,99 @@ static VkShaderModule loadShaderModule(VkDevice device,
   return shaderModule;
 }
 
-// To create a buffer, both the device and application have requirements from
-// the buffer object.
-// Vulkan exposes the different types of buffers the device can allocate, and we
-// have to find a suitable one.
-// deviceRequirements is a bitmask expressing which memory types can be used for
-// a buffer object.
-// The different memory types' properties must match with what the application
-// wants.
-static uint32_t
-findMemoryTypeFromRequirements(const VkPhysicalDeviceMemoryProperties &props,
-                               uint32_t deviceRequirements,
-                               uint32_t hostRequirements) {
-  for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
-    if (deviceRequirements & (1u << i)) {
-      if ((props.memoryTypes[i].propertyFlags & hostRequirements) ==
-          hostRequirements) {
-        return i;
-      }
-    }
-  }
+class Buffer {
+  VkDevice _device;
+  VkBuffer _buffer;
+  VkDeviceMemory _memory;
 
-  LOGE("Failed to obtain suitable memory type.\n");
-  abort();
-}
+public:
+  Buffer(VkDevice device, const VkPhysicalDeviceMemoryProperties &props,
+         const void *pInitialData, size_t size, VkFlags usage)
+      : _device(device) {
+    VkBufferCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = usage,
+    };
 
-static Buffer createBuffer(VkDevice device,
-                           const VkPhysicalDeviceMemoryProperties &props,
-                           const void *pInitialData, size_t size,
-                           VkFlags usage) {
-
-  VkBufferCreateInfo info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-  info.usage = usage;
-  info.size = size;
-
-  Buffer buffer;
-  if (vkCreateBuffer(device, &info, nullptr, &buffer.buffer) != VK_SUCCESS) {
-    LOGE("vkCreateBuffer");
-    abort();
-  }
-
-  // Ask device about its memory requirements.
-  VkMemoryRequirements memReqs;
-  vkGetBufferMemoryRequirements(device, buffer.buffer, &memReqs);
-
-  VkMemoryAllocateInfo alloc = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-  alloc.allocationSize = memReqs.size;
-
-  // We want host visible and coherent memory to simplify things.
-  alloc.memoryTypeIndex =
-      findMemoryTypeFromRequirements(props, memReqs.memoryTypeBits,
-                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-  // Allocate memory.
-  if (vkAllocateMemory(device, &alloc, nullptr, &buffer.memory) != VK_SUCCESS) {
-    LOGE("vkAllocateMemory");
-    abort();
-  }
-
-  // Buffers are not backed by memory, so bind our memory explicitly to the
-  // buffer.
-  vkBindBufferMemory(device, buffer.buffer, buffer.memory, 0);
-
-  // Map the memory and dump data in there.
-  if (pInitialData) {
-    void *pData;
-    if (vkMapMemory(device, buffer.memory, 0, size, 0, &pData) != VK_SUCCESS) {
-      LOGE("vkMapMemory");
+    if (vkCreateBuffer(device, &info, nullptr, &_buffer) != VK_SUCCESS) {
+      LOGE("vkCreateBuffer");
       abort();
     }
-    memcpy(pData, pInitialData, size);
-    vkUnmapMemory(device, buffer.memory);
+
+    // Ask device about its memory requirements.
+    VkMemoryRequirements memReqs;
+    vkGetBufferMemoryRequirements(device, _buffer, &memReqs);
+
+    VkMemoryAllocateInfo alloc = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memReqs.size,
+        // We want host visible and coherent memory to simplify things.
+        .memoryTypeIndex = findMemoryTypeFromRequirements(
+            props, memReqs.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+
+    // Allocate memory.
+    if (vkAllocateMemory(device, &alloc, nullptr, &_memory) != VK_SUCCESS) {
+      LOGE("vkAllocateMemory");
+      abort();
+    }
+
+    // Buffers are not backed by memory, so bind our memory explicitly to the
+    // buffer.
+    vkBindBufferMemory(device, _buffer, _memory, 0);
+
+    // Map the memory and dump data in there.
+    if (pInitialData) {
+      void *pData;
+      if (vkMapMemory(device, _memory, 0, size, 0, &pData) != VK_SUCCESS) {
+        LOGE("vkMapMemory");
+        abort();
+      }
+      memcpy(pData, pInitialData, size);
+      vkUnmapMemory(device, _memory);
+    }
   }
 
-  return buffer;
-}
+  ~Buffer() {
+    vkFreeMemory(_device, _memory, nullptr);
+    vkDestroyBuffer(_device, _buffer, nullptr);
+  }
 
+  void bind(VkCommandBuffer cmd, VkDeviceSize offset) {
+    vkCmdBindVertexBuffers(cmd, 0, 1, &_buffer, &offset);
+  }
+
+private:
+  // To create a buffer, both the device and application have requirements from
+  // the buffer object.
+  // Vulkan exposes the different types of buffers the device can allocate, and
+  // we have to find a suitable one. deviceRequirements is a bitmask expressing
+  // which memory types can be used for a buffer object. The different memory
+  // types' properties must match with what the application wants.
+  static uint32_t
+  findMemoryTypeFromRequirements(const VkPhysicalDeviceMemoryProperties &props,
+                                 uint32_t deviceRequirements,
+                                 uint32_t hostRequirements) {
+    for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
+      if (deviceRequirements & (1u << i)) {
+        if ((props.memoryTypes[i].propertyFlags & hostRequirements) ==
+            hostRequirements) {
+          return i;
+        }
+      }
+    }
+
+    LOGE("Failed to obtain suitable memory type.\n");
+    abort();
+  }
+};
+
+///
+/// Pipeline
+///
 Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass,
                    VkPipelineLayout pipelineLayout, VkPipeline pipeline,
                    VkPipelineCache pipelineCache)
@@ -155,8 +171,7 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass,
       _pipeline(pipeline), _pipelineCache(pipelineCache) {}
 
 Pipeline::~Pipeline() {
-  vkFreeMemory(_device, vertexBuffer.memory, nullptr);
-  vkDestroyBuffer(_device, vertexBuffer.buffer, nullptr);
+  _vertexBuffer = {};
 
   vkDestroyPipelineCache(_device, _pipelineCache, nullptr);
   vkDestroyPipeline(_device, _pipeline, nullptr);
@@ -171,7 +186,6 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
   // RenderPass
   //
   // Finally, create the renderpass.
-  VkRenderPass renderPass;
   VkAttachmentDescription attachment = {
       // Backbuffer format.
       .format = format,
@@ -225,6 +239,7 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
       .dependencyCount = 1,
       .pDependencies = &dependency,
   };
+  VkRenderPass renderPass;
   if (vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass) != VK_SUCCESS) {
     LOGE("vkCreateRenderPass");
     abort();
@@ -462,8 +477,7 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
   vkCmdSetScissor(cmd, 0, 1, &scissor);
 
   // Bind vertex buffer.
-  VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer.buffer, &offset);
+  _vertexBuffer->bind(cmd, 0);
 
   // Draw three vertices with one instance.
   vkCmdDraw(cmd, 3, 1, 0, 0);
@@ -497,6 +511,6 @@ void Pipeline::initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props) {
   };
 
   // We will use the buffer as a vertex buffer only.
-  vertexBuffer = createBuffer(_device, props, data, sizeof(data),
-                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+  _vertexBuffer = std::make_shared<Buffer>(_device, props, data, sizeof(data),
+                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 }

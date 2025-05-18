@@ -1,21 +1,20 @@
 # VkInstance
 
+使用する layer と instance extension を決める必用がある。
+
 ## dependencies
 
-:::tip Surface
-
-PLATFORM 共通
-
+:::tip PLATFORM 共通
 - `VK_KHR_surface`
+:::
 
-PLATFORM=android
-
-- `VK_USE_PLATFORM_ANDROID_KHR=1`
+:::tip PLATFORM android
+- `#define VK_USE_PLATFORM_ANDROID_KHR 1`
 - `VK_KHR_android_surface`
+:::
 
-PLATFORM=windows
-
-- `VK_USE_PLATFORM_WIN32_KHR=1`
+:::tip PLATFORM windows
+- `#define VK_USE_PLATFORM_WIN32_KHR 1`
 - `VK_KHR_win32_surface`
 :::
 

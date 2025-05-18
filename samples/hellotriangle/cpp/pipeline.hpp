@@ -5,11 +5,6 @@
 
 #include <memory>
 
-struct Buffer {
-  VkBuffer buffer;
-  VkDeviceMemory memory;
-};
-
 class Pipeline {
   VkDevice _device;
   VkRenderPass _renderPass;
@@ -17,7 +12,7 @@ class Pipeline {
   VkPipeline _pipeline;
   VkPipelineCache _pipelineCache;
 
-  Buffer vertexBuffer;
+  std::shared_ptr<class Buffer> _vertexBuffer;
 
   Pipeline(VkDevice device, VkRenderPass renderPass,
            VkPipelineLayout pipelineLayout, VkPipeline pipeline,
