@@ -14,21 +14,36 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: 'build',
+        text: 'Reference', link: '/reference'
+      },
+      {
+        text: 'Development',
         items: [
-          { text: 'build', link: '/cmake' },
-          { text: 'android apk', link: '/apk' }
+          { text: 'sdk', link: '/dev/sdk' },
+          { text: 'c++', link: '/dev/cpp' },
+          { text: 'cmake', link: '/dev/cmake' },
+          { text: 'android', link: '/dev/android' }
         ]
       },
       {
-        text: 'vulkan',
+        text: 'Vulkan',
         items: [
-          { text: 'instance', link: '/vulkan/instance' },
-          { text: 'device', link: '/vulkan/instance' },
-          { text: 'swapchain', link: '/vulkan/swapchain' },
-          { text: 'command', link: '/vulkan/command' },
-          { text: 'spv', link: '/vulkan/spv' },
-          { text: 'pipeline', link: '/vulkan/pipeline' },
+          {
+            text: '初期化', link: '/vulkan/initialization',
+            items: [
+              { text: 'instance', link: '/vulkan/initialization/instance' },
+              { text: 'surface', link: '/vulkan/initialization/surface' },
+              { text: 'device', link: '/vulkan/instance' },
+              { text: 'swapchain', link: '/vulkan/swapchain' },
+            ],
+          },
+          {
+            text: 'GraphicsPipeline', link: '/vulkan/pipeline',
+            items: [
+              { text: 'command', link: '/vulkan/pipeline/command' },
+              { text: 'spv', link: '/vulkan/pipeline/spv' },
+            ],
+          },
         ]
       },
     ],

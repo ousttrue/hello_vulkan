@@ -18,6 +18,12 @@ FetchContent_Populate(
   URL https://github.com/Neargye/magic_enum/releases/download/v0.9.7/magic_enum-v0.9.7.tar.gz
 )
 
+FetchContent_Declare(
+  openxr
+  GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+  GIT_TAG release-1.1.47)
+FetchContent_MakeAvailable(openxr)
+
 function(add_glsl TARGET SHADER)
   find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Include/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})
@@ -53,4 +59,4 @@ else()
   subdirs(vulkan_tutorial)
 endif()
 
-subdirs(vulfwk)
+subdirs(vulfwk hello_xr/cpp)
