@@ -100,8 +100,11 @@ set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 if(ANDROID)
   add_library(hello_xr MODULE ${LOCAL_SOURCE} ${VULKAN_SHADERS}
                               $<TARGET_OBJECTS:android_native_app_glue>)
-  target_link_libraries(hello_xr PRIVATE ${ANDROID_LIBRARY}
-                                         ${ANDROID_LOG_LIBRARY})
+  target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID
+                                              -DXR_USE_GRAPHICS_API_VULKAN)
+  target_link_libraries(
+    hello_xr PRIVATE ${ANDROID_LIBRARY} ${ANDROID_LOG_LIBRARY}
+                     android_native_app_glue vulkan)
 
   # Only for Android because it lacks a command line
   set(HELLOXR_DEFAULT_GRAPHICS_PLUGIN
@@ -129,8 +132,8 @@ else()
   target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32
                                               -DXR_USE_GRAPHICS_API_VULKAN)
   target_link_libraries(hello_xr PRIVATE vulkan_sdk)
-  target_include_directories(hello_xr PRIVATE .)
 endif()
+target_include_directories(hello_xr PRIVATE .)
 
 if(APPLE)
   # use C++17 since there is a dependency on metal-cpp
