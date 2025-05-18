@@ -1,12 +1,11 @@
 #include "pipeline.hpp"
 #include "logger.hpp"
-#include "math.hpp"
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
 struct Vertex {
-  glm::vec4 position;
-  glm::vec4 color;
+  float position[4];
+  float color[4];
 };
 
 static std::vector<uint8_t> readRawFile(AAssetManager *assetManager,
@@ -484,16 +483,16 @@ void Pipeline::initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props) {
   // We specify the positions directly in clip space.
   static const Vertex data[] = {
       {
-          glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f),
-          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f),
+          {-0.5f, -0.5f, 0.0f, 1.0f},
+          {1.0f, 0.0f, 0.0f, 1.0f},
       },
       {
-          glm::vec4(-0.5f, +0.5f, 0.0f, 1.0f),
-          glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),
+          {-0.5f, +0.5f, 0.0f, 1.0f},
+          {0.0f, 1.0f, 0.0f, 1.0f},
       },
       {
-          glm::vec4(+0.5f, -0.5f, 0.0f, 1.0f),
-          glm::vec4(0.0f, 0.0f, 1.0f, 1.0f),
+          {+0.5f, -0.5f, 0.0f, 1.0f},
+          {0.0f, 0.0f, 1.0f, 1.0f},
       },
   };
 
