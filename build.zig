@@ -28,6 +28,80 @@ pub fn build(b: *std.Build) void {
 
     build_vulfwk_apk(b, tools, abi, so);
     build_hellotriangle_apk(b, tools, abi, so);
+    build_helloxr_apk(b, tools, abi, so);
+}
+
+fn build_helloxr_apk(
+    b: *std.Build,
+    tools: *android.Tools,
+    abi: []const u8,
+    so: ndk_build.CmakeAndroidToolchainStep,
+) void {
+    const package_name = "corg.khronos.openxr.hello_xr";
+    const apk_name = "hello_xr";
+    const so_name = "libhello_xr.so";
+
+    //
+    // build apk zip archive
+    //
+    const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
+    const zip_file = ndk_build.makeZipfile(
+        b,
+        tools,
+        so.step,
+        b.path("samples/hello_xr/android/AndroidManifest.xml"),
+        .{ .bin = .{
+            .src = so.build_dir.path(b, "samples/hello_xr/cpp/libhello_xr.so"),
+            .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
+        } },
+        b.path("samples/hello_xr/android/res"),
+        null,
+        &.{
+            .{
+                .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+            },
+            .{
+                .src = so.build_dir.path(b, "_deps/openxr-build/src/loader/libopenxr_loader.so"),
+                .dst = "lib/arm64-v8a/libopenxr_loader.so",
+            },
+        },
+    );
+
+    // zipalign
+    const aligned_apk = ndk_build.runZipalign(
+        b,
+        tools,
+        zip_file.file,
+        apk_name,
+    );
+    aligned_apk.step.dependOn(zip_file.step);
+
+    // apksigner
+    const apk = ndk_build.runApksigner(
+        b,
+        tools,
+        aligned_apk.file,
+    );
+
+    // install to zig-out
+    const install_apk = b.addInstallBinFile(
+        apk,
+        b.fmt("{s}.apk", .{apk_name}),
+    );
+    b.getInstallStep().dependOn(&install_apk.step);
+
+    //
+    // zig build run => adb install && adb shell am start
+    //
+    const adb_start = ndk_build.adbStart(
+        b,
+        tools,
+        &install_apk.step,
+        apk_name,
+        package_name,
+    );
+    b.step("helloxr", "adb install... && adb shell am start...").dependOn(&adb_start.step);
 }
 
 fn build_hellotriangle_apk(
