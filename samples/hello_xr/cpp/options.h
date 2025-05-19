@@ -3,7 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include "to_string.h"
 #include <array>
+#include <locale>
+
+inline bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
+                             const std::locale &loc = std::locale()) {
+  const std::ctype<char> &ctype = std::use_facet<std::ctype<char>>(loc);
+  const auto compareCharLower = [&](char c1, char c2) {
+    return ctype.tolower(c1) == ctype.tolower(c2);
+  };
+  return s1.size() == s2.size() &&
+         std::equal(s1.begin(), s1.end(), s2.begin(), compareCharLower);
+}
 
 inline XrFormFactor GetXrFormFactor(const std::string &formFactorStr) {
   if (EqualsIgnoreCase(formFactorStr, "Hmd")) {

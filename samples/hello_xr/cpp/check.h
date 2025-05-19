@@ -10,16 +10,7 @@
 #define TOSTRING(x) CHK_STRINGIFY(x)
 #define FILE_AND_LINE __FILE__ ":" TOSTRING(__LINE__)
 
-[[noreturn]] inline void Throw(std::string failureMessage, const char* originator = nullptr, const char* sourceLocation = nullptr) {
-    if (originator != nullptr) {
-        failureMessage += Fmt("\n    Origin: %s", originator);
-    }
-    if (sourceLocation != nullptr) {
-        failureMessage += Fmt("\n    Source: %s", sourceLocation);
-    }
 
-    throw std::logic_error(failureMessage);
-}
 
 #define THROW(msg) Throw(msg, nullptr, FILE_AND_LINE);
 #define CHECK(exp)                                      \
@@ -35,17 +26,7 @@
         }                                    \
     }
 
-[[noreturn]] inline void ThrowXrResult(XrResult res, const char* originator = nullptr, const char* sourceLocation = nullptr) {
-    Throw(Fmt("XrResult failure [%s]", to_string(res)), originator, sourceLocation);
-}
 
-inline XrResult CheckXrResult(XrResult res, const char* originator = nullptr, const char* sourceLocation = nullptr) {
-    if (XR_FAILED(res)) {
-        ThrowXrResult(res, originator, sourceLocation);
-    }
-
-    return res;
-}
 
 #define THROW_XR(xr, cmd) ThrowXrResult(xr, #cmd, FILE_AND_LINE);
 #define CHECK_XRCMD(cmd) CheckXrResult(cmd, #cmd, FILE_AND_LINE);
