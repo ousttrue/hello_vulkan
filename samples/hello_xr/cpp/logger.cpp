@@ -7,6 +7,9 @@
 
 #include <sstream>
 #include <chrono>
+#include <map>
+#include <iomanip>
+#include <iostream>
 
 #if defined(ANDROID)
 #define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, "hello_xr", __VA_ARGS__)

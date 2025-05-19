@@ -8,6 +8,13 @@
 #include "graphicsplugin_vulkan.h"
 #include "options.h"
 
+#include <vulkan/vulkan.h>
+#include <android_native_app_glue.h>
+#include <openxr/openxr_platform.h>
+
+#include <list>
+#include <map>
+
 #ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <common/vulkan_debug_object_namer.hpp>
 #include <common/xr_linear.h>

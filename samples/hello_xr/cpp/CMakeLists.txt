@@ -92,8 +92,7 @@ set(LOCAL_SOURCE
     openxr_program.cpp
     pch.cpp
     platformplugin_android.cpp
-    # platformplugin_factory.cpp
-    # platformplugin_posix.cpp
+    # platformplugin_factory.cpp platformplugin_posix.cpp
     platformplugin_win32.cpp)
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 
@@ -111,8 +110,10 @@ if(ANDROID)
 
 else()
   add_executable(hello_xr ${LOCAL_SOURCE} ${VULKAN_SHADERS})
-  target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32
-                                              -DXR_USE_GRAPHICS_API_VULKAN)
+  target_compile_definitions(
+    hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN,
+                     -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+
   target_link_libraries(hello_xr PRIVATE vulkan_sdk)
 endif()
 target_include_directories(hello_xr PRIVATE .)

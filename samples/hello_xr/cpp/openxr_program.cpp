@@ -14,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <set>
+#include <map>
 
 namespace {
 

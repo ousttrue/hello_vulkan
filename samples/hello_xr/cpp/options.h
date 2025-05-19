@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-
-#include "pch.h"
+#include <array>
 
 inline XrFormFactor GetXrFormFactor(const std::string &formFactorStr) {
   if (EqualsIgnoreCase(formFactorStr, "Hmd")) {

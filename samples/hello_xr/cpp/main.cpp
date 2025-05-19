@@ -9,6 +9,8 @@
 #include "pch.h"
 #include "platformdata.h"
 
+#include <thread>
+
 #ifdef XR_USE_PLATFORM_ANDROID
 #include "platformplugin_android.h"
 #else
