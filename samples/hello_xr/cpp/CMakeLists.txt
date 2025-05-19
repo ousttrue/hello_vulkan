@@ -83,7 +83,7 @@ set(LOCAL_SOURCE
     # d3d_common.cpp
     # graphicsplugin_d3d11.cpp
     # graphicsplugin_d3d12.cpp
-    graphicsplugin_factory.cpp
+    # graphicsplugin_factory.cpp
     # graphicsplugin_opengl.cpp graphicsplugin_opengles.cpp
     graphicsplugin_vulkan.cpp
     # graphicsplugin_metal.cpp

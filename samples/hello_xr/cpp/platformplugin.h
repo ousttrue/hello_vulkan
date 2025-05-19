@@ -3,21 +3,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <memory>
+#include <openxr/openxr_reflection.h>
+#include <string>
+#include <vector>
 
-// Wraps platform-specific implementation so the main openxr program can be platform-independent.
+// Wraps platform-specific implementation so the main openxr program can be
+// platform-independent.
 struct IPlatformPlugin {
-    virtual ~IPlatformPlugin() = default;
+  virtual ~IPlatformPlugin() = default;
 
-    // Provide extension to XrInstanceCreateInfo for xrCreateInstance.
-    virtual XrBaseInStructure* GetInstanceCreateExtension() const = 0;
+  // Provide extension to XrInstanceCreateInfo for xrCreateInstance.
+  virtual XrBaseInStructure *GetInstanceCreateExtension() const = 0;
 
-    // OpenXR instance-level extensions required by this platform.
-    virtual std::vector<std::string> GetInstanceExtensions() const = 0;
+  // OpenXR instance-level extensions required by this platform.
+  virtual std::vector<std::string> GetInstanceExtensions() const = 0;
 
-    // Perform required steps after updating Options
-    virtual void UpdateOptions(const std::shared_ptr<struct Options>& options) = 0;
+  // Perform required steps after updating Options
+  virtual void
+  UpdateOptions(const std::shared_ptr<struct Options> &options) = 0;
 };
 
 // Create a platform plugin for the platform specified at compile time.
-std::shared_ptr<IPlatformPlugin> CreatePlatformPlugin(const std::shared_ptr<struct Options>& options,
-                                                      const std::shared_ptr<struct PlatformData>& data);
+std::shared_ptr<IPlatformPlugin>
+CreatePlatformPlugin(const std::shared_ptr<struct Options> &options,
+                     const std::shared_ptr<struct PlatformData> &data);
