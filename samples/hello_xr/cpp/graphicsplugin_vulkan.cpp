@@ -4,24 +4,27 @@
 
 #ifdef XR_USE_PLATFORM_WIN32
 #include <windows.h>
-
 #include <unknwn.h>
 #endif
 
-#include "graphicsplugin_vulkan.h"
-#include "geometry.h"
-#include "graphicsplugin_vulkan.h"
-#include "options.h"
 #include "check.h"
+#include "graphicsplugin_vulkan.h"
 #include "logger.h"
+#include "options.h"
 
 #include <vulkan/vulkan.h>
-// #include <android_native_app_glue.h>
+
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+
 #include <openxr/openxr_platform.h>
 
+#include "geometry.h"
+
+#include <algorithm>
 #include <list>
 #include <map>
-#include <algorithm>
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <common/vulkan_debug_object_namer.hpp>
