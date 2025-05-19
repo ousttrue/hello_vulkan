@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "graphicsapi.h"
 #include "platformplugin.h"
 
 struct IOpenXrProgram {

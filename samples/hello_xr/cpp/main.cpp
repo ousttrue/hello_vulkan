@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "common.h"
-#include "graphicsplugin.h"
+#include "graphicsplugin_vulkan.h"
 #include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
 #include "options.h"

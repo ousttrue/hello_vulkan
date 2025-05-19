@@ -5,7 +5,7 @@
 #include "graphicsplugin_vulkan.h"
 #include "common.h"
 #include "geometry.h"
-#include "graphicsplugin.h"
+#include "graphicsplugin_vulkan.h"
 #include "options.h"
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN

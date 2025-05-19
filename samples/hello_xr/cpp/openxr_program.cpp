@@ -8,7 +8,7 @@
 #include "options.h"
 #include "platformdata.h"
 #include "platformplugin.h"
-#include "graphicsplugin.h"
+#include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
 #include <common/xr_linear.h>
 #include <array>
