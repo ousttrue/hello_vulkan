@@ -104,7 +104,7 @@ static std::string vkObjectTypeToString(VkObjectType objectType) {
 
 namespace {
 
-struct SwapchainImageContext {
+class SwapchainImageContext {
   SwapchainImageContext(XrStructureType _swapchainImageType)
       : swapchainImageType(_swapchainImageType) {}
 
@@ -113,12 +113,19 @@ struct SwapchainImageContext {
   std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
   std::vector<RenderTarget> renderTarget;
   VkExtent2D size{};
-  DepthBuffer depthBuffer{};
   RenderPass rp{};
-  Pipeline pipe{};
   XrStructureType swapchainImageType;
 
   SwapchainImageContext() = default;
+
+public:
+  Pipeline pipe{};
+  DepthBuffer depthBuffer{};
+  static std::shared_ptr<SwapchainImageContext>
+  create(XrStructureType _swapchainImageType) {
+    return std::shared_ptr<SwapchainImageContext>(
+        new SwapchainImageContext(_swapchainImageType));
+  }
 
   std::vector<XrSwapchainImageBaseHeader *>
   Create(const VulkanDebugObjectNamer &namer, VkDevice device,
@@ -809,18 +816,18 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
     // pointers to each swapchain image struct so the consumer doesn't need to
     // know the type/size. Keep the buffer alive by adding it into the list of
     // buffers.
-    m_swapchainImageContexts.emplace_back(GetSwapchainImageType());
-    SwapchainImageContext &swapchainImageContext =
-        m_swapchainImageContexts.back();
+    m_swapchainImageContexts.emplace_back(
+        SwapchainImageContext::create(GetSwapchainImageType()));
+    auto swapchainImageContext = m_swapchainImageContexts.back();
 
     std::vector<XrSwapchainImageBaseHeader *> bases =
-        swapchainImageContext.Create(
+        swapchainImageContext->Create(
             m_namer, m_vkDevice, &m_memAllocator, capacity, swapchainCreateInfo,
             m_pipelineLayout, m_shaderProgram, m_drawBuffer);
 
     // Map every swapchainImage base pointer to this context
     for (auto &base : bases) {
-      m_swapchainImageContextMap[base] = &swapchainImageContext;
+      m_swapchainImageContextMap[base] = swapchainImageContext;
     }
 
     return bases;
@@ -929,8 +936,9 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
 protected:
   XrGraphicsBindingVulkan2KHR m_graphicsBinding{
       XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR};
-  std::list<SwapchainImageContext> m_swapchainImageContexts;
-  std::map<const XrSwapchainImageBaseHeader *, SwapchainImageContext *>
+  std::list<std::shared_ptr<SwapchainImageContext>> m_swapchainImageContexts;
+  std::map<const XrSwapchainImageBaseHeader *,
+           std::shared_ptr<SwapchainImageContext>>
       m_swapchainImageContextMap;
 
   VkInstance m_vkInstance{VK_NULL_HANDLE};
