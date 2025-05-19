@@ -74,25 +74,6 @@ private:
   void Load(uint32_t index, const std::vector<uint32_t> &code);
 };
 
-// RenderPass wrapper
-struct RenderPass {
-  VkFormat colorFmt{};
-  VkFormat depthFmt{};
-  VkRenderPass pass{VK_NULL_HANDLE};
-
-  RenderPass() = default;
-  bool Create(const VulkanDebugObjectNamer &namer, VkDevice device,
-              VkFormat aColorFmt, VkFormat aDepthFmt);
-  ~RenderPass();
-  RenderPass(const RenderPass &) = delete;
-  RenderPass &operator=(const RenderPass &) = delete;
-  RenderPass(RenderPass &&) = delete;
-  RenderPass &operator=(RenderPass &&) = delete;
-
-private:
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-};
-
 // VkImage + framebuffer wrapper
 struct RenderTarget {
   VkImage colorImage{VK_NULL_HANDLE};
@@ -108,7 +89,7 @@ struct RenderTarget {
   RenderTarget &operator=(RenderTarget &&other) noexcept;
   void Create(const VulkanDebugObjectNamer &namer, VkDevice device,
               VkImage aColorImage, VkImage aDepthImage, VkExtent2D size,
-              RenderPass &renderPass);
+              struct RenderPass &renderPass);
 
   RenderTarget(const RenderTarget &) = delete;
   RenderTarget &operator=(const RenderTarget &) = delete;

@@ -87,6 +87,7 @@ set(LOCAL_SOURCE
     vk_utils.cpp
     VertexBuffer.cpp
     MemoryAllocator.cpp
+    RenderPass.cpp
     # pch.cpp platformplugin_factory.cpp platformplugin_posix.cpp
 )
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)

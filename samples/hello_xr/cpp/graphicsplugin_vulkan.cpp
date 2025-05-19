@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "CreateGraphicsPlugin_Vulkan.h"
 #include "MemoryAllocator.h"
+#include "RenderPass.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -105,14 +106,14 @@ static std::string vkObjectTypeToString(VkObjectType objectType) {
 
 class SwapchainImageContext {
   SwapchainImageContext(XrStructureType _swapchainImageType)
-      : swapchainImageType(_swapchainImageType) {}
+      : rp(new RenderPass), swapchainImageType(_swapchainImageType) {}
 
   // A packed array of XrSwapchainImageVulkan2KHR's for
   // xrEnumerateSwapchainImages
   std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
   std::vector<RenderTarget> renderTarget;
   VkExtent2D size{};
-  RenderPass rp{};
+  std::shared_ptr<struct RenderPass> rp;
   XrStructureType swapchainImageType;
 
   SwapchainImageContext() = default;
@@ -142,8 +143,8 @@ public:
 
     depthBuffer.Create(namer, m_vkDevice, memAllocator, depthFormat,
                        swapchainCreateInfo);
-    rp.Create(namer, m_vkDevice, colorFormat, depthFormat);
-    pipe.Create(m_vkDevice, size, layout, rp, sp, vb);
+    rp->Create(namer, m_vkDevice, colorFormat, depthFormat);
+    pipe.Create(m_vkDevice, size, layout, *rp, sp, vb);
 
     swapchainImages.resize(capacity);
     renderTarget.resize(capacity);
@@ -168,9 +169,9 @@ public:
     if (renderTarget[index].fb == VK_NULL_HANDLE) {
       renderTarget[index].Create(m_namer, m_vkDevice,
                                  swapchainImages[index].image,
-                                 depthBuffer.depthImage, size, rp);
+                                 depthBuffer.depthImage, size, *rp);
     }
-    renderPassBeginInfo->renderPass = rp.pass;
+    renderPassBeginInfo->renderPass = rp->pass;
     renderPassBeginInfo->framebuffer = renderTarget[index].fb;
     renderPassBeginInfo->renderArea.offset = {0, 0};
     renderPassBeginInfo->renderArea.extent = size;
