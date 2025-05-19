@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "openxr/openxr.h"
-#include "common.h"
 #include "options.h"
 #include "platformplugin.h"
 #include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
+#include "check.h"
+#include "logger.h"
 #include <common/xr_linear.h>
 #include <array>
 #include <cmath>

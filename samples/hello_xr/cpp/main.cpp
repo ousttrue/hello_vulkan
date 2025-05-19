@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "common.h"
 #include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
 #include "options.h"
+#include "logger.h"
 
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android/log.h>

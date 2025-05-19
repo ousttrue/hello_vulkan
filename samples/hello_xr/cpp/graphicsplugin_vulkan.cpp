@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "graphicsplugin_vulkan.h"
-#include "common.h"
 #include "geometry.h"
 #include "graphicsplugin_vulkan.h"
 #include "options.h"
+#include "check.h"
+#include "logger.h"
 
 #include <vulkan/vulkan.h>
 #include <android_native_app_glue.h>
