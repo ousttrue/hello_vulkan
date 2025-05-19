@@ -92,7 +92,7 @@ set(LOCAL_SOURCE
     openxr_program.cpp
     pch.cpp
     platformplugin_android.cpp
-    platformplugin_factory.cpp
+    # platformplugin_factory.cpp
     # platformplugin_posix.cpp
     platformplugin_win32.cpp)
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)

@@ -4,12 +4,16 @@
 
 #include "common.h"
 #include "graphicsplugin_vulkan.h"
-#include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
 #include "options.h"
 #include "pch.h"
 #include "platformdata.h"
-#include "platformplugin.h"
+
+#ifdef XR_USE_PLATFORM_ANDROID
+#include "platformplugin_android.h"
+#else
+#include "platformplugin_win32.h"
+#endif
 
 #if defined(_WIN32)
 // Favor the high performance NVIDIA or AMD GPUs
@@ -224,7 +228,7 @@ void android_main(struct android_app *app) {
 
     // Create platform-specific implementation.
     std::shared_ptr<IPlatformPlugin> platformPlugin =
-        CreatePlatformPlugin(options, data);
+        CreatePlatformPlugin_Android(options, data);
 
     // Create graphics API implementation.
     std::shared_ptr<IGraphicsPlugin> graphicsPlugin =
@@ -330,7 +334,7 @@ int main(int argc, char *argv[]) {
     do {
       // Create platform-specific implementation.
       std::shared_ptr<IPlatformPlugin> platformPlugin =
-          CreatePlatformPlugin(options, data);
+          return CreatePlatformPlugin_Win32(options);
 
       // Create graphics API implementation.
       std::shared_ptr<IGraphicsPlugin> graphicsPlugin =

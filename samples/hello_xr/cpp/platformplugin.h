@@ -23,8 +23,3 @@ struct IPlatformPlugin {
   virtual void
   UpdateOptions(const std::shared_ptr<struct Options> &options) = 0;
 };
-
-// Create a platform plugin for the platform specified at compile time.
-std::shared_ptr<IPlatformPlugin>
-CreatePlatformPlugin(const std::shared_ptr<struct Options> &options,
-                     const std::shared_ptr<struct PlatformData> &data);
