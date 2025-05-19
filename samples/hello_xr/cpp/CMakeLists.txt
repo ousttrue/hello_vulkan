@@ -80,7 +80,7 @@ function(compile_glsl run_target_name)
 endfunction()
 
 set(LOCAL_SOURCE
-    graphicsplugin_vulkan.cpp logger.cpp main.cpp openxr_program.cpp
+    graphicsplugin_vulkan.cpp logger.cpp main.cpp openxr_program.cpp vk_utils.cpp
     # pch.cpp platformplugin_factory.cpp platformplugin_posix.cpp
 )
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
