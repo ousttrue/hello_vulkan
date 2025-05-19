@@ -1,5 +1,8 @@
 #pragma once
-#include "platformplugin.h"
+#include <memory>
+#include <openxr/openxr.h>
+#include <string>
+#include <vector>
 
 struct Cube {
   XrPosef Pose;
@@ -50,6 +53,3 @@ struct IGraphicsPlugin {
   virtual void
   UpdateOptions(const std::shared_ptr<struct Options> &options) = 0;
 };
-std::shared_ptr<IGraphicsPlugin>
-CreateGraphicsPlugin_Vulkan(const std::shared_ptr<Options> &options,
-                            std::shared_ptr<IPlatformPlugin> platformPlugin);

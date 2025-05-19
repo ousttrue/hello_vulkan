@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <memory>
 #ifdef XR_USE_PLATFORM_WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <windows.h>
@@ -22,7 +23,8 @@
 #include <vulkan/vulkan.h>
 #endif
 
-#include "graphicsplugin_vulkan.h"
+#include "CreateGraphicsPlugin_Vulkan.h"
+#include "IGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
@@ -357,8 +359,8 @@ int main(int argc, char *argv[]) {
           CreateGraphicsPlugin_Vulkan(options, platformPlugin);
 
       // Initialize the OpenXR program.
-      std::shared_ptr<IOpenXrProgram> program =
-          CreateOpenXrProgram(options, platformPlugin, graphicsPlugin);
+      auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,
+                                                     graphicsPlugin);
 
       program->CreateInstance();
       program->InitializeSystem();

@@ -1,6 +1,7 @@
 // Copyright (c) 2017-2024, The Khronos Group Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
+#include "CreateGraphicsPlugin_Vulkan.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -9,8 +10,8 @@
 #include <windows.h>
 #endif
 
+#include "IGraphicsPlugin.h"
 #include "check.h"
-#include "graphicsplugin_vulkan.h"
 #include "logger.h"
 #include "options.h"
 
@@ -400,7 +401,7 @@ void Swapchain::Present(VkQueue queue, VkSemaphore drawComplete) {
 
 struct VulkanGraphicsPlugin : public IGraphicsPlugin {
   VulkanGraphicsPlugin(const std::shared_ptr<Options> &options,
-                       std::shared_ptr<IPlatformPlugin> /*unused*/)
+                       std::shared_ptr<struct IPlatformPlugin> /*unused*/)
       : m_clearColor(options->GetBackgroundClearColor()) {
     m_graphicsBinding.type = GetGraphicsBindingType();
   };
@@ -1148,10 +1149,12 @@ struct VulkanGraphicsPluginLegacy : public VulkanGraphicsPlugin {
       }
       LogVulkanExtensions(
           "Vulkan Instance Extensions, requested by application", extensions,
-          extensions.size() -
+          static_cast<uint32_t>(extensions.size()) -
               createInfo->vulkanCreateInfo->enabledExtensionCount);
 
-      VkInstanceCreateInfo instInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+      VkInstanceCreateInfo instInfo{
+          .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      };
       memcpy(&instInfo, createInfo->vulkanCreateInfo, sizeof(instInfo));
       instInfo.enabledExtensionCount = (uint32_t)extensions.size();
       instInfo.ppEnabledExtensionNames =
@@ -1205,7 +1208,7 @@ struct VulkanGraphicsPluginLegacy : public VulkanGraphicsPlugin {
       }
       LogVulkanExtensions(
           "Vulkan Device Extensions, requested by application", extensions,
-          extensions.size() -
+          static_cast<uint32_t>(extensions.size()) -
               createInfo->vulkanCreateInfo->enabledExtensionCount);
 
       VkPhysicalDeviceFeatures features{};

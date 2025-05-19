@@ -47,6 +47,12 @@ export default defineConfig({
           },
         ]
       },
+      {
+        text: 'OpenXR',
+        items: [
+          { text: '初期化', link: '/openxr/initialization' },
+        ],
+      }
     ],
 
     socialLinks: [
