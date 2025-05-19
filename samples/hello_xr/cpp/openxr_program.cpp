@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "openxr/openxr.h"
-#include "pch.h"
 #include "common.h"
 #include "options.h"
 #include "platformdata.h"

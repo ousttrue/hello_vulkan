@@ -2,33 +2,64 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "pch.h"
 #include "common.h"
 #include "platformdata.h"
 #include "platformplugin.h"
 
 #ifdef XR_USE_PLATFORM_ANDROID
+#include <android/log.h>
+#include <android/native_window.h>
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <sys/system_properties.h>
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+#ifdef XR_USE_PLATFORM_WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+#define VK_USE_PLATFORM_ANDROID_KHR
+#endif
+#include <vulkan/vulkan.h>
+#endif
+
+//
+// OpenXR Headers
+//
+#include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
+#include <openxr/openxr_reflection.h>
+
+#ifdef XR_USE_PLATFORM_ANDROID
 
 namespace {
 struct AndroidPlatformPlugin : public IPlatformPlugin {
-    AndroidPlatformPlugin(const std::shared_ptr<Options>& /*unused*/, const std::shared_ptr<PlatformData>& data) {
-        instanceCreateInfoAndroid = {XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
-        instanceCreateInfoAndroid.applicationVM = data->applicationVM;
-        instanceCreateInfoAndroid.applicationActivity = data->applicationActivity;
-    }
+  AndroidPlatformPlugin(const std::shared_ptr<Options> & /*unused*/,
+                        const std::shared_ptr<PlatformData> &data) {
+    instanceCreateInfoAndroid = {XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
+    instanceCreateInfoAndroid.applicationVM = data->applicationVM;
+    instanceCreateInfoAndroid.applicationActivity = data->applicationActivity;
+  }
 
-    std::vector<std::string> GetInstanceExtensions() const override { return {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME}; }
+  std::vector<std::string> GetInstanceExtensions() const override {
+    return {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME};
+  }
 
-    XrBaseInStructure* GetInstanceCreateExtension() const override { return (XrBaseInStructure*)&instanceCreateInfoAndroid; }
+  XrBaseInStructure *GetInstanceCreateExtension() const override {
+    return (XrBaseInStructure *)&instanceCreateInfoAndroid;
+  }
 
-    void UpdateOptions(const std::shared_ptr<struct Options>& /*unused*/) override {}
+  void
+  UpdateOptions(const std::shared_ptr<struct Options> & /*unused*/) override {}
 
-    XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid;
+  XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid;
 };
-}  // namespace
+} // namespace
 
-std::shared_ptr<IPlatformPlugin> CreatePlatformPlugin_Android(const std::shared_ptr<Options>& options,
-                                                              const std::shared_ptr<PlatformData>& data) {
-    return std::make_shared<AndroidPlatformPlugin>(options, data);
+std::shared_ptr<IPlatformPlugin>
+CreatePlatformPlugin_Android(const std::shared_ptr<Options> &options,
+                             const std::shared_ptr<PlatformData> &data) {
+  return std::make_shared<AndroidPlatformPlugin>(options, data);
 }
 #endif

@@ -6,9 +6,32 @@
 #include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
 #include "options.h"
-#include "pch.h"
 #include "platformdata.h"
 
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android/log.h>
+#include <android/native_window.h>
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <sys/system_properties.h>
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+#ifdef XR_USE_PLATFORM_WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+#define VK_USE_PLATFORM_ANDROID_KHR
+#endif
+#include <vulkan/vulkan.h>
+#endif
+
+//
+// OpenXR Headers
+//
+#include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
+#include <openxr/openxr_reflection.h>
 #include <thread>
 
 #ifdef XR_USE_PLATFORM_ANDROID

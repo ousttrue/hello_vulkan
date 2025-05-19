@@ -90,7 +90,7 @@ set(LOCAL_SOURCE
     logger.cpp
     main.cpp
     openxr_program.cpp
-    pch.cpp
+    # pch.cpp
     platformplugin_android.cpp
     # platformplugin_factory.cpp platformplugin_posix.cpp
     platformplugin_win32.cpp)
