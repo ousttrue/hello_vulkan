@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 #include "CreateGraphicsPlugin_Vulkan.h"
+#include "MemoryAllocator.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -101,8 +102,6 @@ static std::string vkObjectTypeToString(VkObjectType objectType) {
 
   return objName;
 }
-
-namespace {
 
 class SwapchainImageContext {
   SwapchainImageContext(XrStructureType _swapchainImageType)
@@ -1087,8 +1086,6 @@ protected:
                                                 graphicsRequirements);
   }
 };
-
-} // namespace
 
 std::shared_ptr<IGraphicsPlugin>
 CreateGraphicsPlugin_Vulkan(const std::shared_ptr<Options> &options,

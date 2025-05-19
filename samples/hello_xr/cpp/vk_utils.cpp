@@ -1,4 +1,5 @@
 #include "vk_utils.h"
+#include "MemoryAllocator.h"
 #include "check.h"
 #include "logger.h"
 #include "to_string.h"
@@ -121,34 +122,6 @@ VkResult CheckVkResult(VkResult res, const char *originator,
 #define THROW_VK(res, cmd) ThrowVkResult(res, #cmd, FILE_AND_LINE);
 #define CHECK_VKCMD(cmd) CheckVkResult(cmd, #cmd, FILE_AND_LINE);
 #define CHECK_VKRESULT(res, cmdStr) CheckVkResult(res, cmdStr, FILE_AND_LINE);
-
-//
-// MemoryAllocator
-//
-void MemoryAllocator::Init(VkPhysicalDevice physicalDevice, VkDevice device) {
-  m_vkDevice = device;
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &m_memProps);
-}
-
-void MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,
-                               VkDeviceMemory *mem, VkFlags flags,
-                               const void *pNext) const {
-  // Search memtypes to find first index with those properties
-  for (uint32_t i = 0; i < m_memProps.memoryTypeCount; ++i) {
-    if ((memReqs.memoryTypeBits & (1 << i)) != 0u) {
-      // Type is available, does it match user properties?
-      if ((m_memProps.memoryTypes[i].propertyFlags & flags) == flags) {
-        VkMemoryAllocateInfo memAlloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                                      pNext};
-        memAlloc.allocationSize = memReqs.size;
-        memAlloc.memoryTypeIndex = i;
-        CHECK_VKCMD(vkAllocateMemory(m_vkDevice, &memAlloc, nullptr, mem));
-        return;
-      }
-    }
-  }
-  THROW("Memory format not supported");
-}
 
 //
 // CmdBuffer - manage VkCommandBuffer state
@@ -335,49 +308,6 @@ void ShaderProgram::Load(uint32_t index, const std::vector<uint32_t> &code) {
   CHECK_VKCMD(vkCreateShaderModule(m_vkDevice, &modInfo, nullptr, &si.module));
 
   Log::Write(Log::Level::Info, Fmt("Loaded %s shader", name.c_str()));
-}
-
-//
-// VertexBuffer base class
-//
-VertexBufferBase::~VertexBufferBase() {
-  if (m_vkDevice != nullptr) {
-    if (idxBuf != VK_NULL_HANDLE) {
-      vkDestroyBuffer(m_vkDevice, idxBuf, nullptr);
-    }
-    if (idxMem != VK_NULL_HANDLE) {
-      vkFreeMemory(m_vkDevice, idxMem, nullptr);
-    }
-    if (vtxBuf != VK_NULL_HANDLE) {
-      vkDestroyBuffer(m_vkDevice, vtxBuf, nullptr);
-    }
-    if (vtxMem != VK_NULL_HANDLE) {
-      vkFreeMemory(m_vkDevice, vtxMem, nullptr);
-    }
-  }
-  idxBuf = VK_NULL_HANDLE;
-  idxMem = VK_NULL_HANDLE;
-  vtxBuf = VK_NULL_HANDLE;
-  vtxMem = VK_NULL_HANDLE;
-  bindDesc = {};
-  attrDesc.clear();
-  count = {0, 0};
-  m_vkDevice = nullptr;
-}
-
-void VertexBufferBase::Init(
-    VkDevice device, const MemoryAllocator *memAllocator,
-    const std::vector<VkVertexInputAttributeDescription> &attr) {
-  m_vkDevice = device;
-  m_memAllocator = memAllocator;
-  attrDesc = attr;
-}
-
-void VertexBufferBase::AllocateBufferMemory(VkBuffer buf,
-                                            VkDeviceMemory *mem) const {
-  VkMemoryRequirements memReq = {};
-  vkGetBufferMemoryRequirements(m_vkDevice, buf, &memReq);
-  m_memAllocator->Allocate(memReq, mem);
 }
 
 //
