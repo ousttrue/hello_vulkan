@@ -2,12 +2,15 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "graphicsplugin_vulkan.h"
-#include "openxr_program.h"
-#include "options.h"
-#include "logger.h"
+#ifdef XR_USE_PLATFORM_WIN32
+#define VK_USE_PLATFORM_WIN32_KHR
+#include <windows.h>
+
+#include <unknwn.h>
+#endif
 
 #ifdef XR_USE_PLATFORM_ANDROID
+#define VK_USE_PLATFORM_ANDROID_KHR
 #include <android/log.h>
 #include <android/native_window.h>
 #include <android_native_app_glue.h>
@@ -16,14 +19,13 @@
 #endif
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
-#ifdef XR_USE_PLATFORM_WIN32
-#define VK_USE_PLATFORM_WIN32_KHR
-#endif
-#ifdef XR_USE_PLATFORM_ANDROID
-#define VK_USE_PLATFORM_ANDROID_KHR
-#endif
 #include <vulkan/vulkan.h>
 #endif
+
+#include "graphicsplugin_vulkan.h"
+#include "logger.h"
+#include "openxr_program.h"
+#include "options.h"
 
 //
 // OpenXR Headers
@@ -119,10 +121,7 @@ bool UpdateOptionsFromCommandLine(Options &options, int argc, char *argv[]) {
 
   while (i < argc) {
     const std::string arg = getNextArg();
-    if (EqualsIgnoreCase(arg, "--graphics") || EqualsIgnoreCase(arg, "-g")) {
-      options.GraphicsPlugin = getNextArg();
-    } else if (EqualsIgnoreCase(arg, "--formfactor") ||
-               EqualsIgnoreCase(arg, "-ff")) {
+    if (EqualsIgnoreCase(arg, "--formfactor") || EqualsIgnoreCase(arg, "-ff")) {
       options.FormFactor = getNextArg();
     } else if (EqualsIgnoreCase(arg, "--viewconfig") ||
                EqualsIgnoreCase(arg, "-vc")) {
@@ -142,13 +141,6 @@ bool UpdateOptionsFromCommandLine(Options &options, int argc, char *argv[]) {
     } else {
       throw std::invalid_argument(Fmt("Unknown argument: %s", arg.c_str()));
     }
-  }
-
-  // Check for required parameters.
-  if (options.GraphicsPlugin.empty()) {
-    Log::Write(Log::Level::Error, "GraphicsPlugin parameter is required");
-    ShowHelp();
-    return false;
   }
 
   try {
@@ -343,7 +335,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
 
-    std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
+    // std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
 
     // Spawn a thread to wait for a keypress
     static bool quitKeyPressed = false;
@@ -358,11 +350,11 @@ int main(int argc, char *argv[]) {
     do {
       // Create platform-specific implementation.
       std::shared_ptr<IPlatformPlugin> platformPlugin =
-          return CreatePlatformPlugin_Win32(options);
+          CreatePlatformPlugin_Win32(options);
 
       // Create graphics API implementation.
       std::shared_ptr<IGraphicsPlugin> graphicsPlugin =
-          CreateGraphicsPlugin(options, platformPlugin);
+          CreateGraphicsPlugin_Vulkan(options, std::move(platformPlugin));
 
       // Initialize the OpenXR program.
       std::shared_ptr<IOpenXrProgram> program =

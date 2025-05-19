@@ -9,6 +9,11 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <mutex>
+
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Windows.h>
+#endif
 
 #if defined(ANDROID)
 #ifdef XR_USE_PLATFORM_ANDROID

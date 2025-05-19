@@ -2,6 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#ifdef XR_USE_PLATFORM_WIN32
+#include <windows.h>
+
+#include <unknwn.h>
+#endif
+
 #include "graphicsplugin_vulkan.h"
 #include "geometry.h"
 #include "graphicsplugin_vulkan.h"
@@ -10,11 +16,12 @@
 #include "logger.h"
 
 #include <vulkan/vulkan.h>
-#include <android_native_app_glue.h>
+// #include <android_native_app_glue.h>
 #include <openxr/openxr_platform.h>
 
 #include <list>
 #include <map>
+#include <algorithm>
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <common/vulkan_debug_object_namer.hpp>

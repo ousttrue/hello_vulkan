@@ -2,6 +2,8 @@
 #include <openxr/openxr_reflection.h>
 #include <stdarg.h>
 #include <string>
+#include <stdexcept>
+#include <memory>
 
 // Macro to generate stringify functions for OpenXR enumerations based data
 // provided in openxr_reflection.h

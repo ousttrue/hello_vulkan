@@ -80,25 +80,15 @@ function(compile_glsl run_target_name)
 endfunction()
 
 set(LOCAL_SOURCE
-    # d3d_common.cpp
-    # graphicsplugin_d3d11.cpp
-    # graphicsplugin_d3d12.cpp
-    # graphicsplugin_factory.cpp
-    # graphicsplugin_opengl.cpp graphicsplugin_opengles.cpp
-    graphicsplugin_vulkan.cpp
-    # graphicsplugin_metal.cpp
-    logger.cpp
-    main.cpp
-    openxr_program.cpp
-    # pch.cpp
-    platformplugin_android.cpp
-    # platformplugin_factory.cpp platformplugin_posix.cpp
-    platformplugin_win32.cpp)
+    graphicsplugin_vulkan.cpp logger.cpp main.cpp openxr_program.cpp
+    # pch.cpp platformplugin_factory.cpp platformplugin_posix.cpp
+)
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 
 if(ANDROID)
-  add_library(hello_xr MODULE ${LOCAL_SOURCE} ${VULKAN_SHADERS}
-                              $<TARGET_OBJECTS:android_native_app_glue>)
+  add_library(
+    hello_xr MODULE platformplugin_android.cpp ${LOCAL_SOURCE}
+                    ${VULKAN_SHADERS} $<TARGET_OBJECTS:android_native_app_glue>)
   target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID
                                               -DXR_USE_GRAPHICS_API_VULKAN)
   target_link_libraries(
@@ -109,9 +99,10 @@ if(ANDROID)
   target_compile_definitions(hello_xr PRIVATE DEFAULT_GRAPHICS_PLUGIN_VULKAN)
 
 else()
-  add_executable(hello_xr ${LOCAL_SOURCE} ${VULKAN_SHADERS})
+  add_executable(hello_xr platformplugin_win32.cpp ${LOCAL_SOURCE}
+                          ${VULKAN_SHADERS})
   target_compile_definitions(
-    hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN,
+    hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
                      -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 
   target_link_libraries(hello_xr PRIVATE vulkan_sdk)
