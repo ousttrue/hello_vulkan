@@ -53,6 +53,55 @@
 #define SPV_SUFFIX
 #endif
 
+static std::string vkObjectTypeToString(VkObjectType objectType) {
+  std::string objName;
+
+#define LIST_OBJECT_TYPES(_)                                                   \
+  _(UNKNOWN)                                                                   \
+  _(INSTANCE)                                                                  \
+  _(PHYSICAL_DEVICE)                                                           \
+  _(DEVICE)                                                                    \
+  _(QUEUE)                                                                     \
+  _(SEMAPHORE)                                                                 \
+  _(COMMAND_BUFFER)                                                            \
+  _(FENCE)                                                                     \
+  _(DEVICE_MEMORY)                                                             \
+  _(BUFFER)                                                                    \
+  _(IMAGE)                                                                     \
+  _(EVENT)                                                                     \
+  _(QUERY_POOL)                                                                \
+  _(BUFFER_VIEW)                                                               \
+  _(IMAGE_VIEW)                                                                \
+  _(SHADER_MODULE)                                                             \
+  _(PIPELINE_CACHE)                                                            \
+  _(PIPELINE_LAYOUT)                                                           \
+  _(RENDER_PASS)                                                               \
+  _(PIPELINE)                                                                  \
+  _(DESCRIPTOR_SET_LAYOUT)                                                     \
+  _(SAMPLER)                                                                   \
+  _(DESCRIPTOR_POOL)                                                           \
+  _(DESCRIPTOR_SET)                                                            \
+  _(FRAMEBUFFER)                                                               \
+  _(COMMAND_POOL)                                                              \
+  _(SURFACE_KHR)                                                               \
+  _(SWAPCHAIN_KHR)                                                             \
+  _(DISPLAY_KHR)                                                               \
+  _(DISPLAY_MODE_KHR)                                                          \
+  _(DESCRIPTOR_UPDATE_TEMPLATE_KHR)                                            \
+  _(DEBUG_UTILS_MESSENGER_EXT)
+
+  switch (objectType) {
+  default:
+#define MK_OBJECT_TYPE_CASE(name)                                              \
+  case VK_OBJECT_TYPE_##name:                                                  \
+    objName = #name;                                                           \
+    break;
+    LIST_OBJECT_TYPES(MK_OBJECT_TYPE_CASE)
+  }
+
+  return objName;
+}
+
 namespace {
 
 struct SwapchainImageContext {
@@ -906,54 +955,6 @@ protected:
   PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT{nullptr};
   VkDebugUtilsMessengerEXT m_vkDebugUtilsMessenger{VK_NULL_HANDLE};
 
-  static std::string vkObjectTypeToString(VkObjectType objectType) {
-    std::string objName;
-
-#define LIST_OBJECT_TYPES(_)                                                   \
-  _(UNKNOWN)                                                                   \
-  _(INSTANCE)                                                                  \
-  _(PHYSICAL_DEVICE)                                                           \
-  _(DEVICE)                                                                    \
-  _(QUEUE)                                                                     \
-  _(SEMAPHORE)                                                                 \
-  _(COMMAND_BUFFER)                                                            \
-  _(FENCE)                                                                     \
-  _(DEVICE_MEMORY)                                                             \
-  _(BUFFER)                                                                    \
-  _(IMAGE)                                                                     \
-  _(EVENT)                                                                     \
-  _(QUERY_POOL)                                                                \
-  _(BUFFER_VIEW)                                                               \
-  _(IMAGE_VIEW)                                                                \
-  _(SHADER_MODULE)                                                             \
-  _(PIPELINE_CACHE)                                                            \
-  _(PIPELINE_LAYOUT)                                                           \
-  _(RENDER_PASS)                                                               \
-  _(PIPELINE)                                                                  \
-  _(DESCRIPTOR_SET_LAYOUT)                                                     \
-  _(SAMPLER)                                                                   \
-  _(DESCRIPTOR_POOL)                                                           \
-  _(DESCRIPTOR_SET)                                                            \
-  _(FRAMEBUFFER)                                                               \
-  _(COMMAND_POOL)                                                              \
-  _(SURFACE_KHR)                                                               \
-  _(SWAPCHAIN_KHR)                                                             \
-  _(DISPLAY_KHR)                                                               \
-  _(DISPLAY_MODE_KHR)                                                          \
-  _(DESCRIPTOR_UPDATE_TEMPLATE_KHR)                                            \
-  _(DEBUG_UTILS_MESSENGER_EXT)
-
-    switch (objectType) {
-    default:
-#define MK_OBJECT_TYPE_CASE(name)                                              \
-  case VK_OBJECT_TYPE_##name:                                                  \
-    objName = #name;                                                           \
-    break;
-      LIST_OBJECT_TYPES(MK_OBJECT_TYPE_CASE)
-    }
-
-    return objName;
-  }
   VkBool32
   debugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                VkDebugUtilsMessageTypeFlagsEXT messageTypes,
