@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 #include "CreateGraphicsPlugin_Vulkan.h"
+#include "DepthBuffer.h"
 #include "MemoryAllocator.h"
-#include "RenderPass.h"
 #include "Pipeline.h"
+#include "RenderPass.h"
+#include "VertexBuffer.h"
+#include "CmdBuffer.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -122,7 +125,7 @@ class SwapchainImageContext {
 
 public:
   std::shared_ptr<class Pipeline> pipe;
-  DepthBuffer depthBuffer{};
+  std::shared_ptr<class DepthBuffer> depthBuffer;
 
   static std::shared_ptr<SwapchainImageContext>
   create(XrStructureType _swapchainImageType) {
@@ -144,8 +147,8 @@ public:
     VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
     // XXX handle swapchainCreateInfo.sampleCount
 
-    depthBuffer.Create(namer, m_vkDevice, memAllocator, depthFormat,
-                       swapchainCreateInfo);
+    depthBuffer = DepthBuffer::Create(namer, m_vkDevice, memAllocator,
+                                      depthFormat, swapchainCreateInfo);
     rp = RenderPass::Create(namer, m_vkDevice, colorFormat, depthFormat);
     pipe = Pipeline::Create(m_vkDevice, size, layout, *rp, sp, vb);
 
@@ -172,7 +175,7 @@ public:
     if (renderTarget[index].fb == VK_NULL_HANDLE) {
       renderTarget[index].Create(m_namer, m_vkDevice,
                                  swapchainImages[index].image,
-                                 depthBuffer.depthImage, size, *rp);
+                                 depthBuffer->depthImage, size, *rp);
     }
     renderPassBeginInfo->renderPass = rp->pass;
     renderPassBeginInfo->framebuffer = renderTarget[index].fb;
@@ -848,7 +851,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
     m_cmdBuffer.Begin();
 
     // Ensure depth is in the right layout
-    swapchainContext->depthBuffer.TransitionLayout(
+    swapchainContext->depthBuffer->TransitionLayout(
         &m_cmdBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // Bind and clear eye render target
@@ -950,7 +953,7 @@ protected:
 
   MemoryAllocator m_memAllocator{};
   ShaderProgram m_shaderProgram{};
-  CmdBuffer m_cmdBuffer{};
+  CmdBuffer m_cmdBuffer;
   PipelineLayout m_pipelineLayout{};
   VertexBuffer<Geometry::Vertex> m_drawBuffer{};
   std::array<float, 4> m_clearColor;
