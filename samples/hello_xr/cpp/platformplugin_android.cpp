@@ -2,9 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include "platformplugin_android.h"
 #include "common.h"
-#include "platformdata.h"
-#include "platformplugin.h"
 
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android/log.h>

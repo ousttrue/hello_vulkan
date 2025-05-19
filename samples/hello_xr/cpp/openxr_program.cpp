@@ -5,7 +5,6 @@
 #include "openxr/openxr.h"
 #include "common.h"
 #include "options.h"
-#include "platformdata.h"
 #include "platformplugin.h"
 #include "graphicsplugin_vulkan.h"
 #include "openxr_program.h"
