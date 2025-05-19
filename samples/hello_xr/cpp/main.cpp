@@ -24,7 +24,7 @@
 #endif
 
 #include "CreateGraphicsPlugin_Vulkan.h"
-#include "IGraphicsPlugin.h"
+#include "graphicsplugin_vulkan.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"

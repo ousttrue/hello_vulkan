@@ -10,8 +10,8 @@
 #include <windows.h>
 #endif
 
-#include "IGraphicsPlugin.h"
 #include "check.h"
+#include "graphicsplugin_vulkan.h"
 #include "logger.h"
 #include "options.h"
 
