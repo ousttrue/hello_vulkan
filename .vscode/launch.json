@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "hello_xr",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/hello_xr/cpp/hello_xr.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "vulfwk",
             "type": "cppvsdbg",
             "request": "launch",
