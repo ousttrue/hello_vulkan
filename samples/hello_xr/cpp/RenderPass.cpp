@@ -4,11 +4,15 @@
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
-bool RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
-                        VkFormat aColorFmt, VkFormat aDepthFmt) {
-  m_vkDevice = device;
-  colorFmt = aColorFmt;
-  depthFmt = aDepthFmt;
+std::shared_ptr<RenderPass>
+RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
+                   VkFormat aColorFmt, VkFormat aDepthFmt) {
+
+  auto ptr = std::shared_ptr<RenderPass>(new RenderPass);
+
+  ptr->m_vkDevice = device;
+  ptr->colorFmt = aColorFmt;
+  ptr->depthFmt = aDepthFmt;
 
   VkSubpassDescription subpass = {};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -30,10 +34,10 @@ bool RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
       .pSubpasses = &subpass,
   };
 
-  if (colorFmt != VK_FORMAT_UNDEFINED) {
+  if (ptr->colorFmt != VK_FORMAT_UNDEFINED) {
     colorRef.attachment = rpInfo.attachmentCount++;
 
-    at[colorRef.attachment].format = colorFmt;
+    at[colorRef.attachment].format = ptr->colorFmt;
     at[colorRef.attachment].samples = VK_SAMPLE_COUNT_1_BIT;
     at[colorRef.attachment].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     at[colorRef.attachment].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -48,10 +52,10 @@ bool RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
     subpass.pColorAttachments = &colorRef;
   }
 
-  if (depthFmt != VK_FORMAT_UNDEFINED) {
+  if (ptr->depthFmt != VK_FORMAT_UNDEFINED) {
     depthRef.attachment = rpInfo.attachmentCount++;
 
-    at[depthRef.attachment].format = depthFmt;
+    at[depthRef.attachment].format = ptr->depthFmt;
     at[depthRef.attachment].samples = VK_SAMPLE_COUNT_1_BIT;
     at[depthRef.attachment].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     at[depthRef.attachment].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -65,15 +69,16 @@ bool RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
     subpass.pDepthStencilAttachment = &depthRef;
   }
 
-  if (vkCreateRenderPass(m_vkDevice, &rpInfo, nullptr, &pass) != VK_SUCCESS) {
+  if (vkCreateRenderPass(ptr->m_vkDevice, &rpInfo, nullptr, &ptr->pass) !=
+      VK_SUCCESS) {
     throw std::runtime_error("vkCreateRenderPass");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)pass,
+  if (namer.SetName(VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)ptr->pass,
                     "hello_xr render pass") != VK_SUCCESS) {
     throw std::runtime_error("->SetName");
   }
 
-  return true;
+  return ptr;
 }
 
 RenderPass::~RenderPass() {

@@ -4,6 +4,7 @@
 #include "CreateGraphicsPlugin_Vulkan.h"
 #include "MemoryAllocator.h"
 #include "RenderPass.h"
+#include "Pipeline.h"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -105,22 +106,24 @@ static std::string vkObjectTypeToString(VkObjectType objectType) {
 }
 
 class SwapchainImageContext {
-  SwapchainImageContext(XrStructureType _swapchainImageType)
-      : rp(new RenderPass), swapchainImageType(_swapchainImageType) {}
+  VkDevice m_vkDevice{VK_NULL_HANDLE};
+  VulkanDebugObjectNamer m_namer;
 
   // A packed array of XrSwapchainImageVulkan2KHR's for
   // xrEnumerateSwapchainImages
   std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
   std::vector<RenderTarget> renderTarget;
   VkExtent2D size{};
-  std::shared_ptr<struct RenderPass> rp;
+  std::shared_ptr<class RenderPass> rp;
   XrStructureType swapchainImageType;
 
-  SwapchainImageContext() = default;
+  SwapchainImageContext(XrStructureType _swapchainImageType)
+      : swapchainImageType(_swapchainImageType) {}
 
 public:
-  Pipeline pipe{};
+  std::shared_ptr<class Pipeline> pipe;
   DepthBuffer depthBuffer{};
+
   static std::shared_ptr<SwapchainImageContext>
   create(XrStructureType _swapchainImageType) {
     return std::shared_ptr<SwapchainImageContext>(
@@ -131,7 +134,7 @@ public:
   Create(const VulkanDebugObjectNamer &namer, VkDevice device,
          MemoryAllocator *memAllocator, uint32_t capacity,
          const XrSwapchainCreateInfo &swapchainCreateInfo,
-         const PipelineLayout &layout, const ShaderProgram &sp,
+         const struct PipelineLayout &layout, const ShaderProgram &sp,
          const VertexBuffer<Geometry::Vertex> &vb) {
     m_vkDevice = device;
     m_namer = namer;
@@ -143,8 +146,8 @@ public:
 
     depthBuffer.Create(namer, m_vkDevice, memAllocator, depthFormat,
                        swapchainCreateInfo);
-    rp->Create(namer, m_vkDevice, colorFormat, depthFormat);
-    pipe.Create(m_vkDevice, size, layout, *rp, sp, vb);
+    rp = RenderPass::Create(namer, m_vkDevice, colorFormat, depthFormat);
+    pipe = Pipeline::Create(m_vkDevice, size, layout, *rp, sp, vb);
 
     swapchainImages.resize(capacity);
     renderTarget.resize(capacity);
@@ -176,10 +179,6 @@ public:
     renderPassBeginInfo->renderArea.offset = {0, 0};
     renderPassBeginInfo->renderArea.extent = size;
   }
-
-private:
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-  VulkanDebugObjectNamer m_namer;
 };
 
 #if defined(USE_MIRROR_WINDOW)
@@ -871,7 +870,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
                          VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBindPipeline(m_cmdBuffer.buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      swapchainContext->pipe.pipe);
+                      swapchainContext->pipe->pipe);
 
     // Bind index and vertex buffers
     vkCmdBindIndexBuffer(m_cmdBuffer.buf, m_drawBuffer.idxBuf, 0,
