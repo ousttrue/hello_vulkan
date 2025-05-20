@@ -25,7 +25,7 @@ struct Cube {
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.
 struct VulkanGraphicsPlugin {
-  VulkanGraphicsPlugin(const std::shared_ptr<struct Options> &options,
+  VulkanGraphicsPlugin(const struct Options &options,
                        std::shared_ptr<struct IPlatformPlugin> /*unused*/);
 
   // OpenXR extensions required by this graphics API.
@@ -69,7 +69,7 @@ struct VulkanGraphicsPlugin {
   }
 
   // Perform required steps after updating Options
-  void UpdateOptions(const std::shared_ptr<struct Options> &options);
+  void UpdateOptions(const struct Options &options);
 
   // Note: The output must not outlive the input - this modifies the input and
   // returns a collection of views into that modified input!

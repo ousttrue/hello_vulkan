@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <windows.h>
-#include <combaseapi.h>
+#include "check.h"
 #include "platformplugin.h"
 #include "to_string.h"
-#include "check.h"
+#include <combaseapi.h>
+#include <windows.h>
 
 [[noreturn]] inline void ThrowHResult(HRESULT hr,
                                       const char *originator = nullptr,
@@ -27,10 +27,9 @@ inline HRESULT CheckHResult(HRESULT hr, const char *originator = nullptr,
 #define CHECK_HRCMD(cmd) CheckHResult(cmd, #cmd, FILE_AND_LINE);
 #define CHECK_HRESULT(res, cmdStr) CheckHResult(res, cmdStr, FILE_AND_LINE);
 
-
 namespace {
 struct Win32PlatformPlugin : public IPlatformPlugin {
-  Win32PlatformPlugin(const std::shared_ptr<Options> &) {
+  Win32PlatformPlugin(const Options &) {
     CHECK_HRCMD(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
   }
 
@@ -42,12 +41,11 @@ struct Win32PlatformPlugin : public IPlatformPlugin {
     return nullptr;
   }
 
-  void
-  UpdateOptions(const std::shared_ptr<struct Options> & /*unused*/) override {}
+  void UpdateOptions(const struct Options & /*unused*/) override {}
 };
 } // namespace
 
 std::shared_ptr<IPlatformPlugin>
-CreatePlatformPlugin_Win32(const std::shared_ptr<Options> &options) {
+CreatePlatformPlugin_Win32(const Options &options) {
   return std::make_shared<Win32PlatformPlugin>(options);
 }

@@ -9,5 +9,5 @@ struct PlatformData {
 };
 
 std::shared_ptr<IPlatformPlugin>
-CreatePlatformPlugin_Android(const std::shared_ptr<struct Options> &options,
+CreatePlatformPlugin_Android(const struct Options &options,
                              const std::shared_ptr<PlatformData> &data);

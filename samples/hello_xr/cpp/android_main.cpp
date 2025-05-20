@@ -4,7 +4,6 @@
 #include "options.h"
 #include "platformplugin_android.h"
 #include <android_native_app_glue.h>
-#include <sys/system_properties.h>
 
 #include <thread>
 
@@ -75,31 +74,6 @@ void ShowHelp() {
              "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
 }
 
-bool UpdateOptionsFromSystemProperties(Options &options) {
-  char value[PROP_VALUE_MAX] = {};
-
-  if (__system_property_get("debug.xr.formFactor", value) != 0) {
-    options.FormFactor = value;
-  }
-
-  if (__system_property_get("debug.xr.viewConfiguration", value) != 0) {
-    options.ViewConfiguration = value;
-  }
-
-  if (__system_property_get("debug.xr.blendMode", value) != 0) {
-    options.EnvironmentBlendMode = value;
-  }
-
-  try {
-    options.ParseStrings();
-  } catch (std::invalid_argument &ia) {
-    Log::Write(Log::Level::Error, ia.what());
-    ShowHelp();
-    return false;
-  }
-  return true;
-}
-
 /**
  * This is the main entry point of a native application that is using
  * android_native_app_glue.  It runs in its own thread, with its own
@@ -115,8 +89,9 @@ void android_main(struct android_app *app) {
     app->userData = &appState;
     app->onAppCmd = app_handle_cmd;
 
-    std::shared_ptr<Options> options = std::make_shared<Options>();
-    if (!UpdateOptionsFromSystemProperties(*options)) {
+    Options options;
+    if (!options.UpdateOptionsFromSystemProperties()) {
+      ShowHelp();
       return;
     }
 
@@ -155,8 +130,10 @@ void android_main(struct android_app *app) {
     program->CreateInstance();
     program->InitializeSystem();
 
-    options->SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-    UpdateOptionsFromSystemProperties(*options);
+    options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
+    if(!options.UpdateOptionsFromSystemProperties()){
+      ShowHelp();
+    }
     platformPlugin->UpdateOptions(options);
     graphicsPlugin->UpdateOptions(options);
 

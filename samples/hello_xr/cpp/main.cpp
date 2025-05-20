@@ -20,55 +20,11 @@ void ShowHelp() {
   Log::Write(Log::Level::Info, "Spaces:                   View, Local, Stage");
 }
 
-bool UpdateOptionsFromCommandLine(Options &options, int argc, char *argv[]) {
-  int i = 1; // Index 0 is the program name and is skipped.
-
-  auto getNextArg = [argc, argv, &i] {
-    if (i >= argc) {
-      throw std::invalid_argument("Argument parameter missing");
-    }
-
-    return std::string(argv[i++]);
-  };
-
-  while (i < argc) {
-    const std::string arg = getNextArg();
-    if (EqualsIgnoreCase(arg, "--formfactor") || EqualsIgnoreCase(arg, "-ff")) {
-      options.FormFactor = getNextArg();
-    } else if (EqualsIgnoreCase(arg, "--viewconfig") ||
-               EqualsIgnoreCase(arg, "-vc")) {
-      options.ViewConfiguration = getNextArg();
-    } else if (EqualsIgnoreCase(arg, "--blendmode") ||
-               EqualsIgnoreCase(arg, "-bm")) {
-      options.EnvironmentBlendMode = getNextArg();
-    } else if (EqualsIgnoreCase(arg, "--space") ||
-               EqualsIgnoreCase(arg, "-s")) {
-      options.AppSpace = getNextArg();
-    } else if (EqualsIgnoreCase(arg, "--verbose") ||
-               EqualsIgnoreCase(arg, "-v")) {
-      Log::SetLevel(Log::Level::Verbose);
-    } else if (EqualsIgnoreCase(arg, "--help") || EqualsIgnoreCase(arg, "-h")) {
-      ShowHelp();
-      return false;
-    } else {
-      throw std::invalid_argument(Fmt("Unknown argument: %s", arg.c_str()));
-    }
-  }
-
-  try {
-    options.ParseStrings();
-  } catch (std::invalid_argument &ia) {
-    Log::Write(Log::Level::Error, ia.what());
-    ShowHelp();
-    return false;
-  }
-  return true;
-}
-
 int main(int argc, char *argv[]) {
   // Parse command-line arguments into Options.
-  std::shared_ptr<Options> options = std::make_shared<Options>();
-  if (!UpdateOptionsFromCommandLine(*options, argc, argv)) {
+  Options options;
+  if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
+    ShowHelp();
     return 1;
   }
 
@@ -98,8 +54,10 @@ int main(int argc, char *argv[]) {
     program->CreateInstance();
     program->InitializeSystem();
 
-    options->SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-    UpdateOptionsFromCommandLine(*options, argc, argv);
+    options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
+    if(!options.UpdateOptionsFromCommandLine(argc, argv)){
+      ShowHelp();
+    }
     platformPlugin->UpdateOptions(options);
     graphicsPlugin->UpdateOptions(options);
 

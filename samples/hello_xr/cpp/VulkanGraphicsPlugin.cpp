@@ -8,6 +8,7 @@
 #include "logger.h"
 #include "openxr/openxr.h"
 #include "options.h"
+#include "to_string.h"
 #include "vulkan_debug_object_namer.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -24,9 +25,8 @@ debugMessageThunk(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 }
 
 VulkanGraphicsPlugin::VulkanGraphicsPlugin(
-    const std::shared_ptr<Options> &options,
-    std::shared_ptr<struct IPlatformPlugin> /*unused*/)
-    : m_clearColor(options->GetBackgroundClearColor()) {
+    const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
+    : m_clearColor(options.GetBackgroundClearColor()) {
   m_graphicsBinding.type = GetGraphicsBindingType();
 }
 
@@ -502,9 +502,8 @@ void VulkanGraphicsPlugin::RenderView(
 #endif
 }
 
-void VulkanGraphicsPlugin::UpdateOptions(
-    const std::shared_ptr<Options> &options) {
-  m_clearColor = options->GetBackgroundClearColor();
+void VulkanGraphicsPlugin::UpdateOptions(const Options &options) {
+  m_clearColor = options.GetBackgroundClearColor();
 }
 
 static std::string vkObjectTypeToString(VkObjectType objectType) {

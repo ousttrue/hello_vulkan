@@ -20,6 +20,5 @@ struct IPlatformPlugin {
   virtual std::vector<std::string> GetInstanceExtensions() const = 0;
 
   // Perform required steps after updating Options
-  virtual void
-  UpdateOptions(const std::shared_ptr<struct Options> &options) = 0;
+  virtual void UpdateOptions(const struct Options &options) = 0;
 };

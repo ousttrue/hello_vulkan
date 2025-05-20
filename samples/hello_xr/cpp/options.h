@@ -3,78 +3,36 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "to_string.h"
 #include <array>
 #include <locale>
+#include <openxr/openxr.h>
 
-inline bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
-                             const std::locale &loc = std::locale()) {
-  const std::ctype<char> &ctype = std::use_facet<std::ctype<char>>(loc);
-  const auto compareCharLower = [&](char c1, char c2) {
-    return ctype.tolower(c1) == ctype.tolower(c2);
-  };
-  return s1.size() == s2.size() &&
-         std::equal(s1.begin(), s1.end(), s2.begin(), compareCharLower);
-}
+bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
+                      const std::locale &loc = std::locale());
 
-inline XrFormFactor GetXrFormFactor(const std::string &formFactorStr) {
-  if (EqualsIgnoreCase(formFactorStr, "Hmd")) {
-    return XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-  }
-  if (EqualsIgnoreCase(formFactorStr, "Handheld")) {
-    return XR_FORM_FACTOR_HANDHELD_DISPLAY;
-  }
-  throw std::invalid_argument(
-      Fmt("Unknown form factor '%s'", formFactorStr.c_str()));
-}
+XrFormFactor GetXrFormFactor(const std::string &formFactorStr);
 
-inline XrViewConfigurationType
-GetXrViewConfigurationType(const std::string &viewConfigurationStr) {
-  if (EqualsIgnoreCase(viewConfigurationStr, "Mono")) {
-    return XR_VIEW_CONFIGURATION_TYPE_PRIMARY_MONO;
-  }
-  if (EqualsIgnoreCase(viewConfigurationStr, "Stereo")) {
-    return XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-  }
-  throw std::invalid_argument(
-      Fmt("Unknown view configuration '%s'", viewConfigurationStr.c_str()));
-}
+XrViewConfigurationType
+GetXrViewConfigurationType(const std::string &viewConfigurationStr);
 
-inline XrEnvironmentBlendMode
-GetXrEnvironmentBlendMode(const std::string &environmentBlendModeStr) {
-  if (EqualsIgnoreCase(environmentBlendModeStr, "Opaque")) {
-    return XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-  }
-  if (EqualsIgnoreCase(environmentBlendModeStr, "Additive")) {
-    return XR_ENVIRONMENT_BLEND_MODE_ADDITIVE;
-  }
-  if (EqualsIgnoreCase(environmentBlendModeStr, "AlphaBlend")) {
-    return XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
-  }
-  throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'",
-                                  environmentBlendModeStr.c_str()));
-}
+XrEnvironmentBlendMode
+GetXrEnvironmentBlendMode(const std::string &environmentBlendModeStr);
 
-inline const char *
-GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode) {
-  switch (environmentBlendMode) {
-  case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
-    return "Opaque";
-  case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
-    return "Additive";
-  case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
-    return "AlphaBlend";
-  default:
-    throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'",
-                                    to_string(environmentBlendMode)));
-  }
-}
+const char *
+GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode);
+
+std::string GetXrVersionString(XrVersion ver);
 
 struct Options {
   std::string FormFactor{"Hmd"};
   std::string ViewConfiguration{"Stereo"};
   std::string EnvironmentBlendMode{"Opaque"};
   std::string AppSpace{"Local"};
+
+  Options() = default;
+  ~Options() = default;
+  Options(const Options &) = delete;
+  Options &operator=(const Options &) = delete;
 
   struct {
     XrFormFactor FormFactor{XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY};
@@ -84,33 +42,10 @@ struct Options {
         XR_ENVIRONMENT_BLEND_MODE_OPAQUE};
   } Parsed;
 
-  void ParseStrings() {
-    Parsed.FormFactor = GetXrFormFactor(FormFactor);
-    Parsed.ViewConfigType = GetXrViewConfigurationType(ViewConfiguration);
-    Parsed.EnvironmentBlendMode =
-        GetXrEnvironmentBlendMode(EnvironmentBlendMode);
-  }
+  void ParseStrings();
+  std::array<float, 4> GetBackgroundClearColor() const;
+  void SetEnvironmentBlendMode(XrEnvironmentBlendMode environmentBlendMode);
 
-  std::array<float, 4> GetBackgroundClearColor() const {
-    static const std::array<float, 4> SlateGrey{0.184313729f, 0.309803933f,
-                                                0.309803933f, 1.0f};
-    static const std::array<float, 4> TransparentBlack{0.0f, 0.0f, 0.0f, 0.0f};
-    static const std::array<float, 4> Black{0.0f, 0.0f, 0.0f, 1.0f};
-
-    switch (Parsed.EnvironmentBlendMode) {
-    case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
-      return SlateGrey;
-    case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
-      return Black;
-    case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
-      return TransparentBlack;
-    default:
-      return SlateGrey;
-    }
-  }
-
-  void SetEnvironmentBlendMode(XrEnvironmentBlendMode environmentBlendMode) {
-    EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-    Parsed.EnvironmentBlendMode = environmentBlendMode;
-  }
+  bool UpdateOptionsFromCommandLine(int argc, char *argv[]);
+  bool UpdateOptionsFromSystemProperties();
 };

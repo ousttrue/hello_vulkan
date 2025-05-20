@@ -9,6 +9,7 @@
 #include "openxr/openxr.h"
 #include "options.h"
 #include "platformplugin.h"
+#include "to_string.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -20,22 +21,21 @@
 #define strcpy_s(dest, source) strncpy((dest), (source), sizeof(dest))
 #endif
 
-inline std::string GetXrVersionString(XrVersion ver) {
-  return Fmt("%d.%d.%d", XR_VERSION_MAJOR(ver), XR_VERSION_MINOR(ver),
-             XR_VERSION_PATCH(ver));
-}
-
 static void LogLayersAndExtensions() {
   // Write out extension properties for a given layer.
   const auto logExtensions = [](const char *layerName, int indent = 0) {
     uint32_t instanceExtensionCount;
-    CHECK_XRCMD(xrEnumerateInstanceExtensionProperties(
-        layerName, 0, &instanceExtensionCount, nullptr));
+    if (xrEnumerateInstanceExtensionProperties(
+            layerName, 0, &instanceExtensionCount, nullptr) != XR_SUCCESS) {
+      throw std::runtime_error("xrEnumerateInstanceExtensionProperties");
+    }
     std::vector<XrExtensionProperties> extensions(
         instanceExtensionCount, {XR_TYPE_EXTENSION_PROPERTIES});
-    CHECK_XRCMD(xrEnumerateInstanceExtensionProperties(
-        layerName, (uint32_t)extensions.size(), &instanceExtensionCount,
-        extensions.data()));
+    if (xrEnumerateInstanceExtensionProperties(
+            layerName, (uint32_t)extensions.size(), &instanceExtensionCount,
+            extensions.data()) != XR_SUCCESS) {
+      throw std::runtime_error("xrEnumerateInstanceExtensionProperties");
+    }
 
     const std::string indentStr(indent, ' ');
     Log::Write(Log::Level::Verbose,
@@ -141,7 +141,7 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
 // OpenXrProgram
 //
 OpenXrProgram::OpenXrProgram(
-    const std::shared_ptr<Options> &options,
+    const Options &options,
     const std::shared_ptr<IPlatformPlugin> &platformPlugin,
     const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin)
     : m_options(options), m_platformPlugin(platformPlugin),
@@ -190,12 +190,12 @@ void OpenXrProgram::InitializeSystem() {
   CHECK(m_systemId == XR_NULL_SYSTEM_ID);
 
   XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
-  systemInfo.formFactor = m_options->Parsed.FormFactor;
+  systemInfo.formFactor = m_options.Parsed.FormFactor;
   CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
 
   Log::Write(Log::Level::Verbose,
              Fmt("Using system %d for form factor %s", m_systemId,
-                 to_string(m_options->Parsed.FormFactor)));
+                 to_string(m_options.Parsed.FormFactor)));
   CHECK(m_instance != XR_NULL_HANDLE);
   CHECK(m_systemId != XR_NULL_SYSTEM_ID);
 }
@@ -227,7 +227,7 @@ void OpenXrProgram::InitializeSession() {
 
   {
     XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-        GetXrReferenceSpaceCreateInfo(m_options->AppSpace);
+        GetXrReferenceSpaceCreateInfo(m_options.AppSpace);
     CHECK_XRCMD(xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo,
                                        &m_appSpace));
   }
@@ -266,18 +266,18 @@ void OpenXrProgram::CreateSwapchains() {
   // Note: No other view configurations exist at the time this code was
   // written. If this condition is not met, the project will need to be
   // audited to see how support should be added.
-  CHECK_MSG(m_options->Parsed.ViewConfigType ==
+  CHECK_MSG(m_options.Parsed.ViewConfigType ==
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
 
   // Query and cache view configuration views.
   uint32_t viewCount;
   CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-      m_instance, m_systemId, m_options->Parsed.ViewConfigType, 0, &viewCount,
+      m_instance, m_systemId, m_options.Parsed.ViewConfigType, 0, &viewCount,
       nullptr));
   m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
   CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-      m_instance, m_systemId, m_options->Parsed.ViewConfigType, viewCount,
+      m_instance, m_systemId, m_options.Parsed.ViewConfigType, viewCount,
       &viewCount, m_configViews.data()));
 
   // Create and cache view buffer for xrLocateViews later.
@@ -478,7 +478,7 @@ void OpenXrProgram::RenderFrame() {
 
   XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
   frameEndInfo.displayTime = frameState.predictedDisplayTime;
-  frameEndInfo.environmentBlendMode = m_options->Parsed.EnvironmentBlendMode;
+  frameEndInfo.environmentBlendMode = m_options.Parsed.EnvironmentBlendMode;
   frameEndInfo.layerCount = (uint32_t)layers.size();
   frameEndInfo.layers = layers.data();
   CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
@@ -487,13 +487,13 @@ void OpenXrProgram::RenderFrame() {
 XrEnvironmentBlendMode OpenXrProgram::GetPreferredBlendMode() const {
   uint32_t count;
   CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId,
-                                               m_options->Parsed.ViewConfigType,
+                                               m_options.Parsed.ViewConfigType,
                                                0, &count, nullptr));
   CHECK(count > 0);
 
   std::vector<XrEnvironmentBlendMode> blendModes(count);
   CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(
-      m_instance, m_systemId, m_options->Parsed.ViewConfigType, count, &count,
+      m_instance, m_systemId, m_options.Parsed.ViewConfigType, count, &count,
       blendModes.data()));
   for (const auto &blendMode : blendModes) {
     if (m_acceptableBlendModes.count(blendMode))
@@ -566,7 +566,7 @@ void OpenXrProgram::LogViewConfigurations() {
     Log::Write(
         Log::Level::Verbose,
         Fmt("  View Configuration Type: %s %s", to_string(viewConfigType),
-            viewConfigType == m_options->Parsed.ViewConfigType ? "(Selected)"
+            viewConfigType == m_options.Parsed.ViewConfigType ? "(Selected)"
                                                                : ""));
 
     XrViewConfigurationProperties viewConfigProperties{
@@ -631,7 +631,7 @@ void OpenXrProgram::LogEnvironmentBlendMode(XrViewConfigurationType type) {
   bool blendModeFound = false;
   for (XrEnvironmentBlendMode mode : blendModes) {
     const bool blendModeMatch =
-        (mode == m_options->Parsed.EnvironmentBlendMode);
+        (mode == m_options.Parsed.EnvironmentBlendMode);
     Log::Write(Log::Level::Info,
                Fmt("Environment Blend Mode (%s) : %s", to_string(mode),
                    blendModeMatch ? "(Selected)" : ""));
@@ -971,7 +971,7 @@ void OpenXrProgram::HandleSessionStateChangedEvent(
     CHECK(m_session != XR_NULL_HANDLE);
     XrSessionBeginInfo sessionBeginInfo{XR_TYPE_SESSION_BEGIN_INFO};
     sessionBeginInfo.primaryViewConfigurationType =
-        m_options->Parsed.ViewConfigType;
+        m_options.Parsed.ViewConfigType;
     CHECK_XRCMD(xrBeginSession(m_session, &sessionBeginInfo));
     m_sessionRunning = true;
     break;
@@ -1057,7 +1057,7 @@ bool OpenXrProgram::RenderLayer(
   uint32_t viewCountOutput;
 
   XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
-  viewLocateInfo.viewConfigurationType = m_options->Parsed.ViewConfigType;
+  viewLocateInfo.viewConfigurationType = m_options.Parsed.ViewConfigType;
   viewLocateInfo.displayTime = predictedDisplayTime;
   viewLocateInfo.space = m_appSpace;
 
@@ -1160,7 +1160,7 @@ bool OpenXrProgram::RenderLayer(
   }
 
   layer.space = m_appSpace;
-  layer.layerFlags = m_options->Parsed.EnvironmentBlendMode ==
+  layer.layerFlags = m_options.Parsed.EnvironmentBlendMode ==
                              XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
                          ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
                                XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT

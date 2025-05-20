@@ -1,5 +1,21 @@
 set(CMAKE_CXX_STANDARD 20)
 
+set(LOCAL_SOURCE
+    logger.cpp
+    openxr_program.cpp
+    vk_utils.cpp
+    VertexBuffer.cpp
+    MemoryAllocator.cpp
+    RenderPass.cpp
+    Pipeline.cpp
+    DepthBuffer.cpp
+    CmdBuffer.cpp
+    SwapchainImageContext.cpp
+    vulkan_debug_object_namer.cpp
+    VulkanGraphicsPlugin.cpp
+    options.cpp
+)
+
 # Find glslc shader compiler. On Android, the NDK includes the binary, so no
 # external dependency.
 if(ANDROID)
@@ -64,21 +80,6 @@ function(compile_glsl run_target_name)
 
 endfunction()
 
-set(LOCAL_SOURCE
-    logger.cpp
-    openxr_program.cpp
-    vk_utils.cpp
-    VertexBuffer.cpp
-    MemoryAllocator.cpp
-    RenderPass.cpp
-    Pipeline.cpp
-    DepthBuffer.cpp
-    CmdBuffer.cpp
-    SwapchainImageContext.cpp
-    vulkan_debug_object_namer.cpp
-    VulkanGraphicsPlugin.cpp
-    # pch.cpp platformplugin_factory.cpp platformplugin_posix.cpp
-)
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 
 if(ANDROID)

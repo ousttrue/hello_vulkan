@@ -33,7 +33,7 @@
 
 namespace {
 struct AndroidPlatformPlugin : public IPlatformPlugin {
-  AndroidPlatformPlugin(const std::shared_ptr<Options> & /*unused*/,
+  AndroidPlatformPlugin(const Options & /*unused*/,
                         const std::shared_ptr<PlatformData> &data) {
     instanceCreateInfoAndroid = {XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
     instanceCreateInfoAndroid.applicationVM = data->applicationVM;
@@ -48,15 +48,14 @@ struct AndroidPlatformPlugin : public IPlatformPlugin {
     return (XrBaseInStructure *)&instanceCreateInfoAndroid;
   }
 
-  void
-  UpdateOptions(const std::shared_ptr<struct Options> & /*unused*/) override {}
+  void UpdateOptions(const struct Options & /*unused*/) override {}
 
   XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid;
 };
 } // namespace
 
 std::shared_ptr<IPlatformPlugin>
-CreatePlatformPlugin_Android(const std::shared_ptr<Options> &options,
+CreatePlatformPlugin_Android(const Options &options,
                              const std::shared_ptr<PlatformData> &data) {
   return std::make_shared<AndroidPlatformPlugin>(options, data);
 }

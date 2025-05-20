@@ -33,7 +33,7 @@ class OpenXrProgram {
     std::array<XrBool32, Side::COUNT> handActive;
   };
 
-  const std::shared_ptr<const Options> m_options;
+  const struct Options &m_options;
   std::shared_ptr<IPlatformPlugin> m_platformPlugin;
   std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
   XrInstance m_instance{XR_NULL_HANDLE};
@@ -66,7 +66,7 @@ class OpenXrProgram {
   const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
 public:
-  OpenXrProgram(const std::shared_ptr<Options> &options,
+  OpenXrProgram(const Options &options,
                 const std::shared_ptr<IPlatformPlugin> &platformPlugin,
                 const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin);
 
