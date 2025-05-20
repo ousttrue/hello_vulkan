@@ -1,6 +1,6 @@
 #include "CmdBuffer.h"
 #include "logger.h"
-#include <common/vulkan_debug_object_namer.hpp>
+#include "vulkan_debug_object_namer.hpp"
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
@@ -47,48 +47,54 @@ std::string CmdBuffer::StateString(CmdBufferState s) {
     }                                                                          \
   while (0)
 
-bool CmdBuffer::Init(const VulkanDebugObjectNamer &namer, VkDevice device,
-                     uint32_t queueFamilyIndex) {
+bool CmdBuffer::Init(VkDevice device, uint32_t queueFamilyIndex) {
   CHECK_CBSTATE(CmdBufferState::Undefined);
 
   m_vkDevice = device;
 
   // Create a command pool to allocate our command buffer from
   VkCommandPoolCreateInfo cmdPoolInfo{
-      VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-  cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  cmdPoolInfo.queueFamilyIndex = queueFamilyIndex;
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex = queueFamilyIndex,
+  };
   if (vkCreateCommandPool(m_vkDevice, &cmdPoolInfo, nullptr, &pool) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateCommandPool");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)pool,
-                    "hello_xr command pool") != VK_SUCCESS) {
-    throw std::runtime_error("->SetName");
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_POOL,
+                                 (uint64_t)pool,
+                                 "hello_xr command pool") != VK_SUCCESS) {
+    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
   // Create the command buffer from the command pool
   VkCommandBufferAllocateInfo cmd{
-      VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+  };
   cmd.commandPool = pool;
   cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   cmd.commandBufferCount = 1;
   if (vkAllocateCommandBuffers(m_vkDevice, &cmd, &buf) != VK_SUCCESS) {
     throw std::runtime_error("vkAllocateCommandBuffers");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)buf,
-                    "hello_xr command buffer") != VK_SUCCESS) {
-    throw std::runtime_error("->SetName");
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
+                                 (uint64_t)buf,
+                                 "hello_xr command buffer") != VK_SUCCESS) {
+    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
-  VkFenceCreateInfo fenceInfo{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+  VkFenceCreateInfo fenceInfo{
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+  };
   if (vkCreateFence(m_vkDevice, &fenceInfo, nullptr, &execFence) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateFence");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_FENCE, (uint64_t)execFence,
-                    "hello_xr fence") != VK_SUCCESS) {
-    throw std::runtime_error("->SetName");
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FENCE,
+                                 (uint64_t)execFence,
+                                 "hello_xr fence") != VK_SUCCESS) {
+    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
   SetState(CmdBufferState::Initialized);

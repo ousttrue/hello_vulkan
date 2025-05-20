@@ -1,14 +1,15 @@
 // Copyright (c) 2017-2024, The Khronos Group Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
+#include "CmdBuffer.h"
 #include "CreateGraphicsPlugin_Vulkan.h"
 #include "DepthBuffer.h"
 #include "MemoryAllocator.h"
 #include "Pipeline.h"
 #include "RenderPass.h"
-#include "VertexBuffer.h"
-#include "CmdBuffer.h"
 #include "SwapchainImageContext.h"
+#include "VertexBuffer.h"
+#include "vulkan_debug_object_namer.hpp"
 
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
@@ -38,7 +39,6 @@
 #include <map>
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
-#include <common/vulkan_debug_object_namer.hpp>
 #include <common/xr_linear.h>
 
 #ifdef USE_ONLINE_VULKAN_SHADERC
@@ -535,6 +535,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
     if (err != VK_SUCCESS) {
       throw std::runtime_error("CreateVulkanInstanceKHR");
     }
+    SetDebugUtilsObjectNameEXT_GetProc(m_vkInstance);
 
     vkCreateDebugUtilsMessengerEXT =
         (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
@@ -608,8 +609,6 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
       throw std::runtime_error("CreateVulkanDeviceKHR");
     }
 
-    m_namer.Init(m_vkInstance, m_vkDevice);
-
     vkGetDeviceQueue(m_vkDevice, queueInfo.queueFamilyIndex, 0, &m_vkQueue);
 
     m_memAllocator.Init(m_vkPhysicalDevice, m_vkDevice);
@@ -676,12 +675,13 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
         VK_SUCCESS) {
       throw std::runtime_error("vkCreateSemaphore");
     }
-    if (m_namer.SetName(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)m_vkDrawDone,
-                        "hello_xr draw done semaphore") != VK_SUCCESS) {
-      throw std::runtime_error("m_namer.SetName");
+    if (SetDebugUtilsObjectNameEXT(
+            m_vkDevice, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)m_vkDrawDone,
+            "hello_xr draw done semaphore") != VK_SUCCESS) {
+      throw std::runtime_error("SetDebugUtilsObjectNameEXT");
     }
 
-    if (!m_cmdBuffer.Init(m_namer, m_vkDevice, m_queueFamilyIndex))
+    if (!m_cmdBuffer.Init(m_vkDevice, m_queueFamilyIndex))
       THROW("Failed to create command buffer");
 
     m_pipelineLayout.Create(m_vkDevice);
@@ -748,9 +748,9 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
     auto swapchainImageContext = m_swapchainImageContexts.back();
 
     std::vector<XrSwapchainImageBaseHeader *> bases =
-        swapchainImageContext->Create(
-            m_namer, m_vkDevice, &m_memAllocator, capacity, swapchainCreateInfo,
-            m_pipelineLayout, m_shaderProgram, m_drawBuffer);
+        swapchainImageContext->Create(m_vkDevice, &m_memAllocator, capacity,
+                                      swapchainCreateInfo, m_pipelineLayout,
+                                      m_shaderProgram, m_drawBuffer);
 
     // Map every swapchainImage base pointer to this context
     for (auto &base : bases) {
@@ -871,7 +871,6 @@ protected:
   VkInstance m_vkInstance{VK_NULL_HANDLE};
   VkPhysicalDevice m_vkPhysicalDevice{VK_NULL_HANDLE};
   VkDevice m_vkDevice{VK_NULL_HANDLE};
-  VulkanDebugObjectNamer m_namer{};
   uint32_t m_queueFamilyIndex = 0;
   VkQueue m_vkQueue{VK_NULL_HANDLE};
   VkSemaphore m_vkDrawDone{VK_NULL_HANDLE};

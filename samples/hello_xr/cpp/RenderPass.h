@@ -13,9 +13,8 @@ public:
   VkFormat depthFmt{};
   VkRenderPass pass{VK_NULL_HANDLE};
 
-  static std::shared_ptr<RenderPass>
-  Create(const class VulkanDebugObjectNamer &namer, VkDevice device,
-         VkFormat aColorFmt, VkFormat aDepthFmt);
+  static std::shared_ptr<RenderPass> Create(VkDevice device, VkFormat aColorFmt,
+                                            VkFormat aDepthFmt);
   ~RenderPass();
   RenderPass(const RenderPass &) = delete;
   RenderPass &operator=(const RenderPass &) = delete;

@@ -92,6 +92,7 @@ set(LOCAL_SOURCE
     DepthBuffer.cpp
     CmdBuffer.cpp
     SwapchainImageContext.cpp
+    vulkan_debug_object_namer.cpp
     # pch.cpp platformplugin_factory.cpp platformplugin_posix.cpp
 )
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)

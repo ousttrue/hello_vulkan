@@ -4,7 +4,6 @@
 #include "check.h"
 #include "logger.h"
 #include "to_string.h"
-#include <common/vulkan_debug_object_namer.hpp>
 
 #ifdef USE_ONLINE_VULKAN_SHADERC
 constexpr char VertexShaderGlsl[] =

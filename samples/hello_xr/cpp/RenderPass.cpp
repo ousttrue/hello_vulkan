@@ -1,12 +1,11 @@
 #include "RenderPass.h"
+#include "vulkan_debug_object_namer.hpp"
 #include <array>
-#include <common/vulkan_debug_object_namer.hpp>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
 std::shared_ptr<RenderPass>
-RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
-                   VkFormat aColorFmt, VkFormat aDepthFmt) {
+RenderPass::Create(VkDevice device, VkFormat aColorFmt, VkFormat aDepthFmt) {
 
   auto ptr = std::shared_ptr<RenderPass>(new RenderPass);
 
@@ -73,9 +72,10 @@ RenderPass::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateRenderPass");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_RENDER_PASS, (uint64_t)ptr->pass,
-                    "hello_xr render pass") != VK_SUCCESS) {
-    throw std::runtime_error("->SetName");
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
+                                 (uint64_t)ptr->pass,
+                                 "hello_xr render pass") != VK_SUCCESS) {
+    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
   return ptr;

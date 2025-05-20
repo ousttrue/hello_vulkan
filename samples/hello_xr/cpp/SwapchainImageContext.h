@@ -1,5 +1,4 @@
 #pragma once
-#include <common/vulkan_debug_object_namer.hpp>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -29,9 +28,8 @@ public:
   RenderTarget(RenderTarget &&other) noexcept;
   RenderTarget &operator=(RenderTarget &&other) noexcept;
   static std::shared_ptr<RenderTarget>
-  Create(const class VulkanDebugObjectNamer &namer, VkDevice device,
-         VkImage aColorImage, VkImage aDepthImage, VkExtent2D size,
-         class RenderPass &renderPass);
+  Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
+         VkExtent2D size, class RenderPass &renderPass);
 
   RenderTarget(const RenderTarget &) = delete;
   RenderTarget &operator=(const RenderTarget &) = delete;
@@ -39,7 +37,6 @@ public:
 
 class SwapchainImageContext {
   VkDevice m_vkDevice{VK_NULL_HANDLE};
-  VulkanDebugObjectNamer m_namer;
 
   // A packed array of XrSwapchainImageVulkan2KHR's for
   // xrEnumerateSwapchainImages
@@ -63,9 +60,8 @@ public:
   }
 
   std::vector<XrSwapchainImageBaseHeader *>
-  Create(const VulkanDebugObjectNamer &namer, VkDevice device,
-         class MemoryAllocator *memAllocator, uint32_t capacity,
-         const XrSwapchainCreateInfo &swapchainCreateInfo,
+  Create(VkDevice device, class MemoryAllocator *memAllocator,
+         uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
          const struct PipelineLayout &layout, const struct ShaderProgram &sp,
          const VertexBuffer<Geometry::Vertex> &vb);
 

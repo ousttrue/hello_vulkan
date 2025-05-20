@@ -1,6 +1,6 @@
 #pragma once
-#include <vulkan/vulkan.h>
 #include <string>
+#include <vulkan/vulkan.h>
 
 // CmdBuffer - manage VkCommandBuffer state
 struct CmdBuffer {
@@ -27,8 +27,7 @@ struct CmdBuffer {
   CmdBuffer &operator=(CmdBuffer &&) = delete;
   ~CmdBuffer();
   std::string StateString(CmdBufferState s);
-  bool Init(const class VulkanDebugObjectNamer &namer, VkDevice device,
-            uint32_t queueFamilyIndex);
+  bool Init(VkDevice device, uint32_t queueFamilyIndex);
   bool Begin();
   bool End();
   bool Exec(VkQueue queue);

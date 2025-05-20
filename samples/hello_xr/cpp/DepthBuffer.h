@@ -7,7 +7,8 @@ class DepthBuffer {
   VkDevice m_vkDevice{VK_NULL_HANDLE};
   VkImageLayout m_vkLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-  DepthBuffer(){}
+  DepthBuffer() {}
+
 public:
   VkImage depthImage{VK_NULL_HANDLE};
   ~DepthBuffer();
@@ -15,8 +16,8 @@ public:
   // DepthBuffer(DepthBuffer &&other) noexcept;
   // DepthBuffer &operator=(DepthBuffer &&other) noexcept;
   static std::shared_ptr<DepthBuffer>
-  Create(const class VulkanDebugObjectNamer &namer, VkDevice device,
-         class MemoryAllocator *memAllocator, VkFormat depthFormat,
+  Create(VkDevice device, class MemoryAllocator *memAllocator,
+         VkFormat depthFormat,
          const struct XrSwapchainCreateInfo &swapchainCreateInfo);
 
   void TransitionLayout(struct CmdBuffer *cmdBuffer, VkImageLayout newLayout);

@@ -2,6 +2,7 @@
 #include "DepthBuffer.h"
 #include "Pipeline.h"
 #include "RenderPass.h"
+#include "vulkan_debug_object_namer.hpp"
 #include <vulkan/vulkan_core.h>
 
 //
@@ -57,9 +58,8 @@ RenderTarget &RenderTarget::operator=(RenderTarget &&other) noexcept {
 }
 
 std::shared_ptr<RenderTarget>
-RenderTarget::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
-                     VkImage aColorImage, VkImage aDepthImage, VkExtent2D size,
-                     RenderPass &renderPass) {
+RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
+                     VkExtent2D size, RenderPass &renderPass) {
 
   auto ptr = std::shared_ptr<RenderTarget>(new RenderTarget);
 
@@ -91,9 +91,10 @@ RenderTarget::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
                           &ptr->colorView) != VK_SUCCESS) {
       throw std::runtime_error("vkCreateImageView");
     }
-    if (namer.SetName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)ptr->colorView,
-                      "hello_xr color image view") != VK_SUCCESS) {
-      throw std::runtime_error("->SetName");
+    if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE_VIEW,
+                                   (uint64_t)ptr->colorView,
+                                   "hello_xr color image view") != VK_SUCCESS) {
+      throw std::runtime_error("SetDebugUtilsObjectNameEXT");
     }
     attachments[attachmentCount++] = ptr->colorView;
   }
@@ -118,9 +119,10 @@ RenderTarget::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
                           &ptr->depthView) != VK_SUCCESS) {
       throw std::runtime_error("vkCreateImageView");
     }
-    if (namer.SetName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)ptr->depthView,
-                      "hello_xr depth image view") != VK_SUCCESS) {
-      throw std::runtime_error("->SetName");
+    if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE_VIEW,
+                                   (uint64_t)ptr->depthView,
+                                   "hello_xr depth image view") != VK_SUCCESS) {
+      throw std::runtime_error("SetDebugUtilsObjectNameEXT");
     }
     attachments[attachmentCount++] = ptr->depthView;
   }
@@ -136,30 +138,28 @@ RenderTarget::Create(const VulkanDebugObjectNamer &namer, VkDevice device,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateFramebuffer");
   }
-  if (namer.SetName(VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)ptr->fb,
-                    "hello_xr framebuffer") != VK_SUCCESS) {
-    throw std::runtime_error("->SetName");
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)ptr->fb,
+                                 "hello_xr framebuffer") != VK_SUCCESS) {
+    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
   return ptr;
 }
 
 std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
-    const VulkanDebugObjectNamer &namer, VkDevice device,
-    class MemoryAllocator *memAllocator, uint32_t capacity,
+    VkDevice device, class MemoryAllocator *memAllocator, uint32_t capacity,
     const XrSwapchainCreateInfo &swapchainCreateInfo,
     const struct PipelineLayout &layout, const struct ShaderProgram &sp,
     const VertexBuffer<Geometry::Vertex> &vb) {
   m_vkDevice = device;
-  m_namer = namer;
 
   size = {swapchainCreateInfo.width, swapchainCreateInfo.height};
   VkFormat colorFormat = (VkFormat)swapchainCreateInfo.format;
   VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
   // XXX handle swapchainCreateInfo.sampleCount
 
-  depthBuffer = DepthBuffer::Create(namer, m_vkDevice, memAllocator,
-                                    depthFormat, swapchainCreateInfo);
-  rp = RenderPass::Create(namer, m_vkDevice, colorFormat, depthFormat);
+  depthBuffer = DepthBuffer::Create(m_vkDevice, memAllocator, depthFormat,
+                                    swapchainCreateInfo);
+  rp = RenderPass::Create(m_vkDevice, colorFormat, depthFormat);
   pipe = Pipeline::Create(m_vkDevice, size, layout, *rp, sp, vb);
 
   swapchainImages.resize(capacity);
@@ -178,7 +178,7 @@ void SwapchainImageContext::BindRenderTarget(
     uint32_t index, VkRenderPassBeginInfo *renderPassBeginInfo) {
   if (!renderTarget[index]) {
     renderTarget[index] =
-        RenderTarget::Create(m_namer, m_vkDevice, swapchainImages[index].image,
+        RenderTarget::Create(m_vkDevice, swapchainImages[index].image,
                              depthBuffer->depthImage, size, *rp);
   }
   renderPassBeginInfo->renderPass = rp->pass;
