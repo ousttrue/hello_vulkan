@@ -189,8 +189,10 @@ void OpenXrProgram::InitializeSystem() {
   CHECK(m_instance != XR_NULL_HANDLE);
   CHECK(m_systemId == XR_NULL_SYSTEM_ID);
 
-  XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
-  systemInfo.formFactor = m_options.Parsed.FormFactor;
+  XrSystemGetInfo systemInfo{
+      .type = XR_TYPE_SYSTEM_GET_INFO,
+      .formFactor = m_options.Parsed.FormFactor,
+  };
   CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
 
   Log::Write(Log::Level::Verbose,
@@ -200,12 +202,12 @@ void OpenXrProgram::InitializeSystem() {
   CHECK(m_systemId != XR_NULL_SYSTEM_ID);
 }
 
-void OpenXrProgram::InitializeDevice() {
+void OpenXrProgram::InitializeDevice(const std::vector<const char *> &layers) {
   LogViewConfigurations();
 
   // The graphics API can initialize the graphics device now that the systemId
   // and instance handle are available.
-  m_graphicsPlugin->InitializeDevice(m_instance, m_systemId);
+  m_graphicsPlugin->InitializeDevice(m_instance, m_systemId, layers);
 }
 
 void OpenXrProgram::InitializeSession() {
@@ -575,7 +577,8 @@ void OpenXrProgram::LogViewConfigurations() {
                                                               : ""));
 
     XrViewConfigurationProperties viewConfigProperties{
-        XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
+        .type = XR_TYPE_VIEW_CONFIGURATION_PROPERTIES,
+    };
     CHECK_XRCMD(xrGetViewConfigurationProperties(
         m_instance, m_systemId, viewConfigType, &viewConfigProperties));
 

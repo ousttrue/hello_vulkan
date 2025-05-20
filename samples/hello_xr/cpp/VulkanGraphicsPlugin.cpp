@@ -47,51 +47,17 @@ VulkanGraphicsPlugin::ParseExtensionString(char *names) {
   return list;
 }
 
-const char *VulkanGraphicsPlugin::GetValidationLayerName() {
-  uint32_t layerCount;
-  vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-  std::vector<VkLayerProperties> availableLayers(layerCount);
-  vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-  std::vector<const char *> validationLayerNames;
-  validationLayerNames.push_back("VK_LAYER_KHRONOS_validation");
-  validationLayerNames.push_back("VK_LAYER_LUNARG_standard_validation");
-
-  // Enable only one validation layer from the list above. Prefer KHRONOS.
-  for (auto &validationLayerName : validationLayerNames) {
-    for (const auto &layerProperties : availableLayers) {
-      if (0 == strcmp(validationLayerName, layerProperties.layerName)) {
-        return validationLayerName;
-      }
-    }
-  }
-
-  return nullptr;
-}
-
 void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
-                                            XrSystemId systemId) {
+                                            XrSystemId systemId, const std::vector<const char*> &layers) {
   // Create the Vulkan device for the adapter associated with the system.
   // Extension function must be loaded by name
   XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
-      XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR};
+      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
+  };
   if (GetVulkanGraphicsRequirements2KHR(instance, systemId,
                                         &graphicsRequirements) != XR_SUCCESS) {
     throw std::runtime_error("GetVulkanGraphicsRequirements2KHR");
   }
-
-  VkResult err;
-
-  std::vector<const char *> layers;
-#if !defined(NDEBUG)
-  const char *const validationLayerName = GetValidationLayerName();
-  if (validationLayerName) {
-    layers.push_back(validationLayerName);
-  } else {
-    Log::Write(Log::Level::Warning,
-               "No validation layers found in the system, skipping");
-  }
-#endif
 
   std::vector<const char *> extensions;
   {
@@ -170,6 +136,8 @@ void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
   createInfo.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
   createInfo.vulkanCreateInfo = &instInfo;
   createInfo.vulkanAllocator = nullptr;
+
+  VkResult err;
   if (CreateVulkanInstanceKHR(instance, &createInfo, &m_vkInstance, &err) !=
       XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");

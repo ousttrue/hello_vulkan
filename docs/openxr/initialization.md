@@ -28,6 +28,12 @@
       .enabledExtensionNames = extensions.data(),
   };
   CHECK_XRCMD(xrCreateInstance(&createInfo, &m_instance));
+
+  XrSystemGetInfo systemInfo{
+      .type = XR_TYPE_SYSTEM_GET_INFO,
+      .formFactor = m_options.Parsed.FormFactor,
+  };
+  CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
 ```
 
 ## VkDevice

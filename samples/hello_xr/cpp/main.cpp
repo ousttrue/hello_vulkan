@@ -3,6 +3,7 @@
 #include "openxr_program.h"
 #include "options.h"
 #include "platformplugin_win32.h"
+#include "vulkan_layers.h"
 #include <thread>
 
 void ShowHelp() {
@@ -60,7 +61,7 @@ int main(int argc, char *argv[]) {
   platformPlugin->UpdateOptions(options);
   graphicsPlugin->UpdateOptions(options);
 
-  program->InitializeDevice();
+  program->InitializeDevice(getVulkanLayers());
   program->InitializeSession();
   program->CreateSwapchains();
 

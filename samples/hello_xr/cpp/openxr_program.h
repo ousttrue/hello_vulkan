@@ -79,7 +79,7 @@ public:
   void InitializeSystem();
 
   // Initialize the graphics device for the selected system.
-  void InitializeDevice();
+  void InitializeDevice(const std::vector<const char *> &layers);
 
   // Create a Session and other basic session-level initialization.
   void InitializeSession();

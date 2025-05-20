@@ -14,6 +14,7 @@ set(LOCAL_SOURCE
     vulkan_debug_object_namer.cpp
     VulkanGraphicsPlugin.cpp
     options.cpp
+    vulkan_layers.cpp
 )
 
 # Find glslc shader compiler. On Android, the NDK includes the binary, so no

@@ -35,7 +35,8 @@ struct VulkanGraphicsPlugin {
 
   // Create an instance of this graphics api for the provided instance and
   // systemId.
-  void InitializeDevice(XrInstance instance, XrSystemId systemId);
+  void InitializeDevice(XrInstance instance, XrSystemId systemId,
+                        const std::vector<const char *> &layers);
 
   // Select the preferred swapchain format from the list of available formats.
   int64_t
@@ -74,8 +75,6 @@ struct VulkanGraphicsPlugin {
   // Note: The output must not outlive the input - this modifies the input and
   // returns a collection of views into that modified input!
   std::vector<const char *> ParseExtensionString(char *names);
-
-  const char *GetValidationLayerName();
 
 #ifdef USE_ONLINE_VULKAN_SHADERC
   // Compile a shader to a SPIR-V binary.
