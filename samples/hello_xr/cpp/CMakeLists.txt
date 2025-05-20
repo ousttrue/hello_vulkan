@@ -1,19 +1,3 @@
-# Copyright (c) 2017-2024, The Khronos Group Inc.
-#
-# SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
-#
 set(CMAKE_CXX_STANDARD 20)
 
 # Find glslc shader compiler. On Android, the NDK includes the binary, so no
@@ -34,6 +18,7 @@ else()
     PATHS ${glslc_folders}
     HINTS "${Vulkan_GLSLC_EXECUTABLE}")
 endif()
+
 find_program(GLSLANG_VALIDATOR glslangValidator
              HINTS "${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE}")
 if(GLSL_COMPILER)
@@ -81,7 +66,6 @@ endfunction()
 
 set(LOCAL_SOURCE
     logger.cpp
-    main.cpp
     openxr_program.cpp
     vk_utils.cpp
     VertexBuffer.cpp
@@ -99,7 +83,7 @@ set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 
 if(ANDROID)
   add_library(
-    hello_xr MODULE platformplugin_android.cpp ${LOCAL_SOURCE}
+    hello_xr MODULE android_main.cpp platformplugin_android.cpp ${LOCAL_SOURCE}
                     ${VULKAN_SHADERS} $<TARGET_OBJECTS:android_native_app_glue>)
   target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID
                                               -DXR_USE_GRAPHICS_API_VULKAN)
@@ -111,7 +95,7 @@ if(ANDROID)
   target_compile_definitions(hello_xr PRIVATE DEFAULT_GRAPHICS_PLUGIN_VULKAN)
 
 else()
-  add_executable(hello_xr platformplugin_win32.cpp ${LOCAL_SOURCE}
+  add_executable(hello_xr main.cpp platformplugin_win32.cpp ${LOCAL_SOURCE}
                           ${VULKAN_SHADERS})
   target_compile_definitions(
     hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
