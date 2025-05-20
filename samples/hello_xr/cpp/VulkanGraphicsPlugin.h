@@ -1,20 +1,11 @@
 #pragma once
+#include <openxr/openxr.h>
 #include <vulkan/vulkan.h>
-
-#ifdef XR_USE_PLATFORM_WIN32
-#include <Unknwn.h>
-#endif
-#ifdef XR_USE_PLATFORM_ANDROID
-#include <android_native_app_glue.h>
-#endif
-
-#include <openxr/openxr_platform.h>
 
 #include <array>
 #include <list>
 #include <map>
 #include <memory>
-#include <string>
 #include <vector>
 
 struct Cube {
@@ -38,11 +29,6 @@ struct VulkanGraphicsPlugin {
   int64_t
   SelectColorSwapchainFormat(const std::vector<int64_t> &runtimeFormats) const;
 
-  // Get the graphics binding header for session creation.
-  const XrBaseInStructure *GetGraphicsBinding() const {
-    return reinterpret_cast<const XrBaseInStructure *>(&m_graphicsBinding);
-  }
-
   // Allocate space for the swapchain image structures. These are different for
   // each graphics API. The returned pointers are valid for the lifetime of the
   // graphics plugin.
@@ -53,14 +39,6 @@ struct VulkanGraphicsPlugin {
   void RenderView(const XrCompositionLayerProjectionView &layerView,
                   const XrSwapchainImageBaseHeader *swapchainImage,
                   int64_t /*swapchainFormat*/, const std::vector<Cube> &cubes);
-
-  // Get recommended number of sub-data element samples in view
-  // (recommendedSwapchainSampleCount) if supported by the graphics plugin. A
-  // supported value otherwise.
-  // uint32_t
-  // GetSupportedSwapchainSampleCount(const XrViewConfigurationView &view) {
-  //   return view.recommendedSwapchainSampleCount;
-  // }
 
   // Perform required steps after updating Options
   void UpdateOptions(const struct Options &options);
@@ -78,8 +56,6 @@ struct VulkanGraphicsPlugin {
 
   void InitializeResources();
 
-  XrGraphicsBindingVulkan2KHR m_graphicsBinding{
-      XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR};
   std::list<std::shared_ptr<class SwapchainImageContext>>
       m_swapchainImageContexts;
   std::map<const XrSwapchainImageBaseHeader *,

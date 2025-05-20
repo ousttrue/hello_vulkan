@@ -3,12 +3,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <vulkan/vulkan.h>
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Unknwn.h>
+#endif
+#include <openxr/openxr_platform.h>
+
 #include "platformplugin.h"
 #include <array>
 #include <map>
 #include <set>
 
 class OpenXrProgram {
+
+  XrGraphicsBindingVulkan2KHR m_graphicsBinding{
+      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+      .next = nullptr,
+      .instance = VK_NULL_HANDLE,
+      .physicalDevice = VK_NULL_HANDLE,
+      .device = VK_NULL_HANDLE,
+      .queueFamilyIndex = UINT_MAX,
+      .queueIndex = 0,
+  };
+
   void LogInstanceInfo();
   void CreateInstanceInternal();
   void LogViewConfigurations();

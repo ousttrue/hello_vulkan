@@ -334,25 +334,25 @@ void OpenXrProgram::InitializeDevice(
       .vulkanAllocator = nullptr,
   };
 
-  VkInstance vkInstance = VK_NULL_HANDLE;
   VkResult err;
-  if (CreateVulkanInstanceKHR(m_instance, &createInfo, &vkInstance, &err) !=
-      XR_SUCCESS) {
+  if (CreateVulkanInstanceKHR(m_instance, &createInfo,
+                              &m_graphicsBinding.instance,
+                              &err) != XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
   if (err != VK_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
-  SetDebugUtilsObjectNameEXT_GetProc(vkInstance);
+  SetDebugUtilsObjectNameEXT_GetProc(m_graphicsBinding.instance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
       .systemId = m_systemId,
-      .vulkanInstance = vkInstance,
+      .vulkanInstance = m_graphicsBinding.instance,
   };
-  VkPhysicalDevice vkPhysicalDevice = VK_NULL_HANDLE;
   if (GetVulkanGraphicsDevice2KHR(m_instance, &deviceGetInfo,
-                                  &vkPhysicalDevice) != XR_SUCCESS) {
+                                  &m_graphicsBinding.physicalDevice) !=
+      XR_SUCCESS) {
     throw std::runtime_error("GetVulkanGraphicsDevice2KHR");
   }
 
@@ -363,16 +363,17 @@ void OpenXrProgram::InitializeDevice(
       .pQueuePriorities = &queuePriorities,
   };
   uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount,
-                                           nullptr);
+  vkGetPhysicalDeviceQueueFamilyProperties(m_graphicsBinding.physicalDevice,
+                                           &queueFamilyCount, nullptr);
   std::vector<VkQueueFamilyProperties> queueFamilyProps(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount,
+  vkGetPhysicalDeviceQueueFamilyProperties(m_graphicsBinding.physicalDevice,
+                                           &queueFamilyCount,
                                            &queueFamilyProps[0]);
 
   for (uint32_t i = 0; i < queueFamilyCount; ++i) {
     // Only need graphics (not presentation) for draw queue
     if ((queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u) {
-      queueInfo.queueFamilyIndex = i;
+      m_graphicsBinding.queueFamilyIndex = queueInfo.queueFamilyIndex = i;
       break;
     }
   }
@@ -395,13 +396,12 @@ void OpenXrProgram::InitializeDevice(
       .type = XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR,
       .systemId = m_systemId,
       .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
-      .vulkanPhysicalDevice = vkPhysicalDevice,
+      .vulkanPhysicalDevice = m_graphicsBinding.physicalDevice,
       .vulkanCreateInfo = &deviceInfo,
       .vulkanAllocator = nullptr,
   };
-  VkDevice vkDevice = VK_NULL_HANDLE;
-  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo, &vkDevice, &err) !=
-      XR_SUCCESS) {
+  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo,
+                            &m_graphicsBinding.device, &err) != XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanDeviceKHR");
   }
   if (err != VK_SUCCESS) {
@@ -410,8 +410,9 @@ void OpenXrProgram::InitializeDevice(
 
   // The graphics API can initialize the graphics device now that the systemId
   // and instance handle are available.
-  m_graphicsPlugin->InitializeDevice(vkInstance, vkPhysicalDevice, vkDevice,
-                                     queueInfo, debugInfo);
+  m_graphicsPlugin->InitializeDevice(
+      m_graphicsBinding.instance, m_graphicsBinding.physicalDevice,
+      m_graphicsBinding.device, queueInfo, debugInfo);
 }
 
 void OpenXrProgram::InitializeSession() {
@@ -422,7 +423,7 @@ void OpenXrProgram::InitializeSession() {
     Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
 
     XrSessionCreateInfo createInfo{XR_TYPE_SESSION_CREATE_INFO};
-    createInfo.next = m_graphicsPlugin->GetGraphicsBinding();
+    createInfo.next = &m_graphicsBinding;
     createInfo.systemId = m_systemId;
     CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &m_session));
   }

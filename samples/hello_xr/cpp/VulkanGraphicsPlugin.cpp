@@ -17,9 +17,7 @@
 
 VulkanGraphicsPlugin::VulkanGraphicsPlugin(
     const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
-    : m_clearColor(options.GetBackgroundClearColor()) {
-  m_graphicsBinding.type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR;
-}
+    : m_clearColor(options.GetBackgroundClearColor()) {}
 
 // Note: The output must not outlive the input - this modifies the input and
 // returns a collection of views into that modified input!
@@ -63,12 +61,6 @@ void VulkanGraphicsPlugin::InitializeDevice(
   m_memAllocator = MemoryAllocator::Create(m_vkPhysicalDevice, m_vkDevice);
 
   InitializeResources();
-
-  m_graphicsBinding.instance = m_vkInstance;
-  m_graphicsBinding.physicalDevice = m_vkPhysicalDevice;
-  m_graphicsBinding.device = m_vkDevice;
-  m_graphicsBinding.queueFamilyIndex = queueInfo.queueFamilyIndex;
-  m_graphicsBinding.queueIndex = 0;
 }
 
 #ifdef USE_ONLINE_VULKAN_SHADERC
@@ -161,8 +153,7 @@ void VulkanGraphicsPlugin::InitializeResources() {
 
 #if defined(USE_MIRROR_WINDOW)
   m_swapchain.Create(m_vkInstance, m_vkPhysicalDevice, m_vkDevice,
-                     m_graphicsBinding.queueFamilyIndex);
-
+                     m_queueFamilyIndex);
   m_cmdBuffer.Reset();
   m_cmdBuffer.Begin();
   m_swapchain.Prepare(m_cmdBuffer.buf);
