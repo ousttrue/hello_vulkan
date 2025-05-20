@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "openxr_program.h"
-#include "graphicsplugin_vulkan.h"
+#include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
 #include "openxr/openxr.h"
@@ -143,7 +143,7 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
 OpenXrProgram::OpenXrProgram(
     const std::shared_ptr<Options> &options,
     const std::shared_ptr<IPlatformPlugin> &platformPlugin,
-    const std::shared_ptr<IGraphicsPlugin> &graphicsPlugin)
+    const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin)
     : m_options(options), m_platformPlugin(platformPlugin),
       m_graphicsPlugin(graphicsPlugin),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE,

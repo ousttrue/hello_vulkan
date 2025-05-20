@@ -35,7 +35,7 @@ class OpenXrProgram {
 
   const std::shared_ptr<const Options> m_options;
   std::shared_ptr<IPlatformPlugin> m_platformPlugin;
-  std::shared_ptr<struct IGraphicsPlugin> m_graphicsPlugin;
+  std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
   XrInstance m_instance{XR_NULL_HANDLE};
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
@@ -68,7 +68,7 @@ class OpenXrProgram {
 public:
   OpenXrProgram(const std::shared_ptr<Options> &options,
                 const std::shared_ptr<IPlatformPlugin> &platformPlugin,
-                const std::shared_ptr<IGraphicsPlugin> &graphicsPlugin);
+                const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin);
 
   ~OpenXrProgram();
 

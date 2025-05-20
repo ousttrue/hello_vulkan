@@ -23,8 +23,6 @@
 #include <vulkan/vulkan.h>
 #endif
 
-#include "CreateGraphicsPlugin_Vulkan.h"
-#include "graphicsplugin_vulkan.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
@@ -42,6 +40,8 @@
 #else
 #include "platformplugin_win32.h"
 #endif
+
+#include "VulkanGraphicsPlugin.h"
 
 #if defined(_WIN32)
 // Favor the high performance NVIDIA or AMD GPUs
@@ -249,8 +249,8 @@ void android_main(struct android_app *app) {
         CreatePlatformPlugin_Android(options, data);
 
     // Create graphics API implementation.
-    std::shared_ptr<IGraphicsPlugin> graphicsPlugin =
-        CreateGraphicsPlugin_Vulkan(options, std::move(platformPlugin));
+    std::shared_ptr<VulkanGraphicsPlugin> graphicsPlugin =
+        std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
 
     // Initialize the OpenXR program.
     std::shared_ptr<IOpenXrProgram> program =
@@ -355,8 +355,8 @@ int main(int argc, char *argv[]) {
           CreatePlatformPlugin_Win32(options);
 
       // Create graphics API implementation.
-      std::shared_ptr<IGraphicsPlugin> graphicsPlugin =
-          CreateGraphicsPlugin_Vulkan(options, platformPlugin);
+      std::shared_ptr<VulkanGraphicsPlugin> graphicsPlugin =
+          std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
 
       // Initialize the OpenXR program.
       auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,

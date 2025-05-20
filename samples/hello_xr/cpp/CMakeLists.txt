@@ -80,7 +80,6 @@ function(compile_glsl run_target_name)
 endfunction()
 
 set(LOCAL_SOURCE
-    graphicsplugin_vulkan.cpp
     logger.cpp
     main.cpp
     openxr_program.cpp
