@@ -2,46 +2,18 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <memory>
-#ifdef XR_USE_PLATFORM_WIN32
-#define VK_USE_PLATFORM_WIN32_KHR
-#include <windows.h>
-
-#include <unknwn.h>
-#endif
-
-#ifdef XR_USE_PLATFORM_ANDROID
-#define VK_USE_PLATFORM_ANDROID_KHR
-#include <android/log.h>
-#include <android/native_window.h>
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <sys/system_properties.h>
-#endif
-
-#ifdef XR_USE_GRAPHICS_API_VULKAN
-#include <vulkan/vulkan.h>
-#endif
-
+#include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
-
-//
-// OpenXR Headers
-//
-#include <openxr/openxr.h>
-#include <openxr/openxr_platform.h>
-#include <openxr/openxr_reflection.h>
-#include <thread>
-
 #ifdef XR_USE_PLATFORM_ANDROID
 #include "platformplugin_android.h"
-#else
+#endif
+#ifdef XR_USE_PLATFORM_WIN32
 #include "platformplugin_win32.h"
 #endif
-
-#include "VulkanGraphicsPlugin.h"
+#include <stdexcept>
+#include <thread>
 
 #if defined(_WIN32)
 // Favor the high performance NVIDIA or AMD GPUs
@@ -56,6 +28,8 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 namespace {
 
 #ifdef XR_USE_PLATFORM_ANDROID
+#include <sys/system_properties.h>
+
 void ShowHelp() {
   Log::Write(Log::Level::Info,
              "adb shell setprop debug.xr.formFactor Hmd|Handheld");
@@ -253,8 +227,8 @@ void android_main(struct android_app *app) {
         std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
 
     // Initialize the OpenXR program.
-    std::shared_ptr<IOpenXrProgram> program =
-        CreateOpenXrProgram(options, platformPlugin, graphicsPlugin);
+    auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,
+                                                   graphicsPlugin);
 
     // Initialize the loader for this platform
     PFN_xrInitializeLoaderKHR initializeLoader = nullptr;

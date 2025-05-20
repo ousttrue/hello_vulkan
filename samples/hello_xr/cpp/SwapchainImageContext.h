@@ -3,8 +3,12 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+#ifdef XR_USE_PLATFORM_WIN32
 #include <Unknwn.h>
-#include <Windows.h>
+#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
 
 #include <openxr/openxr_platform.h>
 

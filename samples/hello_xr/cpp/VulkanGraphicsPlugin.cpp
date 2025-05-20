@@ -352,8 +352,8 @@ void VulkanGraphicsPlugin::InitializeResources() {
       m_vkDevice, m_memAllocator,
       {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
        {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
-      c_cubeVertices, _countof(c_cubeVertices), c_cubeIndices,
-      _countof(c_cubeIndices));
+      c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
+      std::size(c_cubeIndices));
 
 #if defined(USE_MIRROR_WINDOW)
   m_swapchain.Create(m_vkInstance, m_vkPhysicalDevice, m_vkDevice,
