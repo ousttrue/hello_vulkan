@@ -539,8 +539,7 @@ void OpenXrProgram::CreateSwapchains() {
       swapchainCreateInfo.height = vp.recommendedImageRectHeight;
       swapchainCreateInfo.mipCount = 1;
       swapchainCreateInfo.faceCount = 1;
-      swapchainCreateInfo.sampleCount =
-          m_graphicsPlugin->GetSupportedSwapchainSampleCount(vp);
+      swapchainCreateInfo.sampleCount = VK_SAMPLE_COUNT_1_BIT;
       swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
                                        XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
       Swapchain swapchain;
@@ -722,6 +721,11 @@ void OpenXrProgram::LogInstanceInfo() {
           GetXrVersionString(instanceProperties.runtimeVersion).c_str()));
 }
 
+// OpenXR extensions required by this graphics API.
+static std::vector<std::string> GetInstanceExtensions() {
+  return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+}
+
 void OpenXrProgram::CreateInstanceInternal() {
   CHECK(m_instance == XR_NULL_HANDLE);
 
@@ -734,7 +738,7 @@ void OpenXrProgram::CreateInstanceInternal() {
                  std::back_inserter(extensions),
                  [](const std::string &ext) { return ext.c_str(); });
 
-  auto graphicsExtensions = m_graphicsPlugin->GetInstanceExtensions();
+  auto graphicsExtensions = GetInstanceExtensions();
   std::transform(graphicsExtensions.begin(), graphicsExtensions.end(),
                  std::back_inserter(extensions),
                  [](const std::string &ext) { return ext.c_str(); });

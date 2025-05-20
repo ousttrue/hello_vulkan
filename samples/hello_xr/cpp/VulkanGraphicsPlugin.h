@@ -28,11 +28,6 @@ struct VulkanGraphicsPlugin {
   VulkanGraphicsPlugin(const struct Options &options,
                        std::shared_ptr<struct IPlatformPlugin> /*unused*/);
 
-  // OpenXR extensions required by this graphics API.
-  std::vector<std::string> GetInstanceExtensions() const {
-    return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
-  }
-
   // Create an instance of this graphics api for the provided instance and
   // systemId.
   void InitializeDevice(VkInstance instance, VkPhysicalDevice physicalDevice,
@@ -66,9 +61,6 @@ struct VulkanGraphicsPlugin {
   // GetSupportedSwapchainSampleCount(const XrViewConfigurationView &view) {
   //   return view.recommendedSwapchainSampleCount;
   // }
-  uint32_t GetSupportedSwapchainSampleCount(const XrViewConfigurationView &) {
-    return VK_SAMPLE_COUNT_1_BIT;
-  }
 
   // Perform required steps after updating Options
   void UpdateOptions(const struct Options &options);
@@ -119,12 +111,4 @@ struct VulkanGraphicsPlugin {
   debugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                VkDebugUtilsMessageTypeFlagsEXT messageTypes,
                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData);
-
-  XrStructureType GetGraphicsBindingType() const {
-    return XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR;
-  }
-
-  XrStructureType GetSwapchainImageType() const {
-    return XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR;
-  }
 };

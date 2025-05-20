@@ -48,9 +48,11 @@
   xrCreateVulkanDeviceKHR
 ```
 
-## VkDevice
-
 ## XrSession
+
+```cpp
+xrCreateSession
+```
 
 ## Swapchain
 
@@ -58,6 +60,57 @@
 
 - https://developers.meta.com/horizon/documentation/native/android/mobile-openxr-swapchains/
 
+```
+VK_FORMAT_B8G8R8A8_SRGB
+```
+
+## Render
+
+```cpp
+  XrFrameWaitInfo frameWaitInfo{.type = XR_TYPE_FRAME_WAIT_INFO};
+  XrFrameState frameState{.type = XR_TYPE_FRAME_STATE};
+  CHECK_XRCMD(xrWaitFrame(m_session, &frameWaitInfo, &frameState));
+```
+
+```cpp
+  XrFrameBeginInfo frameBeginInfo{.type = XR_TYPE_FRAME_BEGIN_INFO};
+  CHECK_XRCMD(xrBeginFrame(m_session, &frameBeginInfo));
+
+  // layer に描画
+  std::vector<XrCompositionLayerBaseHeader *> layers;
+
+  XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+  std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+  if (frameState.shouldRender == XR_TRUE) {
+    // if (RenderLayer(frameState.predictedDisplayTime, projectionLayerViews,
+    //                 layer)) {
+    //   layers.push_back(
+    //       reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
+    // }
+    XrViewLocateInfo viewLocateInfo{
+        .type = XR_TYPE_VIEW_LOCATE_INFO,
+        .viewConfigurationType = m_options.Parsed.ViewConfigType,
+        .displayTime = predictedDisplayTime,
+        .space = m_appSpace,
+    };
+    auto res = xrLocateViews(m_session, &viewLocateInfo, &viewState,
+                             viewCapacityInput, &viewCountOutput, m_views.data());
+
+    xrAcquireSwapchainImage
+
+    layers.push_back(
+        reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
+  }
+
+  XrFrameEndInfo frameEndInfo{
+      .type = XR_TYPE_FRAME_END_INFO,
+      .displayTime = frameState.predictedDisplayTime,
+      .environmentBlendMode = m_options.Parsed.EnvironmentBlendMode,
+      .layerCount = (uint32_t)layers.size(),
+      .layers = layers.data(),
+  };
+  CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
+```
 
 ### sequence
 
