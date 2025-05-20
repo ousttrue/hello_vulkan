@@ -90,7 +90,7 @@ std::shared_ptr<DepthBuffer> DepthBuffer::Create(
   return ptr;
 }
 
-void DepthBuffer::TransitionLayout(CmdBuffer *cmdBuffer,
+void DepthBuffer::TransitionLayout(const std::shared_ptr<CmdBuffer> &cmdBuffer,
                                    VkImageLayout newLayout) {
   if (newLayout == m_vkLayout) {
     return;

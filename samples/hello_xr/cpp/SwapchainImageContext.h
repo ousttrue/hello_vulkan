@@ -62,7 +62,8 @@ public:
   Create(VkDevice device,
          const std::shared_ptr<class MemoryAllocator> &memAllocator,
          uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
-         const struct PipelineLayout &layout, const struct ShaderProgram &sp,
+         const std::shared_ptr<class PipelineLayout> &layout,
+         const std::shared_ptr<class ShaderProgram> &sp,
          const std::shared_ptr<VertexBuffer> &vb);
 
   uint32_t ImageIndex(const XrSwapchainImageBaseHeader *swapchainImageHeader) {

@@ -21,7 +21,7 @@ public:
          VkFormat depthFormat,
          const struct XrSwapchainCreateInfo &swapchainCreateInfo);
 
-  void TransitionLayout(struct CmdBuffer *cmdBuffer, VkImageLayout newLayout);
+  void TransitionLayout(const std::shared_ptr<class CmdBuffer> &cmdBuffer, VkImageLayout newLayout);
   DepthBuffer(const DepthBuffer &) = delete;
   DepthBuffer &operator=(const DepthBuffer &) = delete;
 };

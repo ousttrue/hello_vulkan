@@ -69,8 +69,9 @@ PipelineLayout::~PipelineLayout() {
   m_vkDevice = nullptr;
 }
 
-void PipelineLayout::Create(VkDevice device) {
-  m_vkDevice = device;
+std::shared_ptr<PipelineLayout> PipelineLayout::Create(VkDevice device) {
+  auto ptr = std::shared_ptr<PipelineLayout>(new PipelineLayout);
+  ptr->m_vkDevice = device;
 
   // MVP matrix is a push_constant
   VkPushConstantRange pcr = {};
@@ -83,10 +84,11 @@ void PipelineLayout::Create(VkDevice device) {
       .pushConstantRangeCount = 1,
       .pPushConstantRanges = &pcr,
   };
-  if (vkCreatePipelineLayout(m_vkDevice, &pipelineLayoutCreateInfo, nullptr,
-                             &layout) != VK_SUCCESS) {
+  if (vkCreatePipelineLayout(ptr->m_vkDevice, &pipelineLayoutCreateInfo, nullptr,
+                             &ptr->layout) != VK_SUCCESS) {
     throw std::runtime_error("vkCreatePipelineLayout");
   }
+  return ptr;
 }
 
 //
@@ -97,8 +99,8 @@ void Pipeline::Dynamic(VkDynamicState state) {
 }
 
 std::shared_ptr<Pipeline>
-Pipeline::Create(VkDevice device, VkExtent2D size, const PipelineLayout &layout,
-                 const RenderPass &rp, const ShaderProgram &sp,
+Pipeline::Create(VkDevice device, VkExtent2D size, const std::shared_ptr<PipelineLayout> &layout,
+                 const RenderPass &rp, const std::shared_ptr<ShaderProgram> &sp,
                  const std::shared_ptr<VertexBuffer> &vb) {
 
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline);
@@ -198,8 +200,8 @@ Pipeline::Create(VkDevice device, VkExtent2D size, const PipelineLayout &layout,
 
   VkGraphicsPipelineCreateInfo pipeInfo{
       VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  pipeInfo.stageCount = (uint32_t)sp.shaderInfo.size();
-  pipeInfo.pStages = sp.shaderInfo.data();
+  pipeInfo.stageCount = (uint32_t)sp->shaderInfo.size();
+  pipeInfo.pStages = sp->shaderInfo.data();
   pipeInfo.pVertexInputState = &vi;
   pipeInfo.pInputAssemblyState = &ia;
   pipeInfo.pTessellationState = nullptr;
@@ -211,7 +213,7 @@ Pipeline::Create(VkDevice device, VkExtent2D size, const PipelineLayout &layout,
   if (dynamicState.dynamicStateCount > 0) {
     pipeInfo.pDynamicState = &dynamicState;
   }
-  pipeInfo.layout = layout.layout;
+  pipeInfo.layout = layout->layout;
   pipeInfo.renderPass = rp.pass;
   pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,

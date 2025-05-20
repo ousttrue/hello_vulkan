@@ -47,10 +47,12 @@ std::string CmdBuffer::StateString(CmdBufferState s) {
     }                                                                          \
   while (0)
 
-bool CmdBuffer::Init(VkDevice device, uint32_t queueFamilyIndex) {
-  CHECK_CBSTATE(CmdBufferState::Undefined);
+std::shared_ptr<CmdBuffer> CmdBuffer::Create(VkDevice device,
+                                             uint32_t queueFamilyIndex) {
 
-  m_vkDevice = device;
+  auto ptr = std::shared_ptr<CmdBuffer>(new CmdBuffer());
+
+  ptr->m_vkDevice = device;
 
   // Create a command pool to allocate our command buffer from
   VkCommandPoolCreateInfo cmdPoolInfo{
@@ -58,12 +60,12 @@ bool CmdBuffer::Init(VkDevice device, uint32_t queueFamilyIndex) {
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = queueFamilyIndex,
   };
-  if (vkCreateCommandPool(m_vkDevice, &cmdPoolInfo, nullptr, &pool) !=
+  if (vkCreateCommandPool(ptr->m_vkDevice, &cmdPoolInfo, nullptr, &ptr->pool) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateCommandPool");
   }
   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_POOL,
-                                 (uint64_t)pool,
+                                 (uint64_t)ptr->pool,
                                  "hello_xr command pool") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
@@ -72,14 +74,15 @@ bool CmdBuffer::Init(VkDevice device, uint32_t queueFamilyIndex) {
   VkCommandBufferAllocateInfo cmd{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
   };
-  cmd.commandPool = pool;
+  cmd.commandPool = ptr->pool;
   cmd.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   cmd.commandBufferCount = 1;
-  if (vkAllocateCommandBuffers(m_vkDevice, &cmd, &buf) != VK_SUCCESS) {
+  if (vkAllocateCommandBuffers(ptr->m_vkDevice, &cmd, &ptr->buf) !=
+      VK_SUCCESS) {
     throw std::runtime_error("vkAllocateCommandBuffers");
   }
   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
-                                 (uint64_t)buf,
+                                 (uint64_t)ptr->buf,
                                  "hello_xr command buffer") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
@@ -87,18 +90,18 @@ bool CmdBuffer::Init(VkDevice device, uint32_t queueFamilyIndex) {
   VkFenceCreateInfo fenceInfo{
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
   };
-  if (vkCreateFence(m_vkDevice, &fenceInfo, nullptr, &execFence) !=
+  if (vkCreateFence(ptr->m_vkDevice, &fenceInfo, nullptr, &ptr->execFence) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateFence");
   }
   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FENCE,
-                                 (uint64_t)execFence,
+                                 (uint64_t)ptr->execFence,
                                  "hello_xr fence") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
-  SetState(CmdBufferState::Initialized);
-  return true;
+  ptr->SetState(CmdBufferState::Initialized);
+  return ptr;
 }
 
 bool CmdBuffer::Begin() {
