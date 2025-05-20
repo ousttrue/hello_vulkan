@@ -37,51 +37,49 @@ int main(int argc, char *argv[]) {
   }};
   exitPollingThread.detach();
 
-  bool requestRestart = false;
-  do {
-    // Create platform-specific implementation.
-    std::shared_ptr<IPlatformPlugin> platformPlugin =
-        CreatePlatformPlugin_Win32(options);
+  //
+  // Create platform-specific implementation.
+  //
+  auto platformPlugin = CreatePlatformPlugin_Win32(options);
 
-    // Create graphics API implementation.
-    std::shared_ptr<VulkanGraphicsPlugin> graphicsPlugin =
-        std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
+  // Create graphics API implementation.
+  auto graphicsPlugin =
+      std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
 
-    // Initialize the OpenXR program.
-    auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,
-                                                   graphicsPlugin);
+  // Initialize the OpenXR program.
+  auto program =
+      std::make_shared<OpenXrProgram>(options, platformPlugin, graphicsPlugin);
 
-    program->CreateInstance();
-    program->InitializeSystem();
+  program->CreateInstance();
+  program->InitializeSystem();
 
-    options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-    if(!options.UpdateOptionsFromCommandLine(argc, argv)){
-      ShowHelp();
-    }
-    platformPlugin->UpdateOptions(options);
-    graphicsPlugin->UpdateOptions(options);
+  options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
+  if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
+    ShowHelp();
+  }
+  platformPlugin->UpdateOptions(options);
+  graphicsPlugin->UpdateOptions(options);
 
-    program->InitializeDevice();
-    program->InitializeSession();
-    program->CreateSwapchains();
+  program->InitializeDevice();
+  program->InitializeSession();
+  program->CreateSwapchains();
 
-    while (!quitKeyPressed) {
-      bool exitRenderLoop = false;
-      program->PollEvents(&exitRenderLoop, &requestRestart);
-      if (exitRenderLoop) {
-        break;
-      }
-
-      if (program->IsSessionRunning()) {
-        program->PollActions();
-        program->RenderFrame();
-      } else {
-        // Throttle loop since xrWaitFrame won't be called.
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-      }
+  while (!quitKeyPressed) {
+    bool exitRenderLoop = false;
+    bool requestRestart = false;
+    program->PollEvents(&exitRenderLoop, &requestRestart);
+    if (exitRenderLoop) {
+      break;
     }
 
-  } while (!quitKeyPressed && requestRestart);
+    if (program->IsSessionRunning()) {
+      program->PollActions();
+      program->RenderFrame();
+    } else {
+      // Throttle loop since xrWaitFrame won't be called.
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+  }
 
   return 0;
 }

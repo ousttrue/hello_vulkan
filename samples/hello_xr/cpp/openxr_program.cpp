@@ -272,9 +272,9 @@ void OpenXrProgram::CreateSwapchains() {
 
   // Query and cache view configuration views.
   uint32_t viewCount;
-  CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-      m_instance, m_systemId, m_options.Parsed.ViewConfigType, 0, &viewCount,
-      nullptr));
+  CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId,
+                                                m_options.Parsed.ViewConfigType,
+                                                0, &viewCount, nullptr));
   m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
   CHECK_XRCMD(xrEnumerateViewConfigurationViews(
       m_instance, m_systemId, m_options.Parsed.ViewConfigType, viewCount,
@@ -523,27 +523,32 @@ void OpenXrProgram::CreateInstanceInternal() {
   std::vector<const char *> extensions;
 
   // Transform platform and graphics extension std::strings to C strings.
-  const std::vector<std::string> platformExtensions =
-      m_platformPlugin->GetInstanceExtensions();
+  auto platformExtensions = m_platformPlugin->GetInstanceExtensions();
   std::transform(platformExtensions.begin(), platformExtensions.end(),
                  std::back_inserter(extensions),
                  [](const std::string &ext) { return ext.c_str(); });
-  const std::vector<std::string> graphicsExtensions =
-      m_graphicsPlugin->GetInstanceExtensions();
+
+  auto graphicsExtensions = m_graphicsPlugin->GetInstanceExtensions();
   std::transform(graphicsExtensions.begin(), graphicsExtensions.end(),
                  std::back_inserter(extensions),
                  [](const std::string &ext) { return ext.c_str(); });
 
-  XrInstanceCreateInfo createInfo{XR_TYPE_INSTANCE_CREATE_INFO};
-  createInfo.next = m_platformPlugin->GetInstanceCreateExtension();
-  createInfo.enabledExtensionCount = (uint32_t)extensions.size();
-  createInfo.enabledExtensionNames = extensions.data();
-
-  strcpy(createInfo.applicationInfo.applicationName, "HelloXR");
-
-  // Current version is 1.1.x, but hello_xr only requires 1.0.x
-  createInfo.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-
+  XrInstanceCreateInfo createInfo{
+      .type = XR_TYPE_INSTANCE_CREATE_INFO,
+      .next = m_platformPlugin->GetInstanceCreateExtension(),
+      .createFlags = 0,
+      .applicationInfo =
+          {.applicationName = "HelloXR",
+           // Current version is 1.1.x, but hello_xr only requires 1.0.x
+           .applicationVersion = {},
+           .engineName = {},
+           .engineVersion = {},
+           .apiVersion = XR_API_VERSION_1_0},
+      .enabledApiLayerCount = 0,
+      .enabledApiLayerNames = nullptr,
+      .enabledExtensionCount = (uint32_t)extensions.size(),
+      .enabledExtensionNames = extensions.data(),
+  };
   CHECK_XRCMD(xrCreateInstance(&createInfo, &m_instance));
 }
 
@@ -567,7 +572,7 @@ void OpenXrProgram::LogViewConfigurations() {
         Log::Level::Verbose,
         Fmt("  View Configuration Type: %s %s", to_string(viewConfigType),
             viewConfigType == m_options.Parsed.ViewConfigType ? "(Selected)"
-                                                               : ""));
+                                                              : ""));
 
     XrViewConfigurationProperties viewConfigProperties{
         XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
@@ -630,8 +635,7 @@ void OpenXrProgram::LogEnvironmentBlendMode(XrViewConfigurationType type) {
 
   bool blendModeFound = false;
   for (XrEnvironmentBlendMode mode : blendModes) {
-    const bool blendModeMatch =
-        (mode == m_options.Parsed.EnvironmentBlendMode);
+    const bool blendModeMatch = (mode == m_options.Parsed.EnvironmentBlendMode);
     Log::Write(Log::Level::Info,
                Fmt("Environment Blend Mode (%s) : %s", to_string(mode),
                    blendModeMatch ? "(Selected)" : ""));
