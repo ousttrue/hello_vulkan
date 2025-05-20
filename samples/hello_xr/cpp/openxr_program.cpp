@@ -202,12 +202,42 @@ void OpenXrProgram::InitializeSystem() {
   CHECK(m_systemId != XR_NULL_SYSTEM_ID);
 }
 
-void OpenXrProgram::InitializeDevice(const std::vector<const char *> &layers) {
+static XrResult GetVulkanGraphicsRequirements2KHR(
+    XrInstance instance, XrSystemId systemId,
+    XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
+  PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
+      nullptr;
+  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirements2KHR",
+                            reinterpret_cast<PFN_xrVoidFunction *>(
+                                &pfnGetVulkanGraphicsRequirements2KHR)) !=
+      XR_SUCCESS) {
+    throw std::runtime_error("xrGetInstanceProcAddr");
+  }
+
+  return pfnGetVulkanGraphicsRequirements2KHR(instance, systemId,
+                                              graphicsRequirements);
+}
+
+void OpenXrProgram::InitializeDevice(
+    const std::vector<const char *> &layers,
+    const std::vector<const char *> &instanceExtensions,
+    const std::vector<const char *> &deviceExtensions) {
   LogViewConfigurations();
+
+  // Create the Vulkan device for the adapter associated with the system.
+  // Extension function must be loaded by name
+  XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
+      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
+  };
+  if (GetVulkanGraphicsRequirements2KHR(m_instance, m_systemId,
+                                        &graphicsRequirements) != XR_SUCCESS) {
+    throw std::runtime_error("GetVulkanGraphicsRequirements2KHR");
+  }
 
   // The graphics API can initialize the graphics device now that the systemId
   // and instance handle are available.
-  m_graphicsPlugin->InitializeDevice(m_instance, m_systemId, layers);
+  m_graphicsPlugin->InitializeDevice(m_instance, m_systemId, layers,
+                                     instanceExtensions, deviceExtensions);
 }
 
 void OpenXrProgram::InitializeSession() {

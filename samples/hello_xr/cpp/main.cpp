@@ -61,7 +61,8 @@ int main(int argc, char *argv[]) {
   platformPlugin->UpdateOptions(options);
   graphicsPlugin->UpdateOptions(options);
 
-  program->InitializeDevice(getVulkanLayers());
+  program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
+                            getVulkanDeviceExtensions());
   program->InitializeSession();
   program->CreateSwapchains();
 

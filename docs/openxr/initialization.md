@@ -34,6 +34,18 @@
       .formFactor = m_options.Parsed.FormFactor,
   };
   CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
+
+  // ?
+  xrGetVulkanGraphicsRequirements2KHR
+
+  // OpenXR 側で VkInstance を作成する
+  xrCreateVulkanInstanceKHR
+
+  // OpenXR 側で VkPhysicalDevice
+  xrGetVulkanGraphicsDevice2KHR
+
+  // OpenXR 側で VkDevice
+  xrCreateVulkanDeviceKHR
 ```
 
 ## VkDevice

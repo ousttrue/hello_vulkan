@@ -47,95 +47,86 @@ VulkanGraphicsPlugin::ParseExtensionString(char *names) {
   return list;
 }
 
-void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
-                                            XrSystemId systemId, const std::vector<const char*> &layers) {
-  // Create the Vulkan device for the adapter associated with the system.
-  // Extension function must be loaded by name
-  XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
-      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
-  };
-  if (GetVulkanGraphicsRequirements2KHR(instance, systemId,
-                                        &graphicsRequirements) != XR_SUCCESS) {
-    throw std::runtime_error("GetVulkanGraphicsRequirements2KHR");
+static XrResult
+CreateVulkanInstanceKHR(XrInstance instance,
+                        const XrVulkanInstanceCreateInfoKHR *createInfo,
+                        VkInstance *vulkanInstance, VkResult *vulkanResult) {
+  PFN_xrCreateVulkanInstanceKHR pfnCreateVulkanInstanceKHR = nullptr;
+  if (xrGetInstanceProcAddr(instance, "xrCreateVulkanInstanceKHR",
+                            reinterpret_cast<PFN_xrVoidFunction *>(
+                                &pfnCreateVulkanInstanceKHR)) != XR_SUCCESS) {
+    throw std::runtime_error("xrGetInstanceProcAddr");
   }
 
-  std::vector<const char *> extensions;
-  {
-    uint32_t extensionCount = 0;
-    if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                               nullptr) != VK_SUCCESS) {
-      throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
-    }
+  return pfnCreateVulkanInstanceKHR(instance, createInfo, vulkanInstance,
+                                    vulkanResult);
+}
 
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                               availableExtensions.data()) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
-    }
-    const auto b = availableExtensions.begin();
-    const auto e = availableExtensions.end();
-
-    auto isExtSupported = [&](const char *extName) -> bool {
-      auto it =
-          std::find_if(b, e, [&](const VkExtensionProperties &properties) {
-            return (0 == strcmp(extName, properties.extensionName));
-          });
-      return (it != e);
-    };
-
-    // Debug utils is optional and not always available
-    if (isExtSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
-      extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-    // TODO add back VK_EXT_debug_report code for compatibility with older
-    // systems? (Android)
+static XrResult
+GetVulkanGraphicsDevice2KHR(XrInstance instance,
+                            const XrVulkanGraphicsDeviceGetInfoKHR *getInfo,
+                            VkPhysicalDevice *vulkanPhysicalDevice) {
+  PFN_xrGetVulkanGraphicsDevice2KHR pfnGetVulkanGraphicsDevice2KHR = nullptr;
+  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsDevice2KHR",
+                            reinterpret_cast<PFN_xrVoidFunction *>(
+                                &pfnGetVulkanGraphicsDevice2KHR)) !=
+      XR_SUCCESS) {
+    throw std::runtime_error("xrGetInstanceProcAddr");
   }
-#if defined(USE_MIRROR_WINDOW)
-  extensions.push_back("VK_KHR_surface");
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-  extensions.push_back("VK_KHR_win32_surface");
-#else
-#error CreateSurface not supported on this OS
-#endif // defined(VK_USE_PLATFORM_WIN32_KHR)
-#endif // defined(USE_MIRROR_WINDOW)
+
+  return pfnGetVulkanGraphicsDevice2KHR(instance, getInfo,
+                                        vulkanPhysicalDevice);
+}
+
+void VulkanGraphicsPlugin::InitializeDevice(
+    XrInstance instance, XrSystemId systemId,
+    const std::vector<const char *> &layers,
+    const std::vector<const char *> &instanceExtensions,
+    const std::vector<const char *> &deviceExtensions) {
 
   VkDebugUtilsMessengerCreateInfoEXT debugInfo{
-      VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-  debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                              VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-#if !defined(NDEBUG)
-  debugInfo.messageSeverity |= VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
-#endif
-  debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                          VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  debugInfo.pfnUserCallback = debugMessageThunk;
-  debugInfo.pUserData = this;
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .messageSeverity = static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(
+          layers.empty() ? VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                         : VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT),
+      .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      .pfnUserCallback = debugMessageThunk,
+      .pUserData = this,
+  };
 
-  VkApplicationInfo appInfo{VK_STRUCTURE_TYPE_APPLICATION_INFO};
-  appInfo.pApplicationName = "hello_xr";
-  appInfo.applicationVersion = 1;
-  appInfo.pEngineName = "hello_xr";
-  appInfo.engineVersion = 1;
-  appInfo.apiVersion = VK_API_VERSION_1_0;
+  VkApplicationInfo appInfo{
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "hello_xr",
+      .applicationVersion = 1,
+      .pEngineName = "hello_xr",
+      .engineVersion = 1,
+      .apiVersion = VK_API_VERSION_1_0,
+  };
 
-  VkInstanceCreateInfo instInfo{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
-  instInfo.pNext = &debugInfo;
-  instInfo.pApplicationInfo = &appInfo;
-  instInfo.enabledLayerCount = (uint32_t)layers.size();
-  instInfo.ppEnabledLayerNames = layers.empty() ? nullptr : layers.data();
-  instInfo.enabledExtensionCount = (uint32_t)extensions.size();
-  instInfo.ppEnabledExtensionNames =
-      extensions.empty() ? nullptr : extensions.data();
+  VkInstanceCreateInfo instInfo{
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pNext = &debugInfo,
+      .pApplicationInfo = &appInfo,
+      .enabledLayerCount = (uint32_t)layers.size(),
+      .ppEnabledLayerNames = layers.empty() ? nullptr : layers.data(),
+      .enabledExtensionCount = (uint32_t)instanceExtensions.size(),
+      .ppEnabledExtensionNames =
+          instanceExtensions.empty() ? nullptr : instanceExtensions.data(),
+  };
 
   XrVulkanInstanceCreateInfoKHR createInfo{
-      XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR};
-  createInfo.systemId = systemId;
-  createInfo.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
-  createInfo.vulkanCreateInfo = &instInfo;
-  createInfo.vulkanAllocator = nullptr;
+      .type = XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR,
+      .systemId = systemId,
+      .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
+      .vulkanCreateInfo = &instInfo,
+      .vulkanAllocator = nullptr,
+  };
 
   VkResult err;
   if (CreateVulkanInstanceKHR(instance, &createInfo, &m_vkInstance, &err) !=
@@ -150,7 +141,6 @@ void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
   vkCreateDebugUtilsMessengerEXT =
       (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
           m_vkInstance, "vkCreateDebugUtilsMessengerEXT");
-
   if (vkCreateDebugUtilsMessengerEXT != nullptr) {
     if (vkCreateDebugUtilsMessengerEXT(m_vkInstance, &debugInfo, nullptr,
                                        &m_vkDebugUtilsMessenger) !=
@@ -168,11 +158,12 @@ void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
     throw std::runtime_error("GetVulkanGraphicsDevice2KHR");
   }
 
-  VkDeviceQueueCreateInfo queueInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
   float queuePriorities = 0;
-  queueInfo.queueCount = 1;
-  queueInfo.pQueuePriorities = &queuePriorities;
-
+  VkDeviceQueueCreateInfo queueInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+      .queueCount = 1,
+      .pQueuePriorities = &queuePriorities,
+  };
   uint32_t queueFamilyCount = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice,
                                            &queueFamilyCount, nullptr);
@@ -188,32 +179,28 @@ void VulkanGraphicsPlugin::InitializeDevice(XrInstance instance,
     }
   }
 
-  std::vector<const char *> deviceExtensions;
-
   VkPhysicalDeviceFeatures features{};
   // features.samplerAnisotropy = VK_TRUE;
-
-#if defined(USE_MIRROR_WINDOW)
-  deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-#endif
-
-  VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-  deviceInfo.queueCreateInfoCount = 1;
-  deviceInfo.pQueueCreateInfos = &queueInfo;
-  deviceInfo.enabledLayerCount = 0;
-  deviceInfo.ppEnabledLayerNames = nullptr;
-  deviceInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size();
-  deviceInfo.ppEnabledExtensionNames =
-      deviceExtensions.empty() ? nullptr : deviceExtensions.data();
-  deviceInfo.pEnabledFeatures = &features;
+  VkDeviceCreateInfo deviceInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = 1,
+      .pQueueCreateInfos = &queueInfo,
+      .enabledLayerCount = 0,
+      .ppEnabledLayerNames = nullptr,
+      .enabledExtensionCount = (uint32_t)deviceExtensions.size(),
+      .ppEnabledExtensionNames =
+          deviceExtensions.empty() ? nullptr : deviceExtensions.data(),
+      .pEnabledFeatures = &features,
+  };
 
   XrVulkanDeviceCreateInfoKHR deviceCreateInfo{
-      XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR};
-  deviceCreateInfo.systemId = systemId;
-  deviceCreateInfo.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
-  deviceCreateInfo.vulkanCreateInfo = &deviceInfo;
-  deviceCreateInfo.vulkanPhysicalDevice = m_vkPhysicalDevice;
-  deviceCreateInfo.vulkanAllocator = nullptr;
+      .type = XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR,
+      .systemId = systemId,
+      .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
+      .vulkanPhysicalDevice = m_vkPhysicalDevice,
+      .vulkanCreateInfo = &deviceInfo,
+      .vulkanAllocator = nullptr,
+  };
   if (CreateVulkanDeviceKHR(instance, &deviceCreateInfo, &m_vkDevice, &err) !=
       XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanDeviceKHR");
@@ -575,20 +562,6 @@ VkBool32 VulkanGraphicsPlugin::debugMessage(
   return VK_FALSE;
 }
 
-XrResult VulkanGraphicsPlugin::CreateVulkanInstanceKHR(
-    XrInstance instance, const XrVulkanInstanceCreateInfoKHR *createInfo,
-    VkInstance *vulkanInstance, VkResult *vulkanResult) {
-  PFN_xrCreateVulkanInstanceKHR pfnCreateVulkanInstanceKHR = nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrCreateVulkanInstanceKHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnCreateVulkanInstanceKHR)) != XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnCreateVulkanInstanceKHR(instance, createInfo, vulkanInstance,
-                                    vulkanResult);
-}
-
 XrResult VulkanGraphicsPlugin::CreateVulkanDeviceKHR(
     XrInstance instance, const XrVulkanDeviceCreateInfoKHR *createInfo,
     VkDevice *vulkanDevice, VkResult *vulkanResult) {
@@ -601,35 +574,4 @@ XrResult VulkanGraphicsPlugin::CreateVulkanDeviceKHR(
 
   return pfnCreateVulkanDeviceKHR(instance, createInfo, vulkanDevice,
                                   vulkanResult);
-}
-
-XrResult VulkanGraphicsPlugin::GetVulkanGraphicsDevice2KHR(
-    XrInstance instance, const XrVulkanGraphicsDeviceGetInfoKHR *getInfo,
-    VkPhysicalDevice *vulkanPhysicalDevice) {
-  PFN_xrGetVulkanGraphicsDevice2KHR pfnGetVulkanGraphicsDevice2KHR = nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsDevice2KHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnGetVulkanGraphicsDevice2KHR)) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnGetVulkanGraphicsDevice2KHR(instance, getInfo,
-                                        vulkanPhysicalDevice);
-}
-
-XrResult VulkanGraphicsPlugin::GetVulkanGraphicsRequirements2KHR(
-    XrInstance instance, XrSystemId systemId,
-    XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
-  PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
-      nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirements2KHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnGetVulkanGraphicsRequirements2KHR)) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnGetVulkanGraphicsRequirements2KHR(instance, systemId,
-                                              graphicsRequirements);
 }

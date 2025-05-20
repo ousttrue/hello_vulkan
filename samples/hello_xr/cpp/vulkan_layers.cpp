@@ -1,5 +1,6 @@
 #include "vulkan_layers.h"
 #include "logger.h"
+#include <stdexcept>
 #include <vulkan/vulkan.h>
 
 static const char *GetValidationLayerName() {
@@ -37,4 +38,55 @@ std::vector<const char *> getVulkanLayers() {
 
   // no debug layer
   return {};
+}
+
+std::vector<const char *> getVulkanInstanceExtensions() {
+  std::vector<const char *> extensions;
+
+  uint32_t extensionCount = 0;
+  if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
+                                             nullptr) != VK_SUCCESS) {
+    throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
+  }
+
+  std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+  if (vkEnumerateInstanceExtensionProperties(
+          nullptr, &extensionCount, availableExtensions.data()) != VK_SUCCESS) {
+    throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
+  }
+  const auto b = availableExtensions.begin();
+  const auto e = availableExtensions.end();
+
+  auto isExtSupported = [&](const char *extName) -> bool {
+    auto it = std::find_if(b, e, [&](const VkExtensionProperties &properties) {
+      return (0 == strcmp(extName, properties.extensionName));
+    });
+    return (it != e);
+  };
+
+  // Debug utils is optional and not always available
+  if (isExtSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  }
+  // TODO add back VK_EXT_debug_report code for compatibility with older
+  // systems? (Android)
+
+#if defined(USE_MIRROR_WINDOW)
+  extensions.push_back("VK_KHR_surface");
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+  extensions.push_back("VK_KHR_win32_surface");
+#else
+#error CreateSurface not supported on this OS
+#endif // defined(VK_USE_PLATFORM_WIN32_KHR)
+#endif // defined(USE_MIRROR_WINDOW)
+
+  return extensions;
+}
+
+std::vector<const char *> getVulkanDeviceExtensions() {
+  std::vector<const char *> deviceExtensions;
+#if defined(USE_MIRROR_WINDOW)
+  deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+#endif
+  return deviceExtensions;
 }
