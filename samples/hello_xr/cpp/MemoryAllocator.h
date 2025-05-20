@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <vulkan/vulkan.h>
 
 class MemoryAllocator {
@@ -6,7 +7,8 @@ class MemoryAllocator {
   VkPhysicalDeviceMemoryProperties m_memProps{};
 
 public:
-  void Init(VkPhysicalDevice physicalDevice, VkDevice device);
+  static std::shared_ptr<MemoryAllocator>
+  Create(VkPhysicalDevice physicalDevice, VkDevice device);
   static const VkFlags defaultFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
   void Allocate(VkMemoryRequirements const &memReqs, VkDeviceMemory *mem,

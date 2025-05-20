@@ -3,9 +3,12 @@
 
 #include <stdexcept>
 
-void MemoryAllocator::Init(VkPhysicalDevice physicalDevice, VkDevice device) {
-  m_vkDevice = device;
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &m_memProps);
+std::shared_ptr<MemoryAllocator>
+MemoryAllocator::Create(VkPhysicalDevice physicalDevice, VkDevice device) {
+  auto ptr = std::shared_ptr<MemoryAllocator>(new MemoryAllocator);
+  ptr->m_vkDevice = device;
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &ptr->m_memProps);
+  return ptr;
 }
 
 void MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,

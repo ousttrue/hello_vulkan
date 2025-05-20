@@ -96,11 +96,10 @@ void Pipeline::Dynamic(VkDynamicState state) {
   dynamicStateEnables.emplace_back(state);
 }
 
-std::shared_ptr<Pipeline> Pipeline::Create(VkDevice device, VkExtent2D size,
-                                           const PipelineLayout &layout,
-                                           const RenderPass &rp,
-                                           const ShaderProgram &sp,
-                                           const VertexBufferBase &vb) {
+std::shared_ptr<Pipeline>
+Pipeline::Create(VkDevice device, VkExtent2D size, const PipelineLayout &layout,
+                 const RenderPass &rp, const ShaderProgram &sp,
+                 const std::shared_ptr<VertexBuffer> &vb) {
 
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline);
 
@@ -114,9 +113,9 @@ std::shared_ptr<Pipeline> Pipeline::Create(VkDevice device, VkExtent2D size,
   VkPipelineVertexInputStateCreateInfo vi{
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
   vi.vertexBindingDescriptionCount = 1;
-  vi.pVertexBindingDescriptions = &vb.bindDesc;
-  vi.vertexAttributeDescriptionCount = (uint32_t)vb.attrDesc.size();
-  vi.pVertexAttributeDescriptions = vb.attrDesc.data();
+  vi.pVertexBindingDescriptions = &vb->bindDesc;
+  vi.vertexAttributeDescriptionCount = (uint32_t)vb->attrDesc.size();
+  vi.pVertexAttributeDescriptions = vb->attrDesc.data();
 
   VkPipelineInputAssemblyStateCreateInfo ia{
       VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};

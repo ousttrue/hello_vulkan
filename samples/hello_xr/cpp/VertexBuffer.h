@@ -1,11 +1,69 @@
+// Copyright (c) 2017-2024, The Khronos Group Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #pragma once
+
 #include <vulkan/vulkan.h>
 
+#include <memory>
 #include <vector>
-#include <stdexcept>
+
+struct Vec3 {
+  float x, y, z;
+};
+
+struct Vertex {
+  Vec3 Position;
+  Vec3 Color;
+};
+
+constexpr Vec3 Red{1, 0, 0};
+constexpr Vec3 DarkRed{0.25f, 0, 0};
+constexpr Vec3 Green{0, 1, 0};
+constexpr Vec3 DarkGreen{0, 0.25f, 0};
+constexpr Vec3 Blue{0, 0, 1};
+constexpr Vec3 DarkBlue{0, 0, 0.25f};
+
+// Vertices for a 1x1x1 meter cube. (Left/Right, Top/Bottom, Front/Back)
+constexpr Vec3 LBB{-0.5f, -0.5f, -0.5f};
+constexpr Vec3 LBF{-0.5f, -0.5f, 0.5f};
+constexpr Vec3 LTB{-0.5f, 0.5f, -0.5f};
+constexpr Vec3 LTF{-0.5f, 0.5f, 0.5f};
+constexpr Vec3 RBB{0.5f, -0.5f, -0.5f};
+constexpr Vec3 RBF{0.5f, -0.5f, 0.5f};
+constexpr Vec3 RTB{0.5f, 0.5f, -0.5f};
+constexpr Vec3 RTF{0.5f, 0.5f, 0.5f};
+
+#define CUBE_SIDE(V1, V2, V3, V4, V5, V6, COLOR)                               \
+  {V1, COLOR}, {V2, COLOR}, {V3, COLOR}, {V4, COLOR}, {V5, COLOR}, {V6, COLOR},
+
+constexpr Vertex c_cubeVertices[] = {
+    CUBE_SIDE(LTB, LBF, LBB, LTB, LTF, LBF, DarkRed)   // -X
+    CUBE_SIDE(RTB, RBB, RBF, RTB, RBF, RTF, Red)       // +X
+    CUBE_SIDE(LBB, LBF, RBF, LBB, RBF, RBB, DarkGreen) // -Y
+    CUBE_SIDE(LTB, RTB, RTF, LTB, RTF, LTF, Green)     // +Y
+    CUBE_SIDE(LBB, RBB, RTB, LBB, RTB, LTB, DarkBlue)  // -Z
+    CUBE_SIDE(LBF, LTF, RTF, LBF, RTF, RBF, Blue)      // +Z
+};
+
+// Winding order is clockwise. Each side uses a different color.
+constexpr unsigned short c_cubeIndices[] = {
+    0,  1,  2,  3,  4,  5,  // -X
+    6,  7,  8,  9,  10, 11, // +X
+    12, 13, 14, 15, 16, 17, // -Y
+    18, 19, 20, 21, 22, 23, // +Y
+    24, 25, 26, 27, 28, 29, // -Z
+    30, 31, 32, 33, 34, 35, // +Z
+};
 
 // VertexBuffer base class
-struct VertexBufferBase {
+struct VertexBuffer {
+  std::shared_ptr<class MemoryAllocator> m_memAllocator;
+
+  VkDevice m_vkDevice{VK_NULL_HANDLE};
+  void AllocateBufferMemory(VkBuffer buf, VkDeviceMemory *mem) const;
+
   VkBuffer idxBuf{VK_NULL_HANDLE};
   VkDeviceMemory idxMem{VK_NULL_HANDLE};
   VkBuffer vtxBuf{VK_NULL_HANDLE};
@@ -17,80 +75,17 @@ struct VertexBufferBase {
     uint32_t vtx;
   } count = {0, 0};
 
-  VertexBufferBase() = default;
-  ~VertexBufferBase();
-  VertexBufferBase(const VertexBufferBase &) = delete;
-  VertexBufferBase &operator=(const VertexBufferBase &) = delete;
-  VertexBufferBase(VertexBufferBase &&) = delete;
-  VertexBufferBase &operator=(VertexBufferBase &&) = delete;
-  void Init(VkDevice device, const class MemoryAllocator *memAllocator,
-            const std::vector<VkVertexInputAttributeDescription> &attr);
+  VertexBuffer() = default;
+  ~VertexBuffer();
+  VertexBuffer(const VertexBuffer &) = delete;
+  VertexBuffer &operator=(const VertexBuffer &) = delete;
+  VertexBuffer(VertexBuffer &&) = delete;
+  VertexBuffer &operator=(VertexBuffer &&) = delete;
 
-protected:
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-  void AllocateBufferMemory(VkBuffer buf, VkDeviceMemory *mem) const;
-
-private:
-  const MemoryAllocator *m_memAllocator{nullptr};
-};
-
-// VertexBuffer template to wrap the indices and vertices
-template <typename T> struct VertexBuffer : public VertexBufferBase {
-  bool Create(uint32_t idxCount, uint32_t vtxCount) {
-    VkBufferCreateInfo bufInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    bufInfo.size = sizeof(uint16_t) * idxCount;
-    if (vkCreateBuffer(m_vkDevice, &bufInfo, nullptr, &idxBuf) != VK_SUCCESS) {
-      throw std::runtime_error("vkCreateBuffer");
-    }
-    AllocateBufferMemory(idxBuf, &idxMem);
-    if (vkBindBufferMemory(m_vkDevice, idxBuf, idxMem, 0) != VK_SUCCESS) {
-      throw std::runtime_error("vkBindBufferMemory");
-    }
-
-    bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufInfo.size = sizeof(T) * vtxCount;
-    if (vkCreateBuffer(m_vkDevice, &bufInfo, nullptr, &vtxBuf) != VK_SUCCESS) {
-      throw std::runtime_error("vkCreateBuffer");
-    }
-    AllocateBufferMemory(vtxBuf, &vtxMem);
-    if (vkBindBufferMemory(m_vkDevice, vtxBuf, vtxMem, 0) != VK_SUCCESS) {
-      throw std::runtime_error("vkBindBufferMemory");
-    }
-
-    bindDesc.binding = 0;
-    bindDesc.stride = sizeof(T);
-    bindDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    count = {idxCount, vtxCount};
-
-    return true;
-  }
-
-  void UpdateIndices(const uint16_t *data, uint32_t elements,
-                     uint32_t offset = 0) {
-    uint16_t *map = nullptr;
-    if (vkMapMemory(m_vkDevice, idxMem, sizeof(map[0]) * offset,
-                    sizeof(map[0]) * elements, 0,
-                    (void **)&map) != VK_SUCCESS) {
-      throw std::runtime_error("vkMapMemory");
-    }
-    for (size_t i = 0; i < elements; ++i) {
-      map[i] = data[i];
-    }
-    vkUnmapMemory(m_vkDevice, idxMem);
-  }
-
-  void UpdateVertices(const T *data, uint32_t elements, uint32_t offset = 0) {
-    T *map = nullptr;
-    if (vkMapMemory(m_vkDevice, vtxMem, sizeof(map[0]) * offset,
-                    sizeof(map[0]) * elements, 0,
-                    (void **)&map) != VK_SUCCESS) {
-      throw std::runtime_error("vkMapMemory");
-    }
-    for (size_t i = 0; i < elements; ++i) {
-      map[i] = data[i];
-    }
-    vkUnmapMemory(m_vkDevice, vtxMem);
-  }
+  static std::shared_ptr<VertexBuffer>
+  Create(VkDevice device,
+         const std::shared_ptr<class MemoryAllocator> &memAllocator,
+         const std::vector<VkVertexInputAttributeDescription> &attr,
+         const Vertex *vertices, uint32_t vertexCount, const uint16_t *indices,
+         uint32_t indexCount);
 };

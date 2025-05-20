@@ -42,10 +42,9 @@ DepthBuffer::~DepthBuffer() {
 //   return *this;
 // }
 
-std::shared_ptr<DepthBuffer>
-DepthBuffer::Create(VkDevice device, MemoryAllocator *memAllocator,
-                    VkFormat depthFormat,
-                    const XrSwapchainCreateInfo &swapchainCreateInfo) {
+std::shared_ptr<DepthBuffer> DepthBuffer::Create(
+    VkDevice device, const std::shared_ptr<MemoryAllocator> &memAllocator,
+    VkFormat depthFormat, const XrSwapchainCreateInfo &swapchainCreateInfo) {
   auto ptr = std::shared_ptr<DepthBuffer>(new DepthBuffer());
   ptr->m_vkDevice = device;
 
@@ -69,8 +68,9 @@ DepthBuffer::Create(VkDevice device, MemoryAllocator *memAllocator,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateImage");
   }
-  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)ptr->depthImage,
-                    "hello_xr fallback depth image") != VK_SUCCESS) {
+  if (SetDebugUtilsObjectNameEXT(
+          device, VK_OBJECT_TYPE_IMAGE, (uint64_t)ptr->depthImage,
+          "hello_xr fallback depth image") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
@@ -78,8 +78,9 @@ DepthBuffer::Create(VkDevice device, MemoryAllocator *memAllocator,
   vkGetImageMemoryRequirements(device, ptr->depthImage, &memRequirements);
   memAllocator->Allocate(memRequirements, &ptr->depthMemory,
                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
-                    "hello_xr fallback depth image memory") != VK_SUCCESS) {
+  if (SetDebugUtilsObjectNameEXT(
+          device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
+          "hello_xr fallback depth image memory") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
   if (vkBindImageMemory(device, ptr->depthImage, ptr->depthMemory, 0) !=

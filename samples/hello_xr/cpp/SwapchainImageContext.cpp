@@ -3,6 +3,7 @@
 #include "Pipeline.h"
 #include "RenderPass.h"
 #include "vulkan_debug_object_namer.hpp"
+#include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
 //
@@ -138,7 +139,8 @@ RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateFramebuffer");
   }
-  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FRAMEBUFFER, (uint64_t)ptr->fb,
+  if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_FRAMEBUFFER,
+                                 (uint64_t)ptr->fb,
                                  "hello_xr framebuffer") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
@@ -146,10 +148,10 @@ RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
 }
 
 std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
-    VkDevice device, class MemoryAllocator *memAllocator, uint32_t capacity,
-    const XrSwapchainCreateInfo &swapchainCreateInfo,
+    VkDevice device, const std::shared_ptr<class MemoryAllocator> &memAllocator,
+    uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
     const struct PipelineLayout &layout, const struct ShaderProgram &sp,
-    const VertexBuffer<Geometry::Vertex> &vb) {
+    const std::shared_ptr<VertexBuffer> &vb) {
   m_vkDevice = device;
 
   size = {swapchainCreateInfo.width, swapchainCreateInfo.height};

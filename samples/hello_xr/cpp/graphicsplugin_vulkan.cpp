@@ -32,8 +32,6 @@
 
 #include <openxr/openxr_platform.h>
 
-#include "geometry.h"
-
 #include <algorithm>
 #include <list>
 #include <map>
@@ -338,7 +336,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
 
     vkGetDeviceQueue(m_vkDevice, queueInfo.queueFamilyIndex, 0, &m_vkQueue);
 
-    m_memAllocator.Init(m_vkPhysicalDevice, m_vkDevice);
+    m_memAllocator = MemoryAllocator::Create(m_vkPhysicalDevice, m_vkDevice);
 
     InitializeResources();
 
@@ -413,19 +411,14 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
 
     m_pipelineLayout.Create(m_vkDevice);
 
-    static_assert(sizeof(Geometry::Vertex) == 24, "Unexpected Vertex size");
-    m_drawBuffer.Init(m_vkDevice, &m_memAllocator,
-                      {{0, 0, VK_FORMAT_R32G32B32_SFLOAT,
-                        offsetof(Geometry::Vertex, Position)},
-                       {1, 0, VK_FORMAT_R32G32B32_SFLOAT,
-                        offsetof(Geometry::Vertex, Color)}});
-    uint32_t numCubeIdicies =
-        sizeof(Geometry::c_cubeIndices) / sizeof(Geometry::c_cubeIndices[0]);
-    uint32_t numCubeVerticies =
-        sizeof(Geometry::c_cubeVertices) / sizeof(Geometry::c_cubeVertices[0]);
-    m_drawBuffer.Create(numCubeIdicies, numCubeVerticies);
-    m_drawBuffer.UpdateIndices(Geometry::c_cubeIndices, numCubeIdicies, 0);
-    m_drawBuffer.UpdateVertices(Geometry::c_cubeVertices, numCubeVerticies, 0);
+    static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
+
+    m_drawBuffer = VertexBuffer::Create(
+        m_vkDevice, m_memAllocator,
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
+         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
+        c_cubeVertices, _countof(c_cubeVertices), c_cubeIndices,
+        _countof(c_cubeIndices));
 
 #if defined(USE_MIRROR_WINDOW)
     m_swapchain.Create(m_vkInstance, m_vkPhysicalDevice, m_vkDevice,
@@ -475,7 +468,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
     auto swapchainImageContext = m_swapchainImageContexts.back();
 
     std::vector<XrSwapchainImageBaseHeader *> bases =
-        swapchainImageContext->Create(m_vkDevice, &m_memAllocator, capacity,
+        swapchainImageContext->Create(m_vkDevice, m_memAllocator, capacity,
                                       swapchainCreateInfo, m_pipelineLayout,
                                       m_shaderProgram, m_drawBuffer);
 
@@ -528,10 +521,10 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
                       swapchainContext->pipe->pipe);
 
     // Bind index and vertex buffers
-    vkCmdBindIndexBuffer(m_cmdBuffer.buf, m_drawBuffer.idxBuf, 0,
+    vkCmdBindIndexBuffer(m_cmdBuffer.buf, m_drawBuffer->idxBuf, 0,
                          VK_INDEX_TYPE_UINT16);
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(m_cmdBuffer.buf, 0, 1, &m_drawBuffer.vtxBuf,
+    vkCmdBindVertexBuffers(m_cmdBuffer.buf, 0, 1, &m_drawBuffer->vtxBuf,
                            &offset);
 
     // Compute the view-projection transform.
@@ -560,7 +553,7 @@ struct VulkanGraphicsPlugin : public IGraphicsPlugin {
                          &mvp.m[0]);
 
       // Draw the cube.
-      vkCmdDrawIndexed(m_cmdBuffer.buf, m_drawBuffer.count.idx, 1, 0, 0, 0);
+      vkCmdDrawIndexed(m_cmdBuffer.buf, m_drawBuffer->count.idx, 1, 0, 0, 0);
     }
 
     vkCmdEndRenderPass(m_cmdBuffer.buf);
@@ -602,11 +595,11 @@ protected:
   VkQueue m_vkQueue{VK_NULL_HANDLE};
   VkSemaphore m_vkDrawDone{VK_NULL_HANDLE};
 
-  MemoryAllocator m_memAllocator{};
+  std::shared_ptr<MemoryAllocator> m_memAllocator;
   ShaderProgram m_shaderProgram{};
   CmdBuffer m_cmdBuffer;
   PipelineLayout m_pipelineLayout{};
-  VertexBuffer<Geometry::Vertex> m_drawBuffer{};
+  std::shared_ptr<VertexBuffer> m_drawBuffer;
   std::array<float, 4> m_clearColor;
 
 #if defined(USE_MIRROR_WINDOW)

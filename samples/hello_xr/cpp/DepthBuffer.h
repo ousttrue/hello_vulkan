@@ -16,7 +16,8 @@ public:
   // DepthBuffer(DepthBuffer &&other) noexcept;
   // DepthBuffer &operator=(DepthBuffer &&other) noexcept;
   static std::shared_ptr<DepthBuffer>
-  Create(VkDevice device, class MemoryAllocator *memAllocator,
+  Create(VkDevice device,
+         const std::shared_ptr<class MemoryAllocator> &memAllocator,
          VkFormat depthFormat,
          const struct XrSwapchainCreateInfo &swapchainCreateInfo);
 

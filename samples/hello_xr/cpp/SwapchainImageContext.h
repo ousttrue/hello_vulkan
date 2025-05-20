@@ -9,7 +9,6 @@
 #include <openxr/openxr_platform.h>
 
 #include "VertexBuffer.h"
-#include "geometry.h"
 
 // VkImage + framebuffer wrapper
 class RenderTarget {
@@ -60,10 +59,11 @@ public:
   }
 
   std::vector<XrSwapchainImageBaseHeader *>
-  Create(VkDevice device, class MemoryAllocator *memAllocator,
+  Create(VkDevice device,
+         const std::shared_ptr<class MemoryAllocator> &memAllocator,
          uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
          const struct PipelineLayout &layout, const struct ShaderProgram &sp,
-         const VertexBuffer<Geometry::Vertex> &vb);
+         const std::shared_ptr<VertexBuffer> &vb);
 
   uint32_t ImageIndex(const XrSwapchainImageBaseHeader *swapchainImageHeader) {
     auto p = reinterpret_cast<const XrSwapchainImageVulkan2KHR *>(
