@@ -35,10 +35,9 @@ struct VulkanGraphicsPlugin {
 
   // Create an instance of this graphics api for the provided instance and
   // systemId.
-  void InitializeDevice(XrInstance instance, XrSystemId systemId,
-                        const std::vector<const char *> &layers,
-                        const std::vector<const char *> &extensions,
-                        const std::vector<const char *> &deviceExtensions);
+  void InitializeDevice(VkInstance instance, VkPhysicalDevice physicalDevice,
+                        VkDevice device, VkDeviceQueueCreateInfo queueInfo,
+                        VkDebugUtilsMessengerCreateInfoEXT debugInfo);
 
   // Select the preferred swapchain format from the list of available formats.
   int64_t
@@ -128,9 +127,4 @@ struct VulkanGraphicsPlugin {
   XrStructureType GetSwapchainImageType() const {
     return XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR;
   }
-
-  XrResult CreateVulkanDeviceKHR(XrInstance instance,
-                                 const XrVulkanDeviceCreateInfoKHR *createInfo,
-                                 VkDevice *vulkanDevice,
-                                 VkResult *vulkanResult);
 };

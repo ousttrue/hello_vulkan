@@ -15,15 +15,6 @@
 
 #include <common/xr_linear.h>
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-debugMessageThunk(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-                  const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-                  void *pUserData) {
-  return static_cast<VulkanGraphicsPlugin *>(pUserData)->debugMessage(
-      messageSeverity, messageTypes, pCallbackData);
-}
-
 VulkanGraphicsPlugin::VulkanGraphicsPlugin(
     const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
     : m_clearColor(options.GetBackgroundClearColor()) {
@@ -47,96 +38,14 @@ VulkanGraphicsPlugin::ParseExtensionString(char *names) {
   return list;
 }
 
-static XrResult
-CreateVulkanInstanceKHR(XrInstance instance,
-                        const XrVulkanInstanceCreateInfoKHR *createInfo,
-                        VkInstance *vulkanInstance, VkResult *vulkanResult) {
-  PFN_xrCreateVulkanInstanceKHR pfnCreateVulkanInstanceKHR = nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrCreateVulkanInstanceKHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnCreateVulkanInstanceKHR)) != XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnCreateVulkanInstanceKHR(instance, createInfo, vulkanInstance,
-                                    vulkanResult);
-}
-
-static XrResult
-GetVulkanGraphicsDevice2KHR(XrInstance instance,
-                            const XrVulkanGraphicsDeviceGetInfoKHR *getInfo,
-                            VkPhysicalDevice *vulkanPhysicalDevice) {
-  PFN_xrGetVulkanGraphicsDevice2KHR pfnGetVulkanGraphicsDevice2KHR = nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsDevice2KHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnGetVulkanGraphicsDevice2KHR)) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnGetVulkanGraphicsDevice2KHR(instance, getInfo,
-                                        vulkanPhysicalDevice);
-}
-
 void VulkanGraphicsPlugin::InitializeDevice(
-    XrInstance instance, XrSystemId systemId,
-    const std::vector<const char *> &layers,
-    const std::vector<const char *> &instanceExtensions,
-    const std::vector<const char *> &deviceExtensions) {
-
-  VkDebugUtilsMessengerCreateInfoEXT debugInfo{
-      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-      .messageSeverity = static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(
-          layers.empty() ? VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-                         : VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
-                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT),
-      .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-      .pfnUserCallback = debugMessageThunk,
-      .pUserData = this,
-  };
-
-  VkApplicationInfo appInfo{
-      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "hello_xr",
-      .applicationVersion = 1,
-      .pEngineName = "hello_xr",
-      .engineVersion = 1,
-      .apiVersion = VK_API_VERSION_1_0,
-  };
-
-  VkInstanceCreateInfo instInfo{
-      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      .pNext = &debugInfo,
-      .pApplicationInfo = &appInfo,
-      .enabledLayerCount = (uint32_t)layers.size(),
-      .ppEnabledLayerNames = layers.empty() ? nullptr : layers.data(),
-      .enabledExtensionCount = (uint32_t)instanceExtensions.size(),
-      .ppEnabledExtensionNames =
-          instanceExtensions.empty() ? nullptr : instanceExtensions.data(),
-  };
-
-  XrVulkanInstanceCreateInfoKHR createInfo{
-      .type = XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR,
-      .systemId = systemId,
-      .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
-      .vulkanCreateInfo = &instInfo,
-      .vulkanAllocator = nullptr,
-  };
-
-  VkResult err;
-  if (CreateVulkanInstanceKHR(instance, &createInfo, &m_vkInstance, &err) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("CreateVulkanInstanceKHR");
-  }
-  if (err != VK_SUCCESS) {
-    throw std::runtime_error("CreateVulkanInstanceKHR");
-  }
-  SetDebugUtilsObjectNameEXT_GetProc(m_vkInstance);
+    VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device,
+    VkDeviceQueueCreateInfo queueInfo,
+    VkDebugUtilsMessengerCreateInfoEXT debugInfo) {
+  m_vkInstance = instance;
+  m_vkPhysicalDevice = physicalDevice;
+  m_vkDevice = device;
+  m_queueFamilyIndex = queueInfo.queueFamilyIndex;
 
   vkCreateDebugUtilsMessengerEXT =
       (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
@@ -147,66 +56,6 @@ void VulkanGraphicsPlugin::InitializeDevice(
         VK_SUCCESS) {
       throw std::runtime_error("vkCreateDebugUtilsMessengerEXT");
     }
-  }
-
-  XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
-      XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR};
-  deviceGetInfo.systemId = systemId;
-  deviceGetInfo.vulkanInstance = m_vkInstance;
-  if (GetVulkanGraphicsDevice2KHR(instance, &deviceGetInfo,
-                                  &m_vkPhysicalDevice) != XR_SUCCESS) {
-    throw std::runtime_error("GetVulkanGraphicsDevice2KHR");
-  }
-
-  float queuePriorities = 0;
-  VkDeviceQueueCreateInfo queueInfo{
-      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueCount = 1,
-      .pQueuePriorities = &queuePriorities,
-  };
-  uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice,
-                                           &queueFamilyCount, nullptr);
-  std::vector<VkQueueFamilyProperties> queueFamilyProps(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(
-      m_vkPhysicalDevice, &queueFamilyCount, &queueFamilyProps[0]);
-
-  for (uint32_t i = 0; i < queueFamilyCount; ++i) {
-    // Only need graphics (not presentation) for draw queue
-    if ((queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u) {
-      m_queueFamilyIndex = queueInfo.queueFamilyIndex = i;
-      break;
-    }
-  }
-
-  VkPhysicalDeviceFeatures features{};
-  // features.samplerAnisotropy = VK_TRUE;
-  VkDeviceCreateInfo deviceInfo{
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .queueCreateInfoCount = 1,
-      .pQueueCreateInfos = &queueInfo,
-      .enabledLayerCount = 0,
-      .ppEnabledLayerNames = nullptr,
-      .enabledExtensionCount = (uint32_t)deviceExtensions.size(),
-      .ppEnabledExtensionNames =
-          deviceExtensions.empty() ? nullptr : deviceExtensions.data(),
-      .pEnabledFeatures = &features,
-  };
-
-  XrVulkanDeviceCreateInfoKHR deviceCreateInfo{
-      .type = XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR,
-      .systemId = systemId,
-      .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
-      .vulkanPhysicalDevice = m_vkPhysicalDevice,
-      .vulkanCreateInfo = &deviceInfo,
-      .vulkanAllocator = nullptr,
-  };
-  if (CreateVulkanDeviceKHR(instance, &deviceCreateInfo, &m_vkDevice, &err) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("CreateVulkanDeviceKHR");
-  }
-  if (err != VK_SUCCESS) {
-    throw std::runtime_error("CreateVulkanDeviceKHR");
   }
 
   vkGetDeviceQueue(m_vkDevice, queueInfo.queueFamilyIndex, 0, &m_vkQueue);
@@ -560,18 +409,4 @@ VkBool32 VulkanGraphicsPlugin::debugMessage(
                         object, pCallbackData->pMessage));
 
   return VK_FALSE;
-}
-
-XrResult VulkanGraphicsPlugin::CreateVulkanDeviceKHR(
-    XrInstance instance, const XrVulkanDeviceCreateInfoKHR *createInfo,
-    VkDevice *vulkanDevice, VkResult *vulkanResult) {
-  PFN_xrCreateVulkanDeviceKHR pfnCreateVulkanDeviceKHR = nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrCreateVulkanDeviceKHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnCreateVulkanDeviceKHR)) != XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
-  }
-
-  return pfnCreateVulkanDeviceKHR(instance, createInfo, vulkanDevice,
-                                  vulkanResult);
 }
