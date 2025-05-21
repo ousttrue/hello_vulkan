@@ -191,22 +191,17 @@ VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
   // pointers to each swapchain image struct so the consumer doesn't need to
   // know the type/size. Keep the buffer alive by adding it into the list of
   // buffers.
-  m_swapchainImageContexts.emplace_back(
-      std::make_shared<SwapchainImageContext>());
+  m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
+      m_vkDevice, m_memAllocator, capacity, size, format, sampleCount,
+      m_pipelineLayout, m_shaderProgram, m_drawBuffer));
   auto swapchainImageContext = m_swapchainImageContexts.back();
 
-  //
-  std::vector<XrSwapchainImageBaseHeader *> bases =
-      swapchainImageContext->Create(m_vkDevice, m_memAllocator, capacity, size,
-                                    format, sampleCount, m_pipelineLayout,
-                                    m_shaderProgram, m_drawBuffer);
-
   // Map every swapchainImage base pointer to this context
-  for (auto &base : bases) {
+  for (auto &base : swapchainImageContext->m_bases) {
     m_swapchainImageContextMap[base] = swapchainImageContext;
   }
 
-  return bases;
+  return swapchainImageContext->m_bases;
 }
 
 void VulkanGraphicsPlugin::RenderView(
@@ -225,7 +220,7 @@ void VulkanGraphicsPlugin::RenderView(
   m_cmdBuffer->Begin();
 
   // Ensure depth is in the right layout
-  swapchainContext->depthBuffer->TransitionLayout(
+  swapchainContext->m_depthBuffer->TransitionLayout(
       m_cmdBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
   // Bind and clear eye render target

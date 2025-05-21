@@ -5,35 +5,38 @@
 #include "RenderTarget.h"
 #include <vulkan/vulkan_core.h>
 
-std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
+std::shared_ptr<SwapchainImageContext> SwapchainImageContext::Create(
     VkDevice device, const std::shared_ptr<class MemoryAllocator> &memAllocator,
     uint32_t capacity, VkExtent2D size, VkFormat format,
     VkSampleCountFlagBits sampleCount,
     const std::shared_ptr<class PipelineLayout> &layout,
     const std::shared_ptr<class ShaderProgram> &sp,
     const std::shared_ptr<VertexBuffer> &vb) {
-  m_vkDevice = device;
 
-  m_size = size;
+  auto ptr = std::shared_ptr<SwapchainImageContext>(new SwapchainImageContext);
+  ptr->m_vkDevice = device;
+
+  ptr->m_size = size;
   VkFormat colorFormat = format;
   VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
   // XXX handle swapchainCreateInfo.sampleCount
 
-  depthBuffer = DepthBuffer::Create(m_vkDevice, memAllocator, size, depthFormat,
-                                    sampleCount);
-  m_rp = RenderPass::Create(m_vkDevice, colorFormat, depthFormat);
-  m_pipe = Pipeline::Create(m_vkDevice, m_size, layout, m_rp, sp, vb);
+  ptr->m_depthBuffer = DepthBuffer::Create(ptr->m_vkDevice, memAllocator, size,
+                                           depthFormat, sampleCount);
+  ptr->m_rp = RenderPass::Create(ptr->m_vkDevice, colorFormat, depthFormat);
+  ptr->m_pipe =
+      Pipeline::Create(ptr->m_vkDevice, ptr->m_size, layout, ptr->m_rp, sp, vb);
 
-  m_swapchainImages.resize(capacity);
-  m_renderTarget.resize(capacity);
-  std::vector<XrSwapchainImageBaseHeader *> bases(capacity);
+  ptr->m_bases.resize(capacity);
+  ptr->m_swapchainImages.resize(capacity);
+  ptr->m_renderTarget.resize(capacity);
   for (uint32_t i = 0; i < capacity; ++i) {
-    m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
-    bases[i] =
-        reinterpret_cast<XrSwapchainImageBaseHeader *>(&m_swapchainImages[i]);
+    ptr->m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
+    ptr->m_bases[i] = reinterpret_cast<XrSwapchainImageBaseHeader *>(
+        &ptr->m_swapchainImages[i]);
   }
 
-  return bases;
+  return ptr;
 }
 
 void SwapchainImageContext::BindRenderTarget(
@@ -41,7 +44,7 @@ void SwapchainImageContext::BindRenderTarget(
   if (!m_renderTarget[index]) {
     m_renderTarget[index] =
         RenderTarget::Create(m_vkDevice, m_swapchainImages[index].image,
-                             depthBuffer->depthImage, m_size, m_rp);
+                             m_depthBuffer->depthImage, m_size, m_rp);
   }
   renderPassBeginInfo->renderPass = m_rp->pass;
   renderPassBeginInfo->framebuffer = m_renderTarget[index]->fb;

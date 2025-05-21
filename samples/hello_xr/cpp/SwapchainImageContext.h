@@ -24,22 +24,12 @@ class SwapchainImageContext {
   VkExtent2D m_size{};
   std::shared_ptr<class RenderPass> m_rp;
 
-  // XrStructureType swapchainImageType;
-  //
-  // SwapchainImageContext(XrStructureType _swapchainImageType)
-  //     : swapchainImageType(_swapchainImageType) {}
-
 public:
   std::shared_ptr<class Pipeline> m_pipe;
-  std::shared_ptr<class DepthBuffer> depthBuffer;
+  std::shared_ptr<class DepthBuffer> m_depthBuffer;
+  std::vector<XrSwapchainImageBaseHeader *> m_bases;
 
-  // static std::shared_ptr<SwapchainImageContext>
-  // create(XrStructureType _swapchainImageType) {
-  //   return std::shared_ptr<SwapchainImageContext>(
-  //       new SwapchainImageContext(_swapchainImageType));
-  // }
-
-  std::vector<XrSwapchainImageBaseHeader *>
+  static std::shared_ptr<SwapchainImageContext>
   Create(VkDevice device,
          const std::shared_ptr<class MemoryAllocator> &memAllocator,
          uint32_t capacity, VkExtent2D size, VkFormat format,
