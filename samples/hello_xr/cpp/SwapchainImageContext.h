@@ -14,30 +14,6 @@
 
 #include "VertexBuffer.h"
 
-// VkImage + framebuffer wrapper
-class RenderTarget {
-  VkImage colorImage{VK_NULL_HANDLE};
-  VkImage depthImage{VK_NULL_HANDLE};
-  VkImageView colorView{VK_NULL_HANDLE};
-  VkImageView depthView{VK_NULL_HANDLE};
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-
-  RenderTarget() = default;
-
-public:
-  VkFramebuffer fb{VK_NULL_HANDLE};
-  ~RenderTarget();
-
-  RenderTarget(RenderTarget &&other) noexcept;
-  RenderTarget &operator=(RenderTarget &&other) noexcept;
-  static std::shared_ptr<RenderTarget>
-  Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
-         VkExtent2D size, class RenderPass &renderPass);
-
-  RenderTarget(const RenderTarget &) = delete;
-  RenderTarget &operator=(const RenderTarget &) = delete;
-};
-
 class SwapchainImageContext {
   VkDevice m_vkDevice{VK_NULL_HANDLE};
 
@@ -45,15 +21,15 @@ class SwapchainImageContext {
   // xrEnumerateSwapchainImages
   std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
   std::vector<std::shared_ptr<class RenderTarget>> renderTarget;
-  VkExtent2D size{};
-  std::shared_ptr<class RenderPass> rp;
+  VkExtent2D m_size{};
+  std::shared_ptr<class RenderPass> m_rp;
   XrStructureType swapchainImageType;
 
   SwapchainImageContext(XrStructureType _swapchainImageType)
       : swapchainImageType(_swapchainImageType) {}
 
 public:
-  std::shared_ptr<class Pipeline> pipe;
+  std::shared_ptr<class Pipeline> m_pipe;
   std::shared_ptr<class DepthBuffer> depthBuffer;
 
   static std::shared_ptr<SwapchainImageContext>

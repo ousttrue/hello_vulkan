@@ -84,8 +84,8 @@ std::shared_ptr<PipelineLayout> PipelineLayout::Create(VkDevice device) {
       .pushConstantRangeCount = 1,
       .pPushConstantRanges = &pcr,
   };
-  if (vkCreatePipelineLayout(ptr->m_vkDevice, &pipelineLayoutCreateInfo, nullptr,
-                             &ptr->layout) != VK_SUCCESS) {
+  if (vkCreatePipelineLayout(ptr->m_vkDevice, &pipelineLayoutCreateInfo,
+                             nullptr, &ptr->layout) != VK_SUCCESS) {
     throw std::runtime_error("vkCreatePipelineLayout");
   }
   return ptr;
@@ -99,8 +99,10 @@ void Pipeline::Dynamic(VkDynamicState state) {
 }
 
 std::shared_ptr<Pipeline>
-Pipeline::Create(VkDevice device, VkExtent2D size, const std::shared_ptr<PipelineLayout> &layout,
-                 const RenderPass &rp, const std::shared_ptr<ShaderProgram> &sp,
+Pipeline::Create(VkDevice device, VkExtent2D size,
+                 const std::shared_ptr<PipelineLayout> &layout,
+                 const std::shared_ptr<RenderPass> &rp,
+                 const std::shared_ptr<ShaderProgram> &sp,
                  const std::shared_ptr<VertexBuffer> &vb) {
 
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline);
@@ -214,7 +216,7 @@ Pipeline::Create(VkDevice device, VkExtent2D size, const std::shared_ptr<Pipelin
     pipeInfo.pDynamicState = &dynamicState;
   }
   pipeInfo.layout = layout->layout;
-  pipeInfo.renderPass = rp.pass;
+  pipeInfo.renderPass = rp->pass;
   pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,
                                 nullptr, &ptr->pipe) != VK_SUCCESS) {

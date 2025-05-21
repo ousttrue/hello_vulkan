@@ -245,7 +245,7 @@ void VulkanGraphicsPlugin::RenderView(
                        VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(m_cmdBuffer->buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    swapchainContext->pipe->pipe);
+                    swapchainContext->m_pipe->pipe);
 
   // Bind index and vertex buffers
   vkCmdBindIndexBuffer(m_cmdBuffer->buf, m_drawBuffer->idxBuf, 0,

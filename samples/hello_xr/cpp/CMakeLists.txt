@@ -7,6 +7,7 @@ set(LOCAL_SOURCE
     VertexBuffer.cpp
     MemoryAllocator.cpp
     RenderPass.cpp
+    RenderTarget.cpp
     Pipeline.cpp
     DepthBuffer.cpp
     CmdBuffer.cpp
