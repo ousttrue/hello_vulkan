@@ -194,10 +194,14 @@ VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
       SwapchainImageContext::create(XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR));
   auto swapchainImageContext = m_swapchainImageContexts.back();
 
+  //
   std::vector<XrSwapchainImageBaseHeader *> bases =
-      swapchainImageContext->Create(m_vkDevice, m_memAllocator, capacity,
-                                    swapchainCreateInfo, m_pipelineLayout,
-                                    m_shaderProgram, m_drawBuffer);
+      swapchainImageContext->Create(
+          m_vkDevice, m_memAllocator, capacity,
+          {swapchainCreateInfo.width, swapchainCreateInfo.height},
+          static_cast<VkFormat>(swapchainCreateInfo.format),
+          static_cast<VkSampleCountFlagBits>(swapchainCreateInfo.sampleCount),
+          m_pipelineLayout, m_shaderProgram, m_drawBuffer);
 
   // Map every swapchainImage base pointer to this context
   for (auto &base : bases) {

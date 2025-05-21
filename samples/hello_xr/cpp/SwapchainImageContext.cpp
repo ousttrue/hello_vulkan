@@ -7,23 +7,20 @@
 
 std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
     VkDevice device, const std::shared_ptr<class MemoryAllocator> &memAllocator,
-    uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
+    uint32_t capacity, VkExtent2D size, VkFormat format,
+    VkSampleCountFlagBits sampleCount,
     const std::shared_ptr<class PipelineLayout> &layout,
     const std::shared_ptr<class ShaderProgram> &sp,
     const std::shared_ptr<VertexBuffer> &vb) {
   m_vkDevice = device;
 
-  m_size = {swapchainCreateInfo.width, swapchainCreateInfo.height};
-  VkFormat colorFormat = (VkFormat)swapchainCreateInfo.format;
+  m_size = size;
+  VkFormat colorFormat = format;
   VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
   // XXX handle swapchainCreateInfo.sampleCount
 
-  depthBuffer = DepthBuffer::Create(
-      m_vkDevice, memAllocator,
-      {.width = swapchainCreateInfo.width,
-       .height = swapchainCreateInfo.height},
-      depthFormat,
-      static_cast<VkSampleCountFlagBits>(swapchainCreateInfo.sampleCount));
+  depthBuffer = DepthBuffer::Create(m_vkDevice, memAllocator, size, depthFormat,
+                                    sampleCount);
   m_rp = RenderPass::Create(m_vkDevice, colorFormat, depthFormat);
   m_pipe = Pipeline::Create(m_vkDevice, m_size, layout, m_rp, sp, vb);
 

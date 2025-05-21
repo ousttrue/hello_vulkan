@@ -41,7 +41,8 @@ public:
   std::vector<XrSwapchainImageBaseHeader *>
   Create(VkDevice device,
          const std::shared_ptr<class MemoryAllocator> &memAllocator,
-         uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo,
+         uint32_t capacity, VkExtent2D size, VkFormat format,
+         VkSampleCountFlagBits sampleCount,
          const std::shared_ptr<class PipelineLayout> &layout,
          const std::shared_ptr<class ShaderProgram> &sp,
          const std::shared_ptr<VertexBuffer> &vb);
