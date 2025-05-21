@@ -16,8 +16,7 @@ set(LOCAL_SOURCE
     vulkan_debug_object_namer.cpp
     VulkanGraphicsPlugin.cpp
     options.cpp
-    vulkan_layers.cpp
-)
+    vulkan_layers.cpp)
 
 # Find glslc shader compiler. On Android, the NDK includes the binary, so no
 # external dependency.
@@ -86,26 +85,38 @@ endfunction()
 set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 
 if(ANDROID)
+  # https://developer.android.com/ndk/guides/graphics/shader-compilers
   add_library(
     hello_xr MODULE android_main.cpp platformplugin_android.cpp ${LOCAL_SOURCE}
                     ${VULKAN_SHADERS} $<TARGET_OBJECTS:android_native_app_glue>)
-  target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID
-                                              -DXR_USE_GRAPHICS_API_VULKAN)
+  target_compile_definitions(
+    hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_VULKAN
+                     # -DUSE_ONLINE_VULKAN_SHADERC
+  )
   target_link_libraries(
     hello_xr PRIVATE ${ANDROID_LIBRARY} ${ANDROID_LOG_LIBRARY}
                      android_native_app_glue vulkan)
-
-  message(STATUS "hello_xr will default to Vulkan graphics plugin")
-  target_compile_definitions(hello_xr PRIVATE DEFAULT_GRAPHICS_PLUGIN_VULKAN)
 
 else()
   add_executable(hello_xr main.cpp platformplugin_win32.cpp ${LOCAL_SOURCE}
                           ${VULKAN_SHADERS})
   target_compile_definitions(
-    hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
-                     -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+    hello_xr
+    PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
+            -DWIN32_LEAN_AND_MEAN -DNOMINMAX -DUSE_ONLINE_VULKAN_SHADERC)
 
-  target_link_libraries(hello_xr PRIVATE vulkan_sdk)
+  target_link_directories(hello_xr PRIVATE $ENV{vulkan_sdk}/Lib)
+  target_link_libraries(
+    hello_xr
+    PRIVATE vulkan_sdk
+            #
+            shadercd.lib
+            shaderc_utild.lib
+            SPIRV-Toolsd.lib
+            SPIRV-Tools-optd.lib
+            glslangd.lib
+            #
+  )
 endif()
 target_include_directories(hello_xr PRIVATE .)
 

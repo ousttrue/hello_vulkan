@@ -55,7 +55,6 @@ else()
     ${TARGET_NAME}
     PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
                IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/vulkan-1.lib)
-
   subdirs(vulkan_tutorial)
 endif()
 

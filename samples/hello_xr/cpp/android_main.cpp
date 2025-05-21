@@ -1,9 +1,15 @@
+#include <vulkan/vulkan.h>
+
+#include <android_native_app_glue.h>
+
+#include <openxr/openxr_platform.h>
+
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
 #include "platformplugin_android.h"
-#include <android_native_app_glue.h>
+#include "vulkan_layers.h"
 
 #include <thread>
 
@@ -131,13 +137,14 @@ void android_main(struct android_app *app) {
     program->InitializeSystem();
 
     options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-    if(!options.UpdateOptionsFromSystemProperties()){
+    if (!options.UpdateOptionsFromSystemProperties()) {
       ShowHelp();
     }
     platformPlugin->UpdateOptions(options);
     graphicsPlugin->UpdateOptions(options);
 
-    program->InitializeDevice();
+    program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
+                              getVulkanDeviceExtensions());
     program->InitializeSession();
     program->CreateSwapchains();
 

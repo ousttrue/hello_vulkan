@@ -12,6 +12,45 @@
 #include <algorithm>
 #include <stdexcept>
 
+constexpr char VertexShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (std140, push_constant) uniform buf
+{
+    mat4 mvp;
+} ubuf;
+
+layout (location = 0) in vec3 Position;
+layout (location = 1) in vec4 Color;
+
+layout (location = 0) out vec4 oColor;
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+void main()
+{
+    oColor.rgba  = Color.rgba;
+    gl_Position = ubuf.mvp * vec4(Position, 1);
+}
+)_";
+
+constexpr char FragmentShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (location = 0) in vec4 oColor;
+
+layout (location = 0) out vec4 FragColor;
+
+void main()
+{
+    FragColor = oColor;
+}
+)_";
+
 VulkanGraphicsPlugin::VulkanGraphicsPlugin(
     const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
     : m_clearColor(options.GetBackgroundClearColor()) {}

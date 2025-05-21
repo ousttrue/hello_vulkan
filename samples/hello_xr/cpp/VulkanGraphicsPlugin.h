@@ -2,8 +2,12 @@
 #include "VertexBuffer.h"
 #include <array>
 #include <memory>
+#include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
+#ifdef USE_ONLINE_VULKAN_SHADERC
+#include <shaderc/shaderc.hpp>
+#endif
 
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.
