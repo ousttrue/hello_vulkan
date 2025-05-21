@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <filesystem>
 #include <vulkan/vulkan.h>
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android_native_app_glue.h>
@@ -17,7 +18,51 @@
 #include <map>
 #include <set>
 
+enum Side {
+  LEFT = 0,
+  RIGHT = 1,
+  COUNT = 2,
+};
+
+struct InputState {
+  XrActionSet actionSet{XR_NULL_HANDLE};
+  XrAction grabAction{XR_NULL_HANDLE};
+  XrAction poseAction{XR_NULL_HANDLE};
+  XrAction vibrateAction{XR_NULL_HANDLE};
+  XrAction quitAction{XR_NULL_HANDLE};
+  std::array<XrPath, Side::COUNT> handSubactionPath;
+  std::array<XrSpace, Side::COUNT> handSpace;
+  std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
+  std::array<XrBool32, Side::COUNT> handActive;
+};
+
+struct ProjectionLayer {
+  XrCompositionLayerProjection m_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+  std::vector<XrCompositionLayerProjectionView> m_projectionLayerViews;
+  struct Swapchain {
+    XrSwapchain handle;
+    int32_t width;
+    int32_t height;
+  };
+  std::vector<Swapchain> m_swapchains;
+  std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
+      m_swapchainImages;
+  int64_t m_colorSwapchainFormat{-1};
+
+  ProjectionLayer() = default;
+  ~ProjectionLayer();
+
+  XrCompositionLayerProjection *RenderLayer(
+      XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
+      std::vector<XrView> &views, XrViewConfigurationType viewConfigType,
+      const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
+      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
+      XrEnvironmentBlendMode environmentBlendMode);
+};
+
 class OpenXrProgram {
+
+  ProjectionLayer m_projectionLayer;
 
   XrGraphicsBindingVulkan2KHR m_graphicsBinding{
       .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
@@ -35,24 +80,6 @@ class OpenXrProgram {
   void LogEnvironmentBlendMode(XrViewConfigurationType type);
   void LogReferenceSpaces();
 
-  enum Side {
-    LEFT = 0,
-    RIGHT = 1,
-    COUNT = 2,
-  };
-
-  struct InputState {
-    XrActionSet actionSet{XR_NULL_HANDLE};
-    XrAction grabAction{XR_NULL_HANDLE};
-    XrAction poseAction{XR_NULL_HANDLE};
-    XrAction vibrateAction{XR_NULL_HANDLE};
-    XrAction quitAction{XR_NULL_HANDLE};
-    std::array<XrPath, Side::COUNT> handSubactionPath;
-    std::array<XrSpace, Side::COUNT> handSpace;
-    std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
-    std::array<XrBool32, Side::COUNT> handActive;
-  };
-
   const struct Options &m_options;
   std::shared_ptr<IPlatformPlugin> m_platformPlugin;
   std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
@@ -63,16 +90,7 @@ class OpenXrProgram {
 
   std::vector<XrViewConfigurationView> m_configViews;
 
-  struct Swapchain {
-    XrSwapchain handle;
-    int32_t width;
-    int32_t height;
-  };
-  std::vector<Swapchain> m_swapchains;
-  std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
-      m_swapchainImages;
   std::vector<XrView> m_views;
-  int64_t m_colorSwapchainFormat{-1};
 
   std::vector<XrSpace> m_visualizedSpaces;
 
@@ -146,9 +164,4 @@ private:
 
   void LogActionSourceName(XrAction action,
                            const std::string &actionName) const;
-
-  bool RenderLayer(
-      XrTime predictedDisplayTime,
-      std::vector<XrCompositionLayerProjectionView> &projectionLayerViews,
-      XrCompositionLayerProjection &layer);
 };
