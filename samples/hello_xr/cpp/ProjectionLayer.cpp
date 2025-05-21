@@ -1,4 +1,5 @@
 #include "ProjectionLayer.h"
+#include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
@@ -102,12 +103,13 @@ std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
                                              nullptr));
       // XXX This should really just return XrSwapchainImageBaseHeader*
       std::vector<XrSwapchainImageBaseHeader *> swapchainImages =
-          vulkan->AllocateSwapchainImageStructs(
+          ptr->AllocateSwapchainImageStructs(
               imageCount,
               {swapchainCreateInfo.width, swapchainCreateInfo.height},
               static_cast<VkFormat>(swapchainCreateInfo.format),
               static_cast<VkSampleCountFlagBits>(
-                  swapchainCreateInfo.sampleCount));
+                  swapchainCreateInfo.sampleCount),
+              vulkan);
       CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount,
                                              &imageCount, swapchainImages[0]));
 
@@ -117,6 +119,30 @@ std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
   }
 
   return ptr;
+}
+
+std::vector<XrSwapchainImageBaseHeader *>
+ProjectionLayer::AllocateSwapchainImageStructs(
+    uint32_t capacity, VkExtent2D size, VkFormat format,
+    VkSampleCountFlagBits sampleCount,
+    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan) {
+  // Allocate and initialize the buffer of image structs (must be sequential
+  // in memory for xrEnumerateSwapchainImages). Return back an array of
+  // pointers to each swapchain image struct so the consumer doesn't need to
+  // know the type/size. Keep the buffer alive by adding it into the list of
+  // buffers.
+  m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
+      vulkan->m_vkDevice, vulkan->m_memAllocator, capacity, size, format,
+      sampleCount, vulkan->m_pipelineLayout, vulkan->m_shaderProgram,
+      vulkan->m_drawBuffer));
+  auto swapchainImageContext = m_swapchainImageContexts.back();
+
+  // Map every swapchainImage base pointer to this context
+  for (auto &base : swapchainImageContext->m_bases) {
+    m_swapchainImageContextMap[base] = swapchainImageContext;
+  }
+
+  return swapchainImageContext->m_bases;
 }
 
 static Cube MakeCube(XrPosef pose, XrVector3f scale) {
@@ -254,7 +280,11 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
 
     const XrSwapchainImageBaseHeader *const swapchainImage =
         m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-    vulkan->RenderView(m_projectionLayerViews[i], swapchainImage,
+
+    auto swapchainContext = m_swapchainImageContextMap[swapchainImage];
+    uint32_t imageIndex = swapchainContext->ImageIndex(swapchainImage);
+
+    vulkan->RenderView(m_projectionLayerViews[i], swapchainContext, imageIndex,
                        m_colorSwapchainFormat, cubes);
 
     XrSwapchainImageReleaseInfo releaseInfo{

@@ -182,37 +182,13 @@ int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
   return *swapchainFormatIt;
 }
 
-std::vector<XrSwapchainImageBaseHeader *>
-VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
-    uint32_t capacity, VkExtent2D size, VkFormat format,
-    VkSampleCountFlagBits sampleCount) {
-  // Allocate and initialize the buffer of image structs (must be sequential
-  // in memory for xrEnumerateSwapchainImages). Return back an array of
-  // pointers to each swapchain image struct so the consumer doesn't need to
-  // know the type/size. Keep the buffer alive by adding it into the list of
-  // buffers.
-  m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
-      m_vkDevice, m_memAllocator, capacity, size, format, sampleCount,
-      m_pipelineLayout, m_shaderProgram, m_drawBuffer));
-  auto swapchainImageContext = m_swapchainImageContexts.back();
-
-  // Map every swapchainImage base pointer to this context
-  for (auto &base : swapchainImageContext->m_bases) {
-    m_swapchainImageContextMap[base] = swapchainImageContext;
-  }
-
-  return swapchainImageContext->m_bases;
-}
-
 void VulkanGraphicsPlugin::RenderView(
     const XrCompositionLayerProjectionView &layerView,
-    const XrSwapchainImageBaseHeader *swapchainImage,
-    int64_t /*swapchainFormat*/, const std::vector<Cube> &cubes) {
+    const std::shared_ptr<SwapchainImageContext> &swapchainContext,
+    uint32_t imageIndex, int64_t /*swapchainFormat*/,
+    const std::vector<Cube> &cubes) {
   // CHECK(layerView.subImage.imageArrayIndex ==
   //       0); // Texture arrays not supported.
-
-  auto swapchainContext = m_swapchainImageContextMap[swapchainImage];
-  uint32_t imageIndex = swapchainContext->ImageIndex(swapchainImage);
 
   // XXX Should double-buffer the command buffers, for now just flush
   m_cmdBuffer->Wait();

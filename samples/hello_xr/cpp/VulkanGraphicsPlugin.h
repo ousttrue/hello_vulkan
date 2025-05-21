@@ -25,18 +25,12 @@ struct VulkanGraphicsPlugin {
   int64_t
   SelectColorSwapchainFormat(const std::vector<int64_t> &runtimeFormats) const;
 
-  // Allocate space for the swapchain image structures. These are different for
-  // each graphics API. The returned pointers are valid for the lifetime of the
-  // graphics plugin.
-  std::vector<XrSwapchainImageBaseHeader *>
-  AllocateSwapchainImageStructs(uint32_t capacity, VkExtent2D size,
-                                VkFormat format,
-                                VkSampleCountFlagBits sampleCount);
-
   // Render to a swapchain image for a projection view.
-  void RenderView(const XrCompositionLayerProjectionView &layerView,
-                  const XrSwapchainImageBaseHeader *swapchainImage,
-                  int64_t /*swapchainFormat*/, const std::vector<Cube> &cubes);
+  void RenderView(
+      const XrCompositionLayerProjectionView &layerView,
+      const std::shared_ptr<class SwapchainImageContext> &swapchainContext,
+      uint32_t imageIndex, int64_t /*swapchainFormat*/,
+      const std::vector<Cube> &cubes);
 
   // Perform required steps after updating Options
   void UpdateOptions(const struct Options &options);
@@ -53,13 +47,6 @@ struct VulkanGraphicsPlugin {
 #endif
 
   void InitializeResources();
-
-  std::list<std::shared_ptr<class SwapchainImageContext>>
-      m_swapchainImageContexts;
-  std::map<const XrSwapchainImageBaseHeader *,
-           std::shared_ptr<SwapchainImageContext>>
-      m_swapchainImageContextMap;
-
   VkInstance m_vkInstance{VK_NULL_HANDLE};
   VkPhysicalDevice m_vkPhysicalDevice{VK_NULL_HANDLE};
   VkDevice m_vkDevice{VK_NULL_HANDLE};

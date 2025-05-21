@@ -1,15 +1,23 @@
 #pragma once
 #include "InputState.h"
+#include <list>
 #include <map>
 #include <memory>
 #include <openxr/openxr.h>
 #include <vector>
+#include <vulkan/vulkan.h>
 
 class ProjectionLayer {
   int64_t m_colorSwapchainFormat{-1};
 
   std::vector<XrViewConfigurationView> m_configViews;
   std::vector<XrView> m_views;
+
+  std::list<std::shared_ptr<class SwapchainImageContext>>
+      m_swapchainImageContexts;
+  std::map<const XrSwapchainImageBaseHeader *,
+           std::shared_ptr<SwapchainImageContext>>
+      m_swapchainImageContextMap;
 
   struct Swapchain {
     XrSwapchain handle;
@@ -31,6 +39,14 @@ public:
   Create(XrInstance instance, XrSystemId systemId, XrSession session,
          XrViewConfigurationType viewConfigurationType,
          const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
+
+  // Allocate space for the swapchain image structures. These are different for
+  // each graphics API. The returned pointers are valid for the lifetime of the
+  // graphics plugin.
+  std::vector<XrSwapchainImageBaseHeader *> AllocateSwapchainImageStructs(
+      uint32_t capacity, VkExtent2D size, VkFormat format,
+      VkSampleCountFlagBits sampleCount,
+      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
 
   XrCompositionLayerProjection *
   RenderLayer(XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
