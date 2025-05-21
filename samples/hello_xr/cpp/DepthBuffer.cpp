@@ -2,7 +2,6 @@
 #include "CmdBuffer.h"
 #include "MemoryAllocator.h"
 #include "vulkan_debug_object_namer.hpp"
-#include <openxr/openxr.h>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
@@ -44,26 +43,29 @@ DepthBuffer::~DepthBuffer() {
 
 std::shared_ptr<DepthBuffer> DepthBuffer::Create(
     VkDevice device, const std::shared_ptr<MemoryAllocator> &memAllocator,
-    VkFormat depthFormat, const XrSwapchainCreateInfo &swapchainCreateInfo) {
+    VkExtent2D size, VkFormat depthFormat, VkSampleCountFlagBits sampleCount) {
   auto ptr = std::shared_ptr<DepthBuffer>(new DepthBuffer());
   ptr->m_vkDevice = device;
 
-  VkExtent2D size = {swapchainCreateInfo.width, swapchainCreateInfo.height};
-
   // Create a D32 depthbuffer
-  VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-  imageInfo.imageType = VK_IMAGE_TYPE_2D;
-  imageInfo.extent.width = size.width;
-  imageInfo.extent.height = size.height;
-  imageInfo.extent.depth = 1;
-  imageInfo.mipLevels = 1;
-  imageInfo.arrayLayers = 1;
-  imageInfo.format = depthFormat;
-  imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-  imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-  imageInfo.samples = (VkSampleCountFlagBits)swapchainCreateInfo.sampleCount;
-  imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  VkImageCreateInfo imageInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = depthFormat,
+      .extent =
+          {
+              .width = size.width,
+              .height = size.height,
+              .depth = 1,
+          },
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = sampleCount,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
   if (vkCreateImage(device, &imageInfo, nullptr, &ptr->depthImage) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateImage");
@@ -74,7 +76,7 @@ std::shared_ptr<DepthBuffer> DepthBuffer::Create(
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
-  VkMemoryRequirements memRequirements{};
+  VkMemoryRequirements memRequirements;
   vkGetImageMemoryRequirements(device, ptr->depthImage, &memRequirements);
   memAllocator->Allocate(memRequirements, &ptr->depthMemory,
                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);

@@ -18,10 +18,11 @@ public:
   static std::shared_ptr<DepthBuffer>
   Create(VkDevice device,
          const std::shared_ptr<class MemoryAllocator> &memAllocator,
-         VkFormat depthFormat,
-         const struct XrSwapchainCreateInfo &swapchainCreateInfo);
+         VkExtent2D size, VkFormat depthFormat,
+         VkSampleCountFlagBits sampleCount);
 
-  void TransitionLayout(const std::shared_ptr<class CmdBuffer> &cmdBuffer, VkImageLayout newLayout);
+  void TransitionLayout(const std::shared_ptr<class CmdBuffer> &cmdBuffer,
+                        VkImageLayout newLayout);
   DepthBuffer(const DepthBuffer &) = delete;
   DepthBuffer &operator=(const DepthBuffer &) = delete;
 };

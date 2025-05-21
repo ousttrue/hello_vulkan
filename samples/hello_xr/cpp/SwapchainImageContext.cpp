@@ -18,8 +18,12 @@ std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
   VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
   // XXX handle swapchainCreateInfo.sampleCount
 
-  depthBuffer = DepthBuffer::Create(m_vkDevice, memAllocator, depthFormat,
-                                    swapchainCreateInfo);
+  depthBuffer = DepthBuffer::Create(
+      m_vkDevice, memAllocator,
+      {.width = swapchainCreateInfo.width,
+       .height = swapchainCreateInfo.height},
+      depthFormat,
+      static_cast<VkSampleCountFlagBits>(swapchainCreateInfo.sampleCount));
   m_rp = RenderPass::Create(m_vkDevice, colorFormat, depthFormat);
   m_pipe = Pipeline::Create(m_vkDevice, m_size, layout, m_rp, sp, vb);
 
