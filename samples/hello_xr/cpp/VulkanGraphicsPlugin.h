@@ -28,8 +28,10 @@ struct VulkanGraphicsPlugin {
   // Allocate space for the swapchain image structures. These are different for
   // each graphics API. The returned pointers are valid for the lifetime of the
   // graphics plugin.
-  std::vector<XrSwapchainImageBaseHeader *> AllocateSwapchainImageStructs(
-      uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo);
+  std::vector<XrSwapchainImageBaseHeader *>
+  AllocateSwapchainImageStructs(uint32_t capacity, VkExtent2D size,
+                                VkFormat format,
+                                VkSampleCountFlagBits sampleCount);
 
   // Render to a swapchain image for a projection view.
   void RenderView(const XrCompositionLayerProjectionView &layerView,

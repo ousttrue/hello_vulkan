@@ -184,7 +184,8 @@ int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
 
 std::vector<XrSwapchainImageBaseHeader *>
 VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
-    uint32_t capacity, const XrSwapchainCreateInfo &swapchainCreateInfo) {
+    uint32_t capacity, VkExtent2D size, VkFormat format,
+    VkSampleCountFlagBits sampleCount) {
   // Allocate and initialize the buffer of image structs (must be sequential
   // in memory for xrEnumerateSwapchainImages). Return back an array of
   // pointers to each swapchain image struct so the consumer doesn't need to
@@ -196,12 +197,9 @@ VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
 
   //
   std::vector<XrSwapchainImageBaseHeader *> bases =
-      swapchainImageContext->Create(
-          m_vkDevice, m_memAllocator, capacity,
-          {swapchainCreateInfo.width, swapchainCreateInfo.height},
-          static_cast<VkFormat>(swapchainCreateInfo.format),
-          static_cast<VkSampleCountFlagBits>(swapchainCreateInfo.sampleCount),
-          m_pipelineLayout, m_shaderProgram, m_drawBuffer);
+      swapchainImageContext->Create(m_vkDevice, m_memAllocator, capacity, size,
+                                    format, sampleCount, m_pipelineLayout,
+                                    m_shaderProgram, m_drawBuffer);
 
   // Map every swapchainImage base pointer to this context
   for (auto &base : bases) {

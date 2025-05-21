@@ -102,8 +102,12 @@ std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
                                              nullptr));
       // XXX This should really just return XrSwapchainImageBaseHeader*
       std::vector<XrSwapchainImageBaseHeader *> swapchainImages =
-          vulkan->AllocateSwapchainImageStructs(imageCount,
-                                                swapchainCreateInfo);
+          vulkan->AllocateSwapchainImageStructs(
+              imageCount,
+              {swapchainCreateInfo.width, swapchainCreateInfo.height},
+              static_cast<VkFormat>(swapchainCreateInfo.format),
+              static_cast<VkSampleCountFlagBits>(
+                  swapchainCreateInfo.sampleCount));
       CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount,
                                              &imageCount, swapchainImages[0]));
 
