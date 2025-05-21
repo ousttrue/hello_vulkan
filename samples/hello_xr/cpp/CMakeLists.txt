@@ -3,6 +3,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(LOCAL_SOURCE
     logger.cpp
     openxr_program.cpp
+    ProjectionLayer.cpp
     vk_utils.cpp
     VertexBuffer.cpp
     MemoryAllocator.cpp

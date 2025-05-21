@@ -3,95 +3,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <filesystem>
-#include <vulkan/vulkan.h>
-#ifdef XR_USE_PLATFORM_ANDROID
-#include <android_native_app_glue.h>
-#endif
-#ifdef XR_USE_PLATFORM_WIN32
-#include <Unknwn.h>
-#endif
-#include <openxr/openxr_platform.h>
-
-#include "platformplugin.h"
-#include <array>
-#include <map>
+#include "InputState.h"
+#include <memory>
 #include <set>
-
-enum Side {
-  LEFT = 0,
-  RIGHT = 1,
-  COUNT = 2,
-};
-
-struct InputState {
-  XrActionSet actionSet{XR_NULL_HANDLE};
-  XrAction grabAction{XR_NULL_HANDLE};
-  XrAction poseAction{XR_NULL_HANDLE};
-  XrAction vibrateAction{XR_NULL_HANDLE};
-  XrAction quitAction{XR_NULL_HANDLE};
-  std::array<XrPath, Side::COUNT> handSubactionPath;
-  std::array<XrSpace, Side::COUNT> handSpace;
-  std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
-  std::array<XrBool32, Side::COUNT> handActive;
-};
-
-struct ProjectionLayer {
-  int64_t m_colorSwapchainFormat{-1};
-
-  std::vector<XrViewConfigurationView> m_configViews;
-  std::vector<XrView> m_views;
-
-  struct Swapchain {
-    XrSwapchain handle;
-    XrExtent2Di extent;
-  };
-  std::vector<Swapchain> m_swapchains;
-  std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
-      m_swapchainImages;
-
-  XrCompositionLayerProjection m_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
-  std::vector<XrCompositionLayerProjectionView> m_projectionLayerViews;
-
-  ProjectionLayer() = default;
-  ~ProjectionLayer();
-
-  void
-  CreateSwapchains(XrInstance instance, XrSystemId systemId, XrSession session,
-                   XrViewConfigurationType viewConfigurationType,
-                   const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
-
-  XrCompositionLayerProjection *
-  RenderLayer(XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-              XrViewConfigurationType viewConfigType,
-              const std::vector<XrSpace> &visualizedSpaces,
-              const InputState &input,
-              const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
-              XrEnvironmentBlendMode environmentBlendMode);
-};
+#include <string>
+#include <vector>
+#include <vulkan/vulkan.h>
 
 class OpenXrProgram {
 
-  ProjectionLayer m_projectionLayer;
+  std::shared_ptr<class ProjectionLayer> m_projectionLayer;
 
-  XrGraphicsBindingVulkan2KHR m_graphicsBinding{
-      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-      .next = nullptr,
-      .instance = VK_NULL_HANDLE,
-      .physicalDevice = VK_NULL_HANDLE,
-      .device = VK_NULL_HANDLE,
-      .queueFamilyIndex = UINT_MAX,
-      .queueIndex = 0,
-  };
-
-  void LogInstanceInfo();
-  void CreateInstanceInternal();
-  void LogViewConfigurations();
-  void LogEnvironmentBlendMode(XrViewConfigurationType type);
-  void LogReferenceSpaces();
+  VkInstance m_vkInstance = VK_NULL_HANDLE;
+  VkPhysicalDevice m_vkPhysicalDevice = VK_NULL_HANDLE;
+  VkDevice m_vkDevice = VK_NULL_HANDLE;
+  uint32_t m_queueFamilyIndex = UINT_MAX;
 
   const struct Options &m_options;
-  std::shared_ptr<IPlatformPlugin> m_platformPlugin;
+
+  std::shared_ptr<struct IPlatformPlugin> m_platformPlugin;
   std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
   XrInstance m_instance{XR_NULL_HANDLE};
   XrSession m_session{XR_NULL_HANDLE};
@@ -108,6 +38,12 @@ class OpenXrProgram {
   InputState m_input;
 
   const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
+
+  void LogInstanceInfo();
+  void CreateInstanceInternal();
+  void LogViewConfigurations();
+  void LogEnvironmentBlendMode(XrViewConfigurationType type);
+  void LogReferenceSpaces();
 
 public:
   OpenXrProgram(const Options &options,

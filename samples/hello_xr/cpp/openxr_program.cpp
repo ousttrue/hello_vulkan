@@ -2,11 +2,21 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "openxr_program.h"
+#include <vulkan/vulkan.h>
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Unknwn.h>
+#endif
+#include <openxr/openxr_platform.h>
+
+#include "ProjectionLayer.h"
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
 #include "openxr/openxr.h"
+#include "openxr_program.h"
 #include "options.h"
 #include "platformplugin.h"
 #include "to_string.h"
@@ -15,7 +25,6 @@
 #include <array>
 #include <cmath>
 #include <common/xr_linear.h>
-#include <map>
 #include <set>
 
 #if !defined(XR_USE_PLATFORM_WIN32)
@@ -136,248 +145,6 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
                                     referenceSpaceTypeStr.c_str()));
   }
   return referenceSpaceCreateInfo;
-}
-
-///
-/// ProjectionLayer
-///
-ProjectionLayer::~ProjectionLayer() {
-  for (Swapchain swapchain : m_swapchains) {
-    xrDestroySwapchain(swapchain.handle);
-  }
-}
-
-void ProjectionLayer::CreateSwapchains(
-    XrInstance instance, XrSystemId systemId, XrSession session,
-    XrViewConfigurationType viewConfigurationType,
-    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan) {
-  CHECK(m_swapchains.empty());
-  CHECK(m_configViews.empty());
-
-  // Query and cache view configuration views.
-  uint32_t viewCount;
-  CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-      instance, systemId, viewConfigurationType, 0, &viewCount, nullptr));
-  m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
-  CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-      instance, systemId, viewConfigurationType, viewCount, &viewCount,
-      m_configViews.data()));
-
-  // Create and cache view buffer for xrLocateViews later.
-  m_views.resize(viewCount, {XR_TYPE_VIEW});
-
-  // Create the swapchain and get the images.
-  if (viewCount > 0) {
-    // Select a swapchain format.
-    uint32_t swapchainFormatCount;
-    CHECK_XRCMD(xrEnumerateSwapchainFormats(session, 0, &swapchainFormatCount,
-                                            nullptr));
-    std::vector<int64_t> swapchainFormats(swapchainFormatCount);
-    CHECK_XRCMD(xrEnumerateSwapchainFormats(
-        session, (uint32_t)swapchainFormats.size(), &swapchainFormatCount,
-        swapchainFormats.data()));
-    CHECK(swapchainFormatCount == swapchainFormats.size());
-    m_colorSwapchainFormat =
-        vulkan->SelectColorSwapchainFormat(swapchainFormats);
-
-    // Print swapchain formats and the selected one.
-    {
-      std::string swapchainFormatsString;
-      for (int64_t format : swapchainFormats) {
-        const bool selected = format == m_colorSwapchainFormat;
-        swapchainFormatsString += " ";
-        if (selected) {
-          swapchainFormatsString += "[";
-        }
-        swapchainFormatsString += std::to_string(format);
-        if (selected) {
-          swapchainFormatsString += "]";
-        }
-      }
-      Log::Write(Log::Level::Verbose,
-                 Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
-    }
-
-    // Create a swapchain for each view.
-    for (uint32_t i = 0; i < viewCount; i++) {
-      const XrViewConfigurationView &vp = m_configViews[i];
-      Log::Write(Log::Level::Info,
-                 Fmt("Creating swapchain for view %d with dimensions "
-                     "Width=%d Height=%d SampleCount=%d",
-                     i, vp.recommendedImageRectWidth,
-                     vp.recommendedImageRectHeight,
-                     vp.recommendedSwapchainSampleCount));
-
-      // Create the swapchain.
-      XrSwapchainCreateInfo swapchainCreateInfo{
-          .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
-          .createFlags = 0,
-          .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
-                        XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
-          .format = m_colorSwapchainFormat,
-          .sampleCount = VK_SAMPLE_COUNT_1_BIT,
-          .width = vp.recommendedImageRectWidth,
-          .height = vp.recommendedImageRectHeight,
-          .faceCount = 1,
-          .arraySize = 1,
-          .mipCount = 1,
-      };
-
-      ProjectionLayer::Swapchain swapchain{
-          .extent =
-              {
-                  .width = static_cast<int32_t>(swapchainCreateInfo.width),
-                  .height = static_cast<int32_t>(swapchainCreateInfo.height),
-              },
-      };
-      CHECK_XRCMD(
-          xrCreateSwapchain(session, &swapchainCreateInfo, &swapchain.handle));
-      m_swapchains.push_back(swapchain);
-
-      uint32_t imageCount;
-      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount,
-                                             nullptr));
-      // XXX This should really just return XrSwapchainImageBaseHeader*
-      std::vector<XrSwapchainImageBaseHeader *> swapchainImages =
-          vulkan->AllocateSwapchainImageStructs(imageCount,
-                                                swapchainCreateInfo);
-      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount,
-                                             &imageCount, swapchainImages[0]));
-
-      m_swapchainImages.insert(
-          std::make_pair(swapchain.handle, std::move(swapchainImages)));
-    }
-  }
-}
-
-XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
-    XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-    XrViewConfigurationType viewConfigType,
-    const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
-    XrEnvironmentBlendMode environmentBlendMode) {
-
-  // uint32_t viewCapacityInput = (uint32_t);
-
-  XrViewLocateInfo viewLocateInfo{
-      .type = XR_TYPE_VIEW_LOCATE_INFO,
-      .viewConfigurationType = viewConfigType,
-      .displayTime = predictedDisplayTime,
-      .space = appSpace,
-  };
-
-  XrViewState viewState{
-      .type = XR_TYPE_VIEW_STATE,
-  };
-
-  uint32_t viewCountOutput;
-  auto res = xrLocateViews(session, &viewLocateInfo, &viewState,
-                           static_cast<uint32_t>(m_views.size()),
-                           &viewCountOutput, m_views.data());
-  CHECK_XRRESULT(res, "xrLocateViews");
-  if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
-      (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-    return {}; // There is no valid tracking poses for the views.
-  }
-
-  CHECK(viewCountOutput == m_views.size());
-  CHECK(viewCountOutput == m_configViews.size());
-  CHECK(viewCountOutput == m_swapchains.size());
-
-  m_projectionLayerViews.resize(viewCountOutput);
-
-  // For each locatable space that we want to visualize, render a 25cm cube.
-  std::vector<Cube> cubes;
-
-  for (XrSpace visualizedSpace : visualizedSpaces) {
-    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    res = xrLocateSpace(visualizedSpace, appSpace, predictedDisplayTime,
-                        &spaceLocation);
-    CHECK_XRRESULT(res, "xrLocateSpace");
-    if (XR_UNQUALIFIED_SUCCESS(res)) {
-      if ((spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-          (spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        cubes.push_back(Cube{spaceLocation.pose, {0.25f, 0.25f, 0.25f}});
-      }
-    } else {
-      Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized "
-                                          "reference space in app space: %d",
-                                          res));
-    }
-  }
-
-  // Render a 10cm cube scaled by grabAction for each hand. Note renderHand
-  // will only be true when the application has focus.
-  for (auto hand : {Side::LEFT, Side::RIGHT}) {
-    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    res = xrLocateSpace(input.handSpace[hand], appSpace, predictedDisplayTime,
-                        &spaceLocation);
-    CHECK_XRRESULT(res, "xrLocateSpace");
-    if (XR_UNQUALIFIED_SUCCESS(res)) {
-      if ((spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-          (spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        float scale = 0.1f * input.handScale[hand];
-        cubes.push_back(Cube{spaceLocation.pose, {scale, scale, scale}});
-      }
-    } else {
-      // Tracking loss is expected when the hand is not active so only log a
-      // message if the hand is active.
-      if (input.handActive[hand] == XR_TRUE) {
-        const char *handName[] = {"left", "right"};
-        Log::Write(Log::Level::Verbose,
-                   Fmt("Unable to locate %s hand action space in app space: %d",
-                       handName[hand], res));
-      }
-    }
-  }
-
-  // Render view to the appropriate part of the swapchain image.
-  for (uint32_t i = 0; i < viewCountOutput; i++) {
-    // Each view has a separate swapchain which is acquired, rendered to, and
-    // released.
-    const Swapchain viewSwapchain = m_swapchains[i];
-
-    XrSwapchainImageAcquireInfo acquireInfo{
-        XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-
-    uint32_t swapchainImageIndex;
-    CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
-                                        &swapchainImageIndex));
-
-    XrSwapchainImageWaitInfo waitInfo{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-    waitInfo.timeout = XR_INFINITE_DURATION;
-    CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
-
-    m_projectionLayerViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
-    m_projectionLayerViews[i].pose = m_views[i].pose;
-    m_projectionLayerViews[i].fov = m_views[i].fov;
-    m_projectionLayerViews[i].subImage.swapchain = viewSwapchain.handle;
-    m_projectionLayerViews[i].subImage.imageRect.offset = {0, 0};
-    m_projectionLayerViews[i].subImage.imageRect.extent = viewSwapchain.extent;
-
-    const XrSwapchainImageBaseHeader *const swapchainImage =
-        m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-    vulkan->RenderView(m_projectionLayerViews[i], swapchainImage,
-                       m_colorSwapchainFormat, cubes);
-
-    XrSwapchainImageReleaseInfo releaseInfo{
-        XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-    CHECK_XRCMD(xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
-  }
-
-  m_layer.space = appSpace;
-  m_layer.layerFlags =
-      environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
-          ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-          : 0;
-  m_layer.viewCount = (uint32_t)m_projectionLayerViews.size();
-  m_layer.views = m_projectionLayerViews.data();
-  return &m_layer;
 }
 
 //
@@ -573,24 +340,22 @@ void OpenXrProgram::InitializeDevice(
   };
 
   VkResult err;
-  if (CreateVulkanInstanceKHR(m_instance, &createInfo,
-                              &m_graphicsBinding.instance,
-                              &err) != XR_SUCCESS) {
+  if (CreateVulkanInstanceKHR(m_instance, &createInfo, &m_vkInstance, &err) !=
+      XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
   if (err != VK_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
-  SetDebugUtilsObjectNameEXT_GetProc(m_graphicsBinding.instance);
+  SetDebugUtilsObjectNameEXT_GetProc(m_vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
       .systemId = m_systemId,
-      .vulkanInstance = m_graphicsBinding.instance,
+      .vulkanInstance = m_vkInstance,
   };
   if (GetVulkanGraphicsDevice2KHR(m_instance, &deviceGetInfo,
-                                  &m_graphicsBinding.physicalDevice) !=
-      XR_SUCCESS) {
+                                  &m_vkPhysicalDevice) != XR_SUCCESS) {
     throw std::runtime_error("GetVulkanGraphicsDevice2KHR");
   }
 
@@ -601,17 +366,16 @@ void OpenXrProgram::InitializeDevice(
       .pQueuePriorities = &queuePriorities,
   };
   uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(m_graphicsBinding.physicalDevice,
+  vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice,
                                            &queueFamilyCount, nullptr);
   std::vector<VkQueueFamilyProperties> queueFamilyProps(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(m_graphicsBinding.physicalDevice,
-                                           &queueFamilyCount,
-                                           &queueFamilyProps[0]);
+  vkGetPhysicalDeviceQueueFamilyProperties(
+      m_vkPhysicalDevice, &queueFamilyCount, &queueFamilyProps[0]);
 
   for (uint32_t i = 0; i < queueFamilyCount; ++i) {
     // Only need graphics (not presentation) for draw queue
     if ((queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u) {
-      m_graphicsBinding.queueFamilyIndex = queueInfo.queueFamilyIndex = i;
+      m_queueFamilyIndex = queueInfo.queueFamilyIndex = i;
       break;
     }
   }
@@ -634,12 +398,12 @@ void OpenXrProgram::InitializeDevice(
       .type = XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR,
       .systemId = m_systemId,
       .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
-      .vulkanPhysicalDevice = m_graphicsBinding.physicalDevice,
+      .vulkanPhysicalDevice = m_vkPhysicalDevice,
       .vulkanCreateInfo = &deviceInfo,
       .vulkanAllocator = nullptr,
   };
-  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo,
-                            &m_graphicsBinding.device, &err) != XR_SUCCESS) {
+  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo, &m_vkDevice, &err) !=
+      XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanDeviceKHR");
   }
   if (err != VK_SUCCESS) {
@@ -648,9 +412,8 @@ void OpenXrProgram::InitializeDevice(
 
   // The graphics API can initialize the graphics device now that the systemId
   // and instance handle are available.
-  m_graphicsPlugin->InitializeDevice(
-      m_graphicsBinding.instance, m_graphicsBinding.physicalDevice,
-      m_graphicsBinding.device, queueInfo, debugInfo);
+  m_graphicsPlugin->InitializeDevice(m_vkInstance, m_vkPhysicalDevice,
+                                     m_vkDevice, queueInfo, debugInfo);
 }
 
 void OpenXrProgram::InitializeSession() {
@@ -660,9 +423,20 @@ void OpenXrProgram::InitializeSession() {
   {
     Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
 
-    XrSessionCreateInfo createInfo{XR_TYPE_SESSION_CREATE_INFO};
-    createInfo.next = &m_graphicsBinding;
-    createInfo.systemId = m_systemId;
+    XrGraphicsBindingVulkan2KHR graphicsBinding{
+        .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+        .next = nullptr,
+        .instance = m_vkInstance,
+        .physicalDevice = m_vkPhysicalDevice,
+        .device = m_vkDevice,
+        .queueFamilyIndex = m_queueFamilyIndex,
+        .queueIndex = 0,
+    };
+    XrSessionCreateInfo createInfo{
+        .type = XR_TYPE_SESSION_CREATE_INFO,
+        .next = &graphicsBinding,
+        .systemId = m_systemId,
+    };
     CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &m_session));
   }
 
@@ -713,9 +487,9 @@ void OpenXrProgram::CreateSwapchains() {
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
 
-  m_projectionLayer.CreateSwapchains(m_instance, m_systemId, m_session,
-                                     m_options.Parsed.ViewConfigType,
-                                     m_graphicsPlugin);
+  m_projectionLayer = ProjectionLayer::Create(m_instance, m_systemId, m_session,
+                                              m_options.Parsed.ViewConfigType,
+                                              m_graphicsPlugin);
 }
 
 void OpenXrProgram::PollEvents(bool *exitRenderLoop, bool *requestRestart) {
@@ -824,7 +598,7 @@ void OpenXrProgram::RenderFrame() {
 
   std::vector<XrCompositionLayerBaseHeader *> layers;
   if (frameState.shouldRender == XR_TRUE) {
-    if (auto layer = m_projectionLayer.RenderLayer(
+    if (auto layer = m_projectionLayer->RenderLayer(
             m_session, frameState.predictedDisplayTime, m_appSpace,
             m_options.Parsed.ViewConfigType, m_visualizedSpaces, m_input,
             m_graphicsPlugin, m_options.Parsed.EnvironmentBlendMode)) {
