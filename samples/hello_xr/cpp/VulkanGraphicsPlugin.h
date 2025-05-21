@@ -1,4 +1,5 @@
 #pragma once
+#include "VertexBuffer.h"
 #include <openxr/openxr.h>
 #include <vulkan/vulkan.h>
 
@@ -7,11 +8,6 @@
 #include <map>
 #include <memory>
 #include <vector>
-
-struct Cube {
-  XrPosef Pose;
-  XrVector3f Scale;
-};
 
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.

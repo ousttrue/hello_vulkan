@@ -115,6 +115,30 @@ std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
   return ptr;
 }
 
+static Cube MakeCube(XrPosef pose, XrVector3f scale) {
+  return Cube{
+      .Translaton =
+          {
+              pose.position.x,
+              pose.position.y,
+              pose.position.z,
+          },
+      .Rotation =
+          {
+              pose.orientation.x,
+              pose.orientation.y,
+              pose.orientation.z,
+              pose.orientation.w,
+          },
+      .Scaling =
+          {
+              scale.x,
+              scale.y,
+              scale.z,
+          },
+  };
+}
+
 XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
     XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
     XrViewConfigurationType viewConfigType,
@@ -164,7 +188,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
            XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
           (spaceLocation.locationFlags &
            XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        cubes.push_back(Cube{spaceLocation.pose, {0.25f, 0.25f, 0.25f}});
+        cubes.push_back(MakeCube(spaceLocation.pose, {0.25f, 0.25f, 0.25f}));
       }
     } else {
       Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized "
@@ -186,7 +210,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
           (spaceLocation.locationFlags &
            XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
         float scale = 0.1f * input.handScale[hand];
-        cubes.push_back(Cube{spaceLocation.pose, {scale, scale, scale}});
+        cubes.push_back(MakeCube(spaceLocation.pose, {scale, scale, scale}));
       }
     } else {
       // Tracking loss is expected when the hand is not active so only log a

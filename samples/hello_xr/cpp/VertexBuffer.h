@@ -13,6 +13,16 @@ struct Vec3 {
   float x, y, z;
 };
 
+struct Quat {
+  float x, y, z, w;
+};
+
+struct Cube {
+  Vec3 Translaton;
+  Quat Rotation;
+  Vec3 Scaling;
+};
+
 struct Vertex {
   Vec3 Position;
   Vec3 Color;

@@ -276,7 +276,8 @@ void VulkanGraphicsPlugin::RenderView(
     // Compute the model-view-projection transform and push it.
     XrMatrix4x4f model;
     XrMatrix4x4f_CreateTranslationRotationScale(
-        &model, &cube.Pose.position, &cube.Pose.orientation, &cube.Scale);
+        &model, (XrVector3f *)&cube.Translaton, (XrQuaternionf *)&cube.Rotation,
+        (XrVector3f *)&cube.Scaling);
     XrMatrix4x4f mvp;
     XrMatrix4x4f_Multiply(&mvp, &vp, &model);
     vkCmdPushConstants(m_cmdBuffer->buf, m_pipelineLayout->layout,
