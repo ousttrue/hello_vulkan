@@ -12,9 +12,6 @@
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.
 struct VulkanGraphicsPlugin {
-  VulkanGraphicsPlugin(const struct Options &options,
-                       std::shared_ptr<struct IPlatformPlugin> /*unused*/);
-
   // Create an instance of this graphics api for the provided instance and
   // systemId.
   void InitializeDevice(VkInstance instance, VkPhysicalDevice physicalDevice,
@@ -28,10 +25,8 @@ struct VulkanGraphicsPlugin {
   // Render to a swapchain image for a projection view.
   void RenderView(
       const std::shared_ptr<class SwapchainImageContext> &swapchainContext,
-      uint32_t imageIndex, const std::vector<Mat4> &cubes);
-
-  // Perform required steps after updating Options
-  void UpdateOptions(const struct Options &options);
+      uint32_t imageIndex, const Vec4 &clearColor,
+      const std::vector<Mat4> &cubes);
 
   // Note: The output must not outlive the input - this modifies the input and
   // returns a collection of views into that modified input!
@@ -57,7 +52,7 @@ struct VulkanGraphicsPlugin {
   std::shared_ptr<class CmdBuffer> m_cmdBuffer;
   std::shared_ptr<class PipelineLayout> m_pipelineLayout{};
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
-  std::array<float, 4> m_clearColor;
+  // std::array<float, 4> m_clearColor;
 
 #if defined(USE_MIRROR_WINDOW)
   Swapchain m_swapchain{};

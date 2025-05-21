@@ -6,29 +6,7 @@
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
-
-struct Vec3 {
-  float x, y, z;
-};
-
-struct Quat {
-  float x, y, z, w;
-};
-
-struct Mat4 {
-  float m[16];
-};
-
-struct Cube {
-  Vec3 Translaton;
-  Quat Rotation;
-  Vec3 Scaling;
-};
-
-struct Vertex {
-  Vec3 Position;
-  Vec3 Color;
-};
+#include "FloatTypes.h"
 
 constexpr Vec3 Red{1, 0, 0};
 constexpr Vec3 DarkRed{0.25f, 0, 0};

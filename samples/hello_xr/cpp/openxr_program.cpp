@@ -586,7 +586,7 @@ void OpenXrProgram::PollActions() {
   }
 }
 
-void OpenXrProgram::RenderFrame() {
+void OpenXrProgram::RenderFrame(const Vec4 &clearColor) {
   CHECK(m_session != XR_NULL_HANDLE);
 
   XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
@@ -601,7 +601,7 @@ void OpenXrProgram::RenderFrame() {
     if (auto layer = m_projectionLayer->RenderLayer(
             m_session, frameState.predictedDisplayTime, m_appSpace,
             m_options.Parsed.ViewConfigType, m_visualizedSpaces, m_input,
-            m_graphicsPlugin, m_options.Parsed.EnvironmentBlendMode)) {
+            m_graphicsPlugin, m_options.GetBackgroundClearColor(),m_options.Parsed.EnvironmentBlendMode)) {
       layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
     }
   }

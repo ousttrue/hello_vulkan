@@ -51,10 +51,6 @@ void main()
 }
 )_";
 
-VulkanGraphicsPlugin::VulkanGraphicsPlugin(
-    const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
-    : m_clearColor(options.GetBackgroundClearColor()) {}
-
 // Note: The output must not outlive the input - this modifies the input and
 // returns a collection of views into that modified input!
 std::vector<const char *>
@@ -220,7 +216,8 @@ int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
 
 void VulkanGraphicsPlugin::RenderView(
     const std::shared_ptr<SwapchainImageContext> &swapchainContext,
-    uint32_t imageIndex, const std::vector<Mat4> &cubes) {
+    uint32_t imageIndex, const Vec4 &clearColor,
+    const std::vector<Mat4> &cubes) {
   // CHECK(layerView.subImage.imageArrayIndex ==
   //       0); // Texture arrays not supported.
 
@@ -235,10 +232,10 @@ void VulkanGraphicsPlugin::RenderView(
 
   // Bind and clear eye render target
   static std::array<VkClearValue, 2> clearValues;
-  clearValues[0].color.float32[0] = m_clearColor[0];
-  clearValues[0].color.float32[1] = m_clearColor[1];
-  clearValues[0].color.float32[2] = m_clearColor[2];
-  clearValues[0].color.float32[3] = m_clearColor[3];
+  clearValues[0].color.float32[0] = clearColor.x;
+  clearValues[0].color.float32[1] = clearColor.y;
+  clearValues[0].color.float32[2] = clearColor.z;
+  clearValues[0].color.float32[3] = clearColor.w;
   clearValues[1].depthStencil.depth = 1.0f;
   clearValues[1].depthStencil.stencil = 0;
 
@@ -287,9 +284,9 @@ void VulkanGraphicsPlugin::RenderView(
 #endif
 }
 
-void VulkanGraphicsPlugin::UpdateOptions(const Options &options) {
-  m_clearColor = options.GetBackgroundClearColor();
-}
+// void VulkanGraphicsPlugin::UpdateOptions(const Options &options) {
+//   m_clearColor = options.GetBackgroundClearColor();
+// }
 
 static std::string vkObjectTypeToString(VkObjectType objectType) {
   std::string objName;

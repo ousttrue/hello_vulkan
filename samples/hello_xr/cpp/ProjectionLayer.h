@@ -1,4 +1,5 @@
 #pragma once
+#include "FloatTypes.h"
 #include "InputState.h"
 #include <list>
 #include <map>
@@ -48,11 +49,10 @@ public:
       VkSampleCountFlagBits sampleCount,
       const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
 
-  XrCompositionLayerProjection *
-  RenderLayer(XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-              XrViewConfigurationType viewConfigType,
-              const std::vector<XrSpace> &visualizedSpaces,
-              const InputState &input,
-              const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
-              XrEnvironmentBlendMode environmentBlendMode);
+  XrCompositionLayerProjection *RenderLayer(
+      XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
+      XrViewConfigurationType viewConfigType,
+      const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
+      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
+      const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode);
 };

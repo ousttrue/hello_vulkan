@@ -113,8 +113,7 @@ void android_main(struct android_app *app) {
         CreatePlatformPlugin_Android(options, data);
 
     // Create graphics API implementation.
-    std::shared_ptr<VulkanGraphicsPlugin> graphicsPlugin =
-        std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
+    auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
 
     // Initialize the OpenXR program.
     auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,
@@ -141,7 +140,6 @@ void android_main(struct android_app *app) {
       ShowHelp();
     }
     platformPlugin->UpdateOptions(options);
-    graphicsPlugin->UpdateOptions(options);
 
     program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
                               getVulkanDeviceExtensions());
@@ -185,7 +183,7 @@ void android_main(struct android_app *app) {
       }
 
       program->PollActions();
-      program->RenderFrame();
+      program->RenderFrame(options.GetBackgroundClearColor());
     }
 
     app->activity->vm->DetachCurrentThread();

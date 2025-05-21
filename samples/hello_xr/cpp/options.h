@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include "FloatTypes.h"
 #include <array>
 #include <locale>
 #include <openxr/openxr.h>
@@ -43,7 +44,7 @@ struct Options {
   } Parsed;
 
   void ParseStrings();
-  std::array<float, 4> GetBackgroundClearColor() const;
+  Vec4 GetBackgroundClearColor() const;
   void SetEnvironmentBlendMode(XrEnvironmentBlendMode environmentBlendMode);
 
   bool UpdateOptionsFromCommandLine(int argc, char *argv[]);

@@ -175,7 +175,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
     XrViewConfigurationType viewConfigType,
     const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
     const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
-    XrEnvironmentBlendMode environmentBlendMode) {
+    const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode) {
 
   // uint32_t viewCapacityInput = (uint32_t);
 
@@ -310,7 +310,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
       XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
       matrices.push_back(mvp);
     }
-    vulkan->RenderView(swapchainContext, imageIndex, matrices);
+    vulkan->RenderView(swapchainContext, imageIndex, clearColor, matrices);
 
     XrSwapchainImageReleaseInfo releaseInfo{
         XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

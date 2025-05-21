@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include "FloatTypes.h"
 #include "InputState.h"
 #include <memory>
 #include <set>
@@ -86,7 +87,7 @@ public:
   void PollActions();
 
   // Create and submit a frame.
-  void RenderFrame();
+  void RenderFrame(const Vec4 &clearColor);
 
   // Get preferred blend mode based on the view configuration specified in the
   // Options
