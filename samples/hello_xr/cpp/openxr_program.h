@@ -37,27 +37,37 @@ struct InputState {
 };
 
 struct ProjectionLayer {
-  XrCompositionLayerProjection m_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
-  std::vector<XrCompositionLayerProjectionView> m_projectionLayerViews;
+  int64_t m_colorSwapchainFormat{-1};
+
+  std::vector<XrViewConfigurationView> m_configViews;
+  std::vector<XrView> m_views;
+
   struct Swapchain {
     XrSwapchain handle;
-    int32_t width;
-    int32_t height;
+    XrExtent2Di extent;
   };
   std::vector<Swapchain> m_swapchains;
   std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
       m_swapchainImages;
-  int64_t m_colorSwapchainFormat{-1};
+
+  XrCompositionLayerProjection m_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+  std::vector<XrCompositionLayerProjectionView> m_projectionLayerViews;
 
   ProjectionLayer() = default;
   ~ProjectionLayer();
 
-  XrCompositionLayerProjection *RenderLayer(
-      XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-      std::vector<XrView> &views, XrViewConfigurationType viewConfigType,
-      const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
-      XrEnvironmentBlendMode environmentBlendMode);
+  void
+  CreateSwapchains(XrInstance instance, XrSystemId systemId, XrSession session,
+                   XrViewConfigurationType viewConfigurationType,
+                   const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
+
+  XrCompositionLayerProjection *
+  RenderLayer(XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
+              XrViewConfigurationType viewConfigType,
+              const std::vector<XrSpace> &visualizedSpaces,
+              const InputState &input,
+              const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
+              XrEnvironmentBlendMode environmentBlendMode);
 };
 
 class OpenXrProgram {
@@ -87,10 +97,6 @@ class OpenXrProgram {
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
   XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
-
-  std::vector<XrViewConfigurationView> m_configViews;
-
-  std::vector<XrView> m_views;
 
   std::vector<XrSpace> m_visualizedSpaces;
 
