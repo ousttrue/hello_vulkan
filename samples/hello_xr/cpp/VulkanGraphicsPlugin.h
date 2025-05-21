@@ -1,13 +1,9 @@
 #pragma once
 #include "VertexBuffer.h"
-#include <openxr/openxr.h>
-#include <vulkan/vulkan.h>
-
 #include <array>
-#include <list>
-#include <map>
 #include <memory>
 #include <vector>
+#include <vulkan/vulkan.h>
 
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.
@@ -27,10 +23,8 @@ struct VulkanGraphicsPlugin {
 
   // Render to a swapchain image for a projection view.
   void RenderView(
-      const XrCompositionLayerProjectionView &layerView,
       const std::shared_ptr<class SwapchainImageContext> &swapchainContext,
-      uint32_t imageIndex, int64_t /*swapchainFormat*/,
-      const std::vector<Cube> &cubes);
+      uint32_t imageIndex, const std::vector<Mat4> &cubes);
 
   // Perform required steps after updating Options
   void UpdateOptions(const struct Options &options);

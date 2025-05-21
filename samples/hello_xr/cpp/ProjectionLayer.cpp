@@ -2,6 +2,7 @@
 #include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
+#include "common/xr_linear.h"
 #include "logger.h"
 #include "to_string.h"
 
@@ -284,8 +285,32 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
     auto swapchainContext = m_swapchainImageContextMap[swapchainImage];
     uint32_t imageIndex = swapchainContext->ImageIndex(swapchainImage);
 
-    vulkan->RenderView(m_projectionLayerViews[i], swapchainContext, imageIndex,
-                       m_colorSwapchainFormat, cubes);
+    auto layerView = m_projectionLayerViews[i];
+    // Compute the view-projection transform.
+    // Note all matrixes (including OpenXR's) are column-major, right-handed.
+    const auto &pose = layerView.pose;
+    XrMatrix4x4f proj;
+    XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, layerView.fov,
+                                     0.05f, 100.0f);
+    XrMatrix4x4f toView;
+    XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
+    XrMatrix4x4f view;
+    XrMatrix4x4f_InvertRigidBody(&view, &toView);
+    XrMatrix4x4f vp;
+    XrMatrix4x4f_Multiply(&vp, &proj, &view);
+
+    std::vector<Mat4> matrices;
+    for (auto &cube : cubes) {
+      // Compute the model-view-projection transform and push it.
+      XrMatrix4x4f model;
+      XrMatrix4x4f_CreateTranslationRotationScale(
+          &model, (XrVector3f *)&cube.Translaton,
+          (XrQuaternionf *)&cube.Rotation, (XrVector3f *)&cube.Scaling);
+      Mat4 mvp;
+      XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
+      matrices.push_back(mvp);
+    }
+    vulkan->RenderView(swapchainContext, imageIndex, matrices);
 
     XrSwapchainImageReleaseInfo releaseInfo{
         XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

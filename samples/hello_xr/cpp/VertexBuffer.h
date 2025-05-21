@@ -1,13 +1,11 @@
 // Copyright (c) 2017-2024, The Khronos Group Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-
 #pragma once
-
-#include <vulkan/vulkan.h>
 
 #include <memory>
 #include <vector>
+#include <vulkan/vulkan.h>
 
 struct Vec3 {
   float x, y, z;
@@ -15,6 +13,10 @@ struct Vec3 {
 
 struct Quat {
   float x, y, z, w;
+};
+
+struct Mat4 {
+  float m[16];
 };
 
 struct Cube {

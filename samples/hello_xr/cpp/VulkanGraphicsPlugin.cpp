@@ -6,14 +6,11 @@
 #include "SwapchainImageContext.h"
 #include "VertexBuffer.h"
 #include "logger.h"
-#include "openxr/openxr.h"
 #include "options.h"
 #include "to_string.h"
 #include "vulkan_debug_object_namer.hpp"
 #include <algorithm>
 #include <stdexcept>
-
-#include <common/xr_linear.h>
 
 VulkanGraphicsPlugin::VulkanGraphicsPlugin(
     const Options &options, std::shared_ptr<struct IPlatformPlugin> /*unused*/)
@@ -183,10 +180,8 @@ int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
 }
 
 void VulkanGraphicsPlugin::RenderView(
-    const XrCompositionLayerProjectionView &layerView,
     const std::shared_ptr<SwapchainImageContext> &swapchainContext,
-    uint32_t imageIndex, int64_t /*swapchainFormat*/,
-    const std::vector<Cube> &cubes) {
+    uint32_t imageIndex, const std::vector<Mat4> &cubes) {
   // CHECK(layerView.subImage.imageArrayIndex ==
   //       0); // Texture arrays not supported.
 
@@ -207,10 +202,12 @@ void VulkanGraphicsPlugin::RenderView(
   clearValues[0].color.float32[3] = m_clearColor[3];
   clearValues[1].depthStencil.depth = 1.0f;
   clearValues[1].depthStencil.stencil = 0;
+
   VkRenderPassBeginInfo renderPassBeginInfo{
-      VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
-  renderPassBeginInfo.clearValueCount = (uint32_t)clearValues.size();
-  renderPassBeginInfo.pClearValues = clearValues.data();
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+      .pClearValues = clearValues.data(),
+  };
 
   swapchainContext->BindRenderTarget(imageIndex, &renderPassBeginInfo);
 
@@ -227,30 +224,10 @@ void VulkanGraphicsPlugin::RenderView(
   vkCmdBindVertexBuffers(m_cmdBuffer->buf, 0, 1, &m_drawBuffer->vtxBuf,
                          &offset);
 
-  // Compute the view-projection transform.
-  // Note all matrixes (including OpenXR's) are column-major, right-handed.
-  const auto &pose = layerView.pose;
-  XrMatrix4x4f proj;
-  XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, layerView.fov, 0.05f,
-                                   100.0f);
-  XrMatrix4x4f toView;
-  XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
-  XrMatrix4x4f view;
-  XrMatrix4x4f_InvertRigidBody(&view, &toView);
-  XrMatrix4x4f vp;
-  XrMatrix4x4f_Multiply(&vp, &proj, &view);
-
   // Render each cube
-  for (const Cube &cube : cubes) {
-    // Compute the model-view-projection transform and push it.
-    XrMatrix4x4f model;
-    XrMatrix4x4f_CreateTranslationRotationScale(
-        &model, (XrVector3f *)&cube.Translaton, (XrQuaternionf *)&cube.Rotation,
-        (XrVector3f *)&cube.Scaling);
-    XrMatrix4x4f mvp;
-    XrMatrix4x4f_Multiply(&mvp, &vp, &model);
+  for (const Mat4 &cube : cubes) {
     vkCmdPushConstants(m_cmdBuffer->buf, m_pipelineLayout->layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvp.m), &mvp.m[0]);
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
     vkCmdDrawIndexed(m_cmdBuffer->buf, m_drawBuffer->count.idx, 1, 0, 0, 0);
