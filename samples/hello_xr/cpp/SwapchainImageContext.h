@@ -19,24 +19,25 @@ class SwapchainImageContext {
 
   // A packed array of XrSwapchainImageVulkan2KHR's for
   // xrEnumerateSwapchainImages
-  std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
-  std::vector<std::shared_ptr<class RenderTarget>> renderTarget;
+  std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
+  std::vector<std::shared_ptr<class RenderTarget>> m_renderTarget;
   VkExtent2D m_size{};
   std::shared_ptr<class RenderPass> m_rp;
-  XrStructureType swapchainImageType;
 
-  SwapchainImageContext(XrStructureType _swapchainImageType)
-      : swapchainImageType(_swapchainImageType) {}
+  // XrStructureType swapchainImageType;
+  //
+  // SwapchainImageContext(XrStructureType _swapchainImageType)
+  //     : swapchainImageType(_swapchainImageType) {}
 
 public:
   std::shared_ptr<class Pipeline> m_pipe;
   std::shared_ptr<class DepthBuffer> depthBuffer;
 
-  static std::shared_ptr<SwapchainImageContext>
-  create(XrStructureType _swapchainImageType) {
-    return std::shared_ptr<SwapchainImageContext>(
-        new SwapchainImageContext(_swapchainImageType));
-  }
+  // static std::shared_ptr<SwapchainImageContext>
+  // create(XrStructureType _swapchainImageType) {
+  //   return std::shared_ptr<SwapchainImageContext>(
+  //       new SwapchainImageContext(_swapchainImageType));
+  // }
 
   std::vector<XrSwapchainImageBaseHeader *>
   Create(VkDevice device,
@@ -50,7 +51,7 @@ public:
   uint32_t ImageIndex(const XrSwapchainImageBaseHeader *swapchainImageHeader) {
     auto p = reinterpret_cast<const XrSwapchainImageVulkan2KHR *>(
         swapchainImageHeader);
-    return (uint32_t)(p - &swapchainImages[0]);
+    return (uint32_t)(p - &m_swapchainImages[0]);
   }
 
   void BindRenderTarget(uint32_t index,

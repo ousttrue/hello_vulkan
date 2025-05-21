@@ -24,13 +24,13 @@ std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
   m_rp = RenderPass::Create(m_vkDevice, colorFormat, depthFormat);
   m_pipe = Pipeline::Create(m_vkDevice, m_size, layout, m_rp, sp, vb);
 
-  swapchainImages.resize(capacity);
-  renderTarget.resize(capacity);
+  m_swapchainImages.resize(capacity);
+  m_renderTarget.resize(capacity);
   std::vector<XrSwapchainImageBaseHeader *> bases(capacity);
   for (uint32_t i = 0; i < capacity; ++i) {
-    swapchainImages[i] = {swapchainImageType};
+    m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
     bases[i] =
-        reinterpret_cast<XrSwapchainImageBaseHeader *>(&swapchainImages[i]);
+        reinterpret_cast<XrSwapchainImageBaseHeader *>(&m_swapchainImages[i]);
   }
 
   return bases;
@@ -38,13 +38,13 @@ std::vector<XrSwapchainImageBaseHeader *> SwapchainImageContext::Create(
 
 void SwapchainImageContext::BindRenderTarget(
     uint32_t index, VkRenderPassBeginInfo *renderPassBeginInfo) {
-  if (!renderTarget[index]) {
-    renderTarget[index] =
-        RenderTarget::Create(m_vkDevice, swapchainImages[index].image,
+  if (!m_renderTarget[index]) {
+    m_renderTarget[index] =
+        RenderTarget::Create(m_vkDevice, m_swapchainImages[index].image,
                              depthBuffer->depthImage, m_size, m_rp);
   }
   renderPassBeginInfo->renderPass = m_rp->pass;
-  renderPassBeginInfo->framebuffer = renderTarget[index]->fb;
+  renderPassBeginInfo->framebuffer = m_renderTarget[index]->fb;
   renderPassBeginInfo->renderArea.offset = {0, 0};
   renderPassBeginInfo->renderArea.extent = m_size;
 }

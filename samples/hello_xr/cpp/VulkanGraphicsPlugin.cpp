@@ -192,7 +192,7 @@ VulkanGraphicsPlugin::AllocateSwapchainImageStructs(
   // know the type/size. Keep the buffer alive by adding it into the list of
   // buffers.
   m_swapchainImageContexts.emplace_back(
-      SwapchainImageContext::create(XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR));
+      std::make_shared<SwapchainImageContext>());
   auto swapchainImageContext = m_swapchainImageContexts.back();
 
   //
