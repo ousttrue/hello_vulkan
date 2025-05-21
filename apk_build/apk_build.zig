@@ -11,6 +11,8 @@ pub const createAndroidTools = android.Tools.create;
 pub const setup = native_activity.setup;
 
 pub const makeZipfile = apk_builder.makeZipfile;
+pub const EntryPoint = apk_builder.EntryPoint;
+pub const CopyFile = apk_builder.CopyFile;
 pub const runZipalign = apk_builder.runZipalign;
 pub const runApksigner = apk_builder.runApksigner;
 

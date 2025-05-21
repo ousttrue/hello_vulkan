@@ -26,33 +26,20 @@ pub fn build(b: *std.Build) void {
         },
     );
 
-    build_vulfwk_apk(b, tools, abi, so);
-    build_hellotriangle_apk(b, tools, abi, so);
-    build_helloxr_apk(b, tools, abi, so);
-}
-
-fn build_helloxr_apk(
-    b: *std.Build,
-    tools: *android.Tools,
-    abi: []const u8,
-    so: ndk_build.CmakeAndroidToolchainStep,
-) void {
-    const package_name = "corg.khronos.openxr.hello_xr";
-    const apk_name = "hello_xr";
-    const so_name = "libhello_xr.so";
-
     //
-    // build apk zip archive
+    // apk
     //
     const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
-    const zip_file = ndk_build.makeZipfile(
+    build_apk(
         b,
         tools,
-        so.step,
+        so,
+        "corg.khronos.openxr.hello_xr",
+        "hello_xr",
         b.path("samples/hello_xr/android/AndroidManifest.xml"),
         .{ .bin = .{
             .src = so.build_dir.path(b, "samples/hello_xr/cpp/libhello_xr.so"),
-            .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
+            .dst = "lib/arm64-v8a/libhello_xr.so",
         } },
         b.path("samples/hello_xr/android/res"),
         null,
@@ -67,65 +54,16 @@ fn build_helloxr_apk(
             },
         },
     );
-
-    // zipalign
-    const aligned_apk = ndk_build.runZipalign(
+    build_apk(
         b,
         tools,
-        zip_file.file,
-        apk_name,
-    );
-    aligned_apk.step.dependOn(zip_file.step);
-
-    // apksigner
-    const apk = ndk_build.runApksigner(
-        b,
-        tools,
-        aligned_apk.file,
-    );
-
-    // install to zig-out
-    const install_apk = b.addInstallBinFile(
-        apk,
-        b.fmt("{s}.apk", .{apk_name}),
-    );
-    b.getInstallStep().dependOn(&install_apk.step);
-
-    //
-    // zig build run => adb install && adb shell am start
-    //
-    const adb_start = ndk_build.adbStart(
-        b,
-        tools,
-        &install_apk.step,
-        apk_name,
-        package_name,
-    );
-    b.step("helloxr", "adb install... && adb shell am start...").dependOn(&adb_start.step);
-}
-
-fn build_hellotriangle_apk(
-    b: *std.Build,
-    tools: *android.Tools,
-    abi: []const u8,
-    so: ndk_build.CmakeAndroidToolchainStep,
-) void {
-    const package_name = "com.arm.vulkansdk.hellotriangle";
-    const apk_name = "hellotriangle";
-    const so_name = "libnative.so";
-
-    //
-    // build apk zip archive
-    //
-    const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
-    const zip_file = ndk_build.makeZipfile(
-        b,
-        tools,
-        so.step,
+        so,
+        "com.arm.vulkansdk.hellotriangle",
+        "hellotriangle",
         b.path("samples/hellotriangle/android/AndroidManifest.xml"),
         .{ .bin = .{
             .src = so.build_dir.path(b, "samples/hellotriangle/cpp/libnative.so"),
-            .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
+            .dst = "lib/arm64-v8a/libnative.so",
         } },
         b.path("samples/hellotriangle/android/res"),
         b.path("samples/hellotriangle/android/assets"),
@@ -134,69 +72,20 @@ fn build_hellotriangle_apk(
             .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
         }},
     );
-
-    // zipalign
-    const aligned_apk = ndk_build.runZipalign(
-        b,
-        tools,
-        zip_file.file,
-        apk_name,
-    );
-    aligned_apk.step.dependOn(zip_file.step);
-
-    // apksigner
-    const apk = ndk_build.runApksigner(
-        b,
-        tools,
-        aligned_apk.file,
-    );
-
-    // install to zig-out
-    const install_apk = b.addInstallBinFile(
-        apk,
-        b.fmt("{s}.apk", .{apk_name}),
-    );
-    b.getInstallStep().dependOn(&install_apk.step);
-
-    //
-    // zig build run => adb install && adb shell am start
-    //
-    const adb_start = ndk_build.adbStart(
-        b,
-        tools,
-        &install_apk.step,
-        apk_name,
-        package_name,
-    );
-    b.step("hellotriangle", "adb install... && adb shell am start...").dependOn(&adb_start.step);
-}
-
-fn build_vulfwk_apk(
-    b: *std.Build,
-    tools: *android.Tools,
-    abi: []const u8,
-    so: ndk_build.CmakeAndroidToolchainStep,
-) void {
-    const package_name = "com.ousttrue.vulfwk";
-    const apk_name = "vulfwk";
-    const so_name = b.fmt("lib{s}.so", .{apk_name});
     const shaders_wf = b.addWriteFiles();
     shaders_wf.step.dependOn(so.step);
     _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
     _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
-
-    //
-    // build apk zip archive
-    //
-    const validationlayers_dep = b.dependency("vulkan-validationlayers", .{});
-    const zip_file = ndk_build.makeZipfile(
+    build_apk(
         b,
         tools,
-        &shaders_wf.step,
+        so,
+        "com.ousttrue.vulfwk",
+        "vulfwk",
         b.path("samples/vulfwk/android/AndroidManifest.xml"),
         .{ .bin = .{
             .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),
-            .dst = b.fmt("lib/{s}/{s}", .{ abi, so_name }),
+            .dst = "lib/arm64-v8a/libvulfwk.so",
         } },
         null,
         shaders_wf.getDirectory(),
@@ -205,6 +94,34 @@ fn build_vulfwk_apk(
             .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
         }},
     );
+}
+
+fn build_apk(
+    b: *std.Build,
+    tools: *android.Tools,
+    so: ndk_build.CmakeAndroidToolchainStep,
+    package_name: []const u8,
+    apk_name: []const u8,
+    android_manifest: std.Build.LazyPath,
+    entry_point: ndk_build.EntryPoint,
+    resource_directory: ?std.Build.LazyPath,
+    assets_directory: ?std.Build.LazyPath,
+    appends: ?[]const ndk_build.CopyFile,
+) void {
+
+    //
+    // build apk zip archive
+    //
+    const zip_file = ndk_build.makeZipfile(
+        b,
+        tools,
+        so.step,
+        android_manifest,
+        entry_point,
+        resource_directory,
+        assets_directory,
+        appends,
+    );
 
     // zipalign
     const aligned_apk = ndk_build.runZipalign(
@@ -227,6 +144,7 @@ fn build_vulfwk_apk(
         apk,
         b.fmt("{s}.apk", .{apk_name}),
     );
+    b.step(apk_name, b.fmt("build {s}", .{apk_name})).dependOn(&install_apk.step);
     b.getInstallStep().dependOn(&install_apk.step);
 
     //
@@ -239,5 +157,5 @@ fn build_vulfwk_apk(
         apk_name,
         package_name,
     );
-    b.step("vulfwk", "adb install... && adb shell am start...").dependOn(&adb_start.step);
+    b.step(b.fmt("run_{s}", .{apk_name}), "adb install... && adb shell am start...").dependOn(&adb_start.step);
 }
