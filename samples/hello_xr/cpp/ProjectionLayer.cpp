@@ -15,7 +15,7 @@ ProjectionLayer::~ProjectionLayer() {
 std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
     XrInstance instance, XrSystemId systemId, XrSession session,
     XrViewConfigurationType viewConfigurationType,
-    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan) {
+    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
 
   auto ptr = std::shared_ptr<ProjectionLayer>(new ProjectionLayer);
 
@@ -126,7 +126,7 @@ std::vector<XrSwapchainImageBaseHeader *>
 ProjectionLayer::AllocateSwapchainImageStructs(
     uint32_t capacity, VkExtent2D size, VkFormat format,
     VkSampleCountFlagBits sampleCount,
-    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan) {
+    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
   // Allocate and initialize the buffer of image structs (must be sequential
   // in memory for xrEnumerateSwapchainImages). Return back an array of
   // pointers to each swapchain image struct so the consumer doesn't need to
@@ -174,7 +174,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
     XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
     XrViewConfigurationType viewConfigType,
     const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-    const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
+    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
     const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode) {
 
   // uint32_t viewCapacityInput = (uint32_t);

@@ -39,7 +39,7 @@ public:
   static std::shared_ptr<ProjectionLayer>
   Create(XrInstance instance, XrSystemId systemId, XrSession session,
          XrViewConfigurationType viewConfigurationType,
-         const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
+         const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
   // Allocate space for the swapchain image structures. These are different for
   // each graphics API. The returned pointers are valid for the lifetime of the
@@ -47,12 +47,12 @@ public:
   std::vector<XrSwapchainImageBaseHeader *> AllocateSwapchainImageStructs(
       uint32_t capacity, VkExtent2D size, VkFormat format,
       VkSampleCountFlagBits sampleCount,
-      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan);
+      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
   XrCompositionLayerProjection *RenderLayer(
       XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
       XrViewConfigurationType viewConfigType,
       const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-      const std::shared_ptr<struct VulkanGraphicsPlugin> &vulkan,
+      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
       const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode);
 };

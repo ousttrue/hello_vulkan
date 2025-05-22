@@ -17,6 +17,13 @@ Swapchain の semaphore 周りが難読。
 
 - https://github.com/KhronosGroup/OpenXR-SDK-Source/tree/main/src/tests/hello_xr
 
+cross platform(win, android...) x cross gpu(vulkan, opengl, d3d...) で難読。
+Swapchain 周りが難読。
+
 # googlesamples/android-vulkan-tutorials
 
 - `GameActivity` https://github.com/googlesamples/android-vulkan-tutorials/blob/master/tutorial05_triangle/app/src/main/cpp/AndroidMain.cpp
+
+# vk_mini_samples
+
+https://github.com/nvpro-samples/vk_mini_samples

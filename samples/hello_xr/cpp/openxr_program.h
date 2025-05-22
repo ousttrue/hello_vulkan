@@ -12,20 +12,14 @@
 #include <vulkan/vulkan.h>
 
 class OpenXrProgram {
-  std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
   const struct Options &m_options;
 
-  std::shared_ptr<class ProjectionLayer> m_projectionLayer;
-
-  VkInstance m_vkInstance = VK_NULL_HANDLE;
-  VkPhysicalDevice m_vkPhysicalDevice = VK_NULL_HANDLE;
-  VkDevice m_vkDevice = VK_NULL_HANDLE;
-  uint32_t m_queueFamilyIndex = UINT_MAX;
-
-  XrInstance m_instance{XR_NULL_HANDLE};
+  XrInstance m_instance;
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
   XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
+
+  std::shared_ptr<class ProjectionLayer> m_projectionLayer;
 
   std::vector<XrSpace> m_visualizedSpaces;
 
@@ -38,39 +32,30 @@ class OpenXrProgram {
 
   const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
-  void LogInstanceInfo();
-  void
-  CreateInstanceInternal(const std::vector<std::string> &platformExtensions,
-                         void *next);
-  void LogViewConfigurations();
-  void LogEnvironmentBlendMode(XrViewConfigurationType type);
-  void LogReferenceSpaces();
+  OpenXrProgram(const Options &options, XrInstance instance);
 
 public:
-  OpenXrProgram(const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin,
-                const Options &options);
-
   ~OpenXrProgram();
 
   // Create an Instance and other basic instance-level initialization.
-  void CreateInstance(const std::vector<std::string> &platformExtensions,
-                      void *next);
-
-  // Select a System for the view configuration specified in the Options
-  void InitializeSystem();
+  static std::shared_ptr<OpenXrProgram>
+  Create(const Options &options,
+                 const std::vector<std::string> &platformExtensions,
+                 void *next);
 
   // Initialize the graphics device for the selected system.
-  void InitializeDevice(const std::vector<const char *> &layers,
-                        const std::vector<const char *> &instanceExtensions,
-                        const std::vector<const char *> &deviceExtensions);
+  std::shared_ptr<class VulkanGraphicsPlugin>
+  InitializeDevice(const std::vector<const char *> &layers,
+                   const std::vector<const char *> &instanceExtensions,
+                   const std::vector<const char *> &deviceExtensions);
 
   // Create a Session and other basic session-level initialization.
-  void InitializeSession();
+  void InitializeSession(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
 
   // Create a Swapchain which requires coordinating with the graphics plugin to
   // select the format, getting the system graphics properties, getting the view
   // configuration and grabbing the resulting swapchain images.
-  void CreateSwapchains();
+  void CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
 
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);
@@ -87,7 +72,8 @@ public:
   void PollActions();
 
   // Create and submit a frame.
-  void RenderFrame(const Vec4 &clearColor);
+  void RenderFrame(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+                   const Vec4 &clearColor);
 
   // Get preferred blend mode based on the view configuration specified in the
   // Options

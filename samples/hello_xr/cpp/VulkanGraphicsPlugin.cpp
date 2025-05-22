@@ -12,6 +12,31 @@
 #include <algorithm>
 #include <stdexcept>
 
+#ifdef USE_ONLINE_VULKAN_SHADERC
+#include <shaderc/shaderc.hpp>
+// Compile a shader to a SPIR-V binary.
+static std::vector<uint32_t> CompileGlslShader(const std::string &name,
+                                               shaderc_shader_kind kind,
+                                               const std::string &source) {
+  shaderc::Compiler compiler;
+  shaderc::CompileOptions options;
+
+  options.SetOptimizationLevel(shaderc_optimization_level_size);
+
+  shaderc::SpvCompilationResult module =
+      compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
+
+  if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
+    Log::Write(Log::Level::Error,
+               Fmt("Shader %s compilation failed: %s", name.c_str(),
+                   module.GetErrorMessage().c_str()));
+    return std::vector<uint32_t>();
+  }
+
+  return {module.cbegin(), module.cend()};
+}
+#endif
+
 constexpr char VertexShaderGlsl[] = R"_(
 #version 430
 #extension GL_ARB_separate_shader_objects : enable
@@ -51,33 +76,12 @@ void main()
 }
 )_";
 
-// Note: The output must not outlive the input - this modifies the input and
-// returns a collection of views into that modified input!
-std::vector<const char *>
-VulkanGraphicsPlugin::ParseExtensionString(char *names) {
-  std::vector<const char *> list;
-  while (*names != 0) {
-    list.push_back(names);
-    while (*(++names) != 0) {
-      if (*names == ' ') {
-        *names++ = '\0';
-        break;
-      }
-    }
-  }
-  return list;
-}
-
-void VulkanGraphicsPlugin::InitializeDevice(
+VulkanGraphicsPlugin::VulkanGraphicsPlugin(
     VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device,
-    VkDeviceQueueCreateInfo queueInfo,
-    VkDebugUtilsMessengerCreateInfoEXT debugInfo) {
-  m_vkInstance = instance;
-  m_vkPhysicalDevice = physicalDevice;
-  m_vkDevice = device;
-  m_queueFamilyIndex = queueInfo.queueFamilyIndex;
-
-  vkCreateDebugUtilsMessengerEXT =
+    uint32_t queueFamilyIndex, VkDebugUtilsMessengerCreateInfoEXT debugInfo)
+    : m_vkInstance(instance), m_vkPhysicalDevice(physicalDevice),
+      m_vkDevice(device), m_queueFamilyIndex(queueFamilyIndex) {
+  auto vkCreateDebugUtilsMessengerEXT =
       (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
           m_vkInstance, "vkCreateDebugUtilsMessengerEXT");
   if (vkCreateDebugUtilsMessengerEXT != nullptr) {
@@ -88,37 +92,12 @@ void VulkanGraphicsPlugin::InitializeDevice(
     }
   }
 
-  vkGetDeviceQueue(m_vkDevice, queueInfo.queueFamilyIndex, 0, &m_vkQueue);
+  vkGetDeviceQueue(m_vkDevice, m_queueFamilyIndex, 0, &m_vkQueue);
 
   m_memAllocator = MemoryAllocator::Create(m_vkPhysicalDevice, m_vkDevice);
 
   InitializeResources();
 }
-
-#ifdef USE_ONLINE_VULKAN_SHADERC
-// Compile a shader to a SPIR-V binary.
-std::vector<uint32_t>
-VulkanGraphicsPlugin::CompileGlslShader(const std::string &name,
-                                        shaderc_shader_kind kind,
-                                        const std::string &source) {
-  shaderc::Compiler compiler;
-  shaderc::CompileOptions options;
-
-  options.SetOptimizationLevel(shaderc_optimization_level_size);
-
-  shaderc::SpvCompilationResult module =
-      compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
-
-  if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
-    Log::Write(Log::Level::Error,
-               Fmt("Shader %s compilation failed: %s", name.c_str(),
-                   module.GetErrorMessage().c_str()));
-    return std::vector<uint32_t>();
-  }
-
-  return {module.cbegin(), module.cend()};
-}
-#endif
 
 // glslangValidator doesn't wrap its output in brackets if you don't have it
 // define the whole array.

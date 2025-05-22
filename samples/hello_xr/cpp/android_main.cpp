@@ -103,12 +103,6 @@ void android_main(struct android_app *app) {
     bool requestRestart = false;
     bool exitRenderLoop = false;
 
-    // Create graphics API implementation.
-    auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
-
-    // Initialize the OpenXR program.
-    auto program = std::make_shared<OpenXrProgram>(graphicsPlugin, options);
-
     // Initialize the loader for this platform
     PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
     if (XR_SUCCEEDED(
@@ -127,19 +121,22 @@ void android_main(struct android_app *app) {
         .applicationVM = app->activity->vm,
         .applicationActivity = app->activity->clazz,
     };
-    program->CreateInstance({XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME},
-                            &instanceCreateInfoAndroid);
-    program->InitializeSystem();
+
+    // Initialize the OpenXR program.
+    auto program = OpenXrProgram::Create(
+        options, {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME},
+        &instanceCreateInfoAndroid);
 
     options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
     if (!options.UpdateOptionsFromSystemProperties()) {
       ShowHelp();
     }
 
-    program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
-                              getVulkanDeviceExtensions());
-    program->InitializeSession();
-    program->CreateSwapchains();
+    auto vulkan = program->InitializeDevice(getVulkanLayers(),
+                                            getVulkanInstanceExtensions(),
+                                            getVulkanDeviceExtensions());
+    program->InitializeSession(vulkan);
+    program->CreateSwapchains(vulkan);
 
     while (app->destroyRequested == 0) {
       // Read all pending events.
@@ -178,7 +175,7 @@ void android_main(struct android_app *app) {
       }
 
       program->PollActions();
-      program->RenderFrame(options.GetBackgroundClearColor());
+      program->RenderFrame(vulkan, options.GetBackgroundClearColor());
     }
 
     app->activity->vm->DetachCurrentThread();

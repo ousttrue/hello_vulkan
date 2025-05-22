@@ -37,24 +37,19 @@ int main(int argc, char *argv[]) {
   }};
   exitPollingThread.detach();
 
-  // Create graphics API implementation.
-  auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
-
   // Initialize the OpenXR program.
-  auto program = std::make_shared<OpenXrProgram>(graphicsPlugin, options);
-
-  program->CreateInstance({}, nullptr);
-  program->InitializeSystem();
+  auto program = OpenXrProgram::Create(options, {}, nullptr);
 
   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
     ShowHelp();
   }
 
-  program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
+  // Create VkDevice by OpenXR.
+  auto vulkan = program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
                             getVulkanDeviceExtensions());
-  program->InitializeSession();
-  program->CreateSwapchains();
+  program->InitializeSession(vulkan);
+  program->CreateSwapchains(vulkan);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
@@ -66,7 +61,7 @@ int main(int argc, char *argv[]) {
 
     if (program->IsSessionRunning()) {
       program->PollActions();
-      program->RenderFrame(options.GetBackgroundClearColor());
+      program->RenderFrame(vulkan, options.GetBackgroundClearColor());
     } else {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));

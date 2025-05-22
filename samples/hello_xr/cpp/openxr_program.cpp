@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cstdarg>
 #include <vulkan/vulkan.h>
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android_native_app_glue.h>
@@ -149,13 +150,39 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
 //
 // OpenXrProgram
 //
-OpenXrProgram::OpenXrProgram(
-    const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin,
-    const Options &options)
-    : m_graphicsPlugin(graphicsPlugin), m_options(options),
+OpenXrProgram::OpenXrProgram(const Options &options, XrInstance instance)
+    : m_options(options), m_instance(instance),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
                              XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
-                             XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {}
+                             XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {
+
+  CHECK(m_instance != XR_NULL_HANDLE);
+
+  XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};
+  CHECK_XRCMD(xrGetInstanceProperties(m_instance, &instanceProperties));
+
+  Log::Write(
+      Log::Level::Info,
+      Fmt("Instance RuntimeName=%s RuntimeVersion=%s",
+          instanceProperties.runtimeName,
+          GetXrVersionString(instanceProperties.runtimeVersion).c_str()));
+
+  // Select a System for the view configuration specified in the Options
+  CHECK(m_instance != XR_NULL_HANDLE);
+  CHECK(m_systemId == XR_NULL_SYSTEM_ID);
+
+  XrSystemGetInfo systemInfo{
+      .type = XR_TYPE_SYSTEM_GET_INFO,
+      .formFactor = m_options.Parsed.FormFactor,
+  };
+  CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
+
+  Log::Write(Log::Level::Verbose,
+             Fmt("Using system %d for form factor %s", m_systemId,
+                 to_string(m_options.Parsed.FormFactor)));
+  CHECK(m_instance != XR_NULL_HANDLE);
+  CHECK(m_systemId != XR_NULL_SYSTEM_ID);
+}
 
 OpenXrProgram::~OpenXrProgram() {
   if (m_input.actionSet != XR_NULL_HANDLE) {
@@ -182,44 +209,51 @@ OpenXrProgram::~OpenXrProgram() {
   }
 }
 
-void OpenXrProgram::CreateInstance(
-    const std::vector<std::string> &platformExtensions, void *next) {
+// OpenXR extensions required by this graphics API.
+static std::vector<const char*> GetInstanceExtensions() {
+  return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+}
+
+std::shared_ptr<OpenXrProgram> OpenXrProgram::Create(
+    const Options &options, const std::vector<std::string> &platformExtensions,
+    void *next) {
   LogLayersAndExtensions();
-  CreateInstanceInternal(platformExtensions, next);
-  LogInstanceInfo();
-}
 
-void OpenXrProgram::InitializeSystem() {
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_systemId == XR_NULL_SYSTEM_ID);
+  // Create union of extensions required by platform and graphics plugins.
+  std::vector<const char *> extensions;
 
-  XrSystemGetInfo systemInfo{
-      .type = XR_TYPE_SYSTEM_GET_INFO,
-      .formFactor = m_options.Parsed.FormFactor,
-  };
-  CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
-
-  Log::Write(Log::Level::Verbose,
-             Fmt("Using system %d for form factor %s", m_systemId,
-                 to_string(m_options.Parsed.FormFactor)));
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_systemId != XR_NULL_SYSTEM_ID);
-}
-
-static XrResult GetVulkanGraphicsRequirements2KHR(
-    XrInstance instance, XrSystemId systemId,
-    XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
-  PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
-      nullptr;
-  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirements2KHR",
-                            reinterpret_cast<PFN_xrVoidFunction *>(
-                                &pfnGetVulkanGraphicsRequirements2KHR)) !=
-      XR_SUCCESS) {
-    throw std::runtime_error("xrGetInstanceProcAddr");
+  for (auto &ext : platformExtensions) {
+    extensions.push_back(ext.c_str());
   }
 
-  return pfnGetVulkanGraphicsRequirements2KHR(instance, systemId,
-                                              graphicsRequirements);
+  auto instanceExtensions = GetInstanceExtensions();
+  for (auto &ext : instanceExtensions) {
+    extensions.push_back(ext);
+  }
+
+  XrInstanceCreateInfo createInfo{
+      .type = XR_TYPE_INSTANCE_CREATE_INFO,
+      .next = next,
+      .createFlags = 0,
+      .applicationInfo =
+          {.applicationName = "HelloXR",
+           // Current version is 1.1.x, but hello_xr only requires 1.0.x
+           .applicationVersion = {},
+           .engineName = {},
+           .engineVersion = {},
+           .apiVersion = XR_API_VERSION_1_0},
+      .enabledApiLayerCount = 0,
+      .enabledApiLayerNames = nullptr,
+      .enabledExtensionCount = (uint32_t)extensions.size(),
+      .enabledExtensionNames = extensions.data(),
+  };
+  XrInstance instance;
+  CHECK_XRCMD(xrCreateInstance(&createInfo, &instance));
+
+  auto ptr =
+      std::shared_ptr<OpenXrProgram>(new OpenXrProgram(options, instance));
+
+  return ptr;
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -277,11 +311,124 @@ CreateVulkanDeviceKHR(XrInstance instance,
                                   vulkanResult);
 }
 
-void OpenXrProgram::InitializeDevice(
+static void LogEnvironmentBlendMode(XrInstance m_instance,
+                                    XrSystemId m_systemId,
+                                    const Options &m_options,
+                                    XrViewConfigurationType type) {
+  CHECK(m_instance != XR_NULL_HANDLE);
+  CHECK(m_systemId != 0);
+
+  uint32_t count;
+  CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, type, 0,
+                                               &count, nullptr));
+  CHECK(count > 0);
+
+  Log::Write(Log::Level::Info,
+             Fmt("Available Environment Blend Mode count : (%d)", count));
+
+  std::vector<XrEnvironmentBlendMode> blendModes(count);
+  CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(
+      m_instance, m_systemId, type, count, &count, blendModes.data()));
+
+  bool blendModeFound = false;
+  for (XrEnvironmentBlendMode mode : blendModes) {
+    const bool blendModeMatch = (mode == m_options.Parsed.EnvironmentBlendMode);
+    Log::Write(Log::Level::Info,
+               Fmt("Environment Blend Mode (%s) : %s", to_string(mode),
+                   blendModeMatch ? "(Selected)" : ""));
+    blendModeFound |= blendModeMatch;
+  }
+  CHECK(blendModeFound);
+}
+
+static void LogViewConfigurations(XrInstance m_instance, XrSystemId m_systemId,
+                                  const Options &m_options) {
+  CHECK(m_instance != XR_NULL_HANDLE);
+  CHECK(m_systemId != XR_NULL_SYSTEM_ID);
+
+  uint32_t viewConfigTypeCount;
+  CHECK_XRCMD(xrEnumerateViewConfigurations(m_instance, m_systemId, 0,
+                                            &viewConfigTypeCount, nullptr));
+  std::vector<XrViewConfigurationType> viewConfigTypes(viewConfigTypeCount);
+  CHECK_XRCMD(xrEnumerateViewConfigurations(
+      m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount,
+      viewConfigTypes.data()));
+  CHECK((uint32_t)viewConfigTypes.size() == viewConfigTypeCount);
+
+  Log::Write(Log::Level::Info, Fmt("Available View Configuration Types: (%d)",
+                                   viewConfigTypeCount));
+  for (XrViewConfigurationType viewConfigType : viewConfigTypes) {
+    Log::Write(
+        Log::Level::Verbose,
+        Fmt("  View Configuration Type: %s %s", to_string(viewConfigType),
+            viewConfigType == m_options.Parsed.ViewConfigType ? "(Selected)"
+                                                              : ""));
+
+    XrViewConfigurationProperties viewConfigProperties{
+        .type = XR_TYPE_VIEW_CONFIGURATION_PROPERTIES,
+    };
+    CHECK_XRCMD(xrGetViewConfigurationProperties(
+        m_instance, m_systemId, viewConfigType, &viewConfigProperties));
+
+    Log::Write(
+        Log::Level::Verbose,
+        Fmt("  View configuration FovMutable=%s",
+            viewConfigProperties.fovMutable == XR_TRUE ? "True" : "False"));
+
+    uint32_t viewCount;
+    CHECK_XRCMD(xrEnumerateViewConfigurationViews(
+        m_instance, m_systemId, viewConfigType, 0, &viewCount, nullptr));
+    if (viewCount > 0) {
+      std::vector<XrViewConfigurationView> views(
+          viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+      CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId,
+                                                    viewConfigType, viewCount,
+                                                    &viewCount, views.data()));
+
+      for (uint32_t i = 0; i < views.size(); i++) {
+        const XrViewConfigurationView &view = views[i];
+
+        Log::Write(Log::Level::Verbose,
+                   Fmt("    View [%d]: Recommended Width=%d Height=%d "
+                       "SampleCount=%d",
+                       i, view.recommendedImageRectWidth,
+                       view.recommendedImageRectHeight,
+                       view.recommendedSwapchainSampleCount));
+        Log::Write(Log::Level::Verbose,
+                   Fmt("    View [%d]:     Maximum Width=%d Height=%d "
+                       "SampleCount=%d",
+                       i, view.maxImageRectWidth, view.maxImageRectHeight,
+                       view.maxSwapchainSampleCount));
+      }
+    } else {
+      Log::Write(Log::Level::Error, Fmt("Empty view configuration type"));
+    }
+
+    LogEnvironmentBlendMode(m_instance, m_systemId, m_options, viewConfigType);
+  }
+}
+
+static XrResult GetVulkanGraphicsRequirements2KHR(
+    XrInstance instance, XrSystemId systemId,
+    XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
+  PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
+      nullptr;
+  if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirements2KHR",
+                            reinterpret_cast<PFN_xrVoidFunction *>(
+                                &pfnGetVulkanGraphicsRequirements2KHR)) !=
+      XR_SUCCESS) {
+    throw std::runtime_error("xrGetInstanceProcAddr");
+  }
+
+  return pfnGetVulkanGraphicsRequirements2KHR(instance, systemId,
+                                              graphicsRequirements);
+}
+
+std::shared_ptr<VulkanGraphicsPlugin> OpenXrProgram::InitializeDevice(
     const std::vector<const char *> &layers,
     const std::vector<const char *> &instanceExtensions,
     const std::vector<const char *> &deviceExtensions) {
-  LogViewConfigurations();
+  LogViewConfigurations(m_instance, m_systemId, m_options);
 
   // Create the Vulkan device for the adapter associated with the system.
   // Extension function must be loaded by name
@@ -337,23 +484,25 @@ void OpenXrProgram::InitializeDevice(
       .vulkanAllocator = nullptr,
   };
 
+  VkInstance vkInstance;
   VkResult err;
-  if (CreateVulkanInstanceKHR(m_instance, &createInfo, &m_vkInstance, &err) !=
+  if (CreateVulkanInstanceKHR(m_instance, &createInfo, &vkInstance, &err) !=
       XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
   if (err != VK_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
-  SetDebugUtilsObjectNameEXT_GetProc(m_vkInstance);
+  SetDebugUtilsObjectNameEXT_GetProc(vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
       .systemId = m_systemId,
-      .vulkanInstance = m_vkInstance,
+      .vulkanInstance = vkInstance,
   };
+  VkPhysicalDevice vkPhysicalDevice;
   if (GetVulkanGraphicsDevice2KHR(m_instance, &deviceGetInfo,
-                                  &m_vkPhysicalDevice) != XR_SUCCESS) {
+                                  &vkPhysicalDevice) != XR_SUCCESS) {
     throw std::runtime_error("GetVulkanGraphicsDevice2KHR");
   }
 
@@ -364,16 +513,17 @@ void OpenXrProgram::InitializeDevice(
       .pQueuePriorities = &queuePriorities,
   };
   uint32_t queueFamilyCount = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(m_vkPhysicalDevice,
-                                           &queueFamilyCount, nullptr);
+  vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount,
+                                           nullptr);
   std::vector<VkQueueFamilyProperties> queueFamilyProps(queueFamilyCount);
-  vkGetPhysicalDeviceQueueFamilyProperties(
-      m_vkPhysicalDevice, &queueFamilyCount, &queueFamilyProps[0]);
+  vkGetPhysicalDeviceQueueFamilyProperties(vkPhysicalDevice, &queueFamilyCount,
+                                           &queueFamilyProps[0]);
 
+  uint32_t queueFamilyIndex = UINT_MAX;
   for (uint32_t i = 0; i < queueFamilyCount; ++i) {
     // Only need graphics (not presentation) for draw queue
     if ((queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0u) {
-      m_queueFamilyIndex = queueInfo.queueFamilyIndex = i;
+      queueFamilyIndex = queueInfo.queueFamilyIndex = i;
       break;
     }
   }
@@ -396,11 +546,12 @@ void OpenXrProgram::InitializeDevice(
       .type = XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR,
       .systemId = m_systemId,
       .pfnGetInstanceProcAddr = &vkGetInstanceProcAddr,
-      .vulkanPhysicalDevice = m_vkPhysicalDevice,
+      .vulkanPhysicalDevice = vkPhysicalDevice,
       .vulkanCreateInfo = &deviceInfo,
       .vulkanAllocator = nullptr,
   };
-  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo, &m_vkDevice, &err) !=
+  VkDevice vkDevice;
+  if (CreateVulkanDeviceKHR(m_instance, &deviceCreateInfo, &vkDevice, &err) !=
       XR_SUCCESS) {
     throw std::runtime_error("CreateVulkanDeviceKHR");
   }
@@ -410,11 +561,30 @@ void OpenXrProgram::InitializeDevice(
 
   // The graphics API can initialize the graphics device now that the systemId
   // and instance handle are available.
-  m_graphicsPlugin->InitializeDevice(m_vkInstance, m_vkPhysicalDevice,
-                                     m_vkDevice, queueInfo, debugInfo);
+  return std::make_shared<VulkanGraphicsPlugin>(
+      vkInstance, vkPhysicalDevice, vkDevice, queueInfo.queueFamilyIndex,
+      debugInfo);
 }
 
-void OpenXrProgram::InitializeSession() {
+static void LogReferenceSpaces(XrSession m_session) {
+
+  CHECK(m_session != XR_NULL_HANDLE);
+
+  uint32_t spaceCount;
+  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, nullptr));
+  std::vector<XrReferenceSpaceType> spaces(spaceCount);
+  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount,
+                                         spaces.data()));
+
+  Log::Write(Log::Level::Info,
+             Fmt("Available reference spaces: %d", spaceCount));
+  for (XrReferenceSpaceType space : spaces) {
+    Log::Write(Log::Level::Verbose, Fmt("  Name: %s", to_string(space)));
+  }
+}
+
+void OpenXrProgram::InitializeSession(
+    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
   CHECK(m_instance != XR_NULL_HANDLE);
   CHECK(m_session == XR_NULL_HANDLE);
 
@@ -424,10 +594,10 @@ void OpenXrProgram::InitializeSession() {
     XrGraphicsBindingVulkan2KHR graphicsBinding{
         .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
         .next = nullptr,
-        .instance = m_vkInstance,
-        .physicalDevice = m_vkPhysicalDevice,
-        .device = m_vkDevice,
-        .queueFamilyIndex = m_queueFamilyIndex,
+        .instance = vulkan->m_vkInstance,
+        .physicalDevice = vulkan->m_vkPhysicalDevice,
+        .device = vulkan->m_vkDevice,
+        .queueFamilyIndex = vulkan->m_queueFamilyIndex,
         .queueIndex = 0,
     };
     XrSessionCreateInfo createInfo{
@@ -438,7 +608,7 @@ void OpenXrProgram::InitializeSession() {
     CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &m_session));
   }
 
-  LogReferenceSpaces();
+  LogReferenceSpaces(m_session);
   InitializeActions();
   CreateVisualizedSpaces();
 
@@ -450,7 +620,8 @@ void OpenXrProgram::InitializeSession() {
   }
 }
 
-void OpenXrProgram::CreateSwapchains() {
+void OpenXrProgram::CreateSwapchains(
+    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
   CHECK(m_session != XR_NULL_HANDLE);
 
   // Read graphics properties for preferred swapchain length and logging.
@@ -485,9 +656,9 @@ void OpenXrProgram::CreateSwapchains() {
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
 
-  m_projectionLayer = ProjectionLayer::Create(m_instance, m_systemId, m_session,
-                                              m_options.Parsed.ViewConfigType,
-                                              m_graphicsPlugin);
+  m_projectionLayer =
+      ProjectionLayer::Create(m_instance, m_systemId, m_session,
+                              m_options.Parsed.ViewConfigType, vulkan);
 }
 
 void OpenXrProgram::PollEvents(bool *exitRenderLoop, bool *requestRestart) {
@@ -584,7 +755,9 @@ void OpenXrProgram::PollActions() {
   }
 }
 
-void OpenXrProgram::RenderFrame(const Vec4 &clearColor) {
+void OpenXrProgram::RenderFrame(
+    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+    const Vec4 &clearColor) {
   CHECK(m_session != XR_NULL_HANDLE);
 
   XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
@@ -599,8 +772,7 @@ void OpenXrProgram::RenderFrame(const Vec4 &clearColor) {
     if (auto layer = m_projectionLayer->RenderLayer(
             m_session, frameState.predictedDisplayTime, m_appSpace,
             m_options.Parsed.ViewConfigType, m_visualizedSpaces, m_input,
-            m_graphicsPlugin, clearColor,
-            m_options.Parsed.EnvironmentBlendMode)) {
+            vulkan, clearColor, m_options.Parsed.EnvironmentBlendMode)) {
       layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
     }
   }
@@ -630,169 +802,6 @@ XrEnvironmentBlendMode OpenXrProgram::GetPreferredBlendMode() const {
   }
   THROW("No acceptable blend mode returned from the "
         "xrEnumerateEnvironmentBlendModes");
-}
-
-void OpenXrProgram::LogInstanceInfo() {
-  CHECK(m_instance != XR_NULL_HANDLE);
-
-  XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};
-  CHECK_XRCMD(xrGetInstanceProperties(m_instance, &instanceProperties));
-
-  Log::Write(
-      Log::Level::Info,
-      Fmt("Instance RuntimeName=%s RuntimeVersion=%s",
-          instanceProperties.runtimeName,
-          GetXrVersionString(instanceProperties.runtimeVersion).c_str()));
-}
-
-// OpenXR extensions required by this graphics API.
-static std::vector<std::string> GetInstanceExtensions() {
-  return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
-}
-
-void OpenXrProgram::CreateInstanceInternal(
-    const std::vector<std::string> &platformExtensions, void *next) {
-  CHECK(m_instance == XR_NULL_HANDLE);
-
-  // Create union of extensions required by platform and graphics plugins.
-  std::vector<const char *> extensions;
-
-  // Transform platform and graphics extension std::strings to C strings.
-  std::transform(platformExtensions.begin(), platformExtensions.end(),
-                 std::back_inserter(extensions),
-                 [](const std::string &ext) { return ext.c_str(); });
-
-  auto graphicsExtensions = GetInstanceExtensions();
-  std::transform(graphicsExtensions.begin(), graphicsExtensions.end(),
-                 std::back_inserter(extensions),
-                 [](const std::string &ext) { return ext.c_str(); });
-
-  XrInstanceCreateInfo createInfo{
-      .type = XR_TYPE_INSTANCE_CREATE_INFO,
-      .next = next,
-      .createFlags = 0,
-      .applicationInfo =
-          {.applicationName = "HelloXR",
-           // Current version is 1.1.x, but hello_xr only requires 1.0.x
-           .applicationVersion = {},
-           .engineName = {},
-           .engineVersion = {},
-           .apiVersion = XR_API_VERSION_1_0},
-      .enabledApiLayerCount = 0,
-      .enabledApiLayerNames = nullptr,
-      .enabledExtensionCount = (uint32_t)extensions.size(),
-      .enabledExtensionNames = extensions.data(),
-  };
-  CHECK_XRCMD(xrCreateInstance(&createInfo, &m_instance));
-}
-
-void OpenXrProgram::LogViewConfigurations() {
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_systemId != XR_NULL_SYSTEM_ID);
-
-  uint32_t viewConfigTypeCount;
-  CHECK_XRCMD(xrEnumerateViewConfigurations(m_instance, m_systemId, 0,
-                                            &viewConfigTypeCount, nullptr));
-  std::vector<XrViewConfigurationType> viewConfigTypes(viewConfigTypeCount);
-  CHECK_XRCMD(xrEnumerateViewConfigurations(
-      m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount,
-      viewConfigTypes.data()));
-  CHECK((uint32_t)viewConfigTypes.size() == viewConfigTypeCount);
-
-  Log::Write(Log::Level::Info, Fmt("Available View Configuration Types: (%d)",
-                                   viewConfigTypeCount));
-  for (XrViewConfigurationType viewConfigType : viewConfigTypes) {
-    Log::Write(
-        Log::Level::Verbose,
-        Fmt("  View Configuration Type: %s %s", to_string(viewConfigType),
-            viewConfigType == m_options.Parsed.ViewConfigType ? "(Selected)"
-                                                              : ""));
-
-    XrViewConfigurationProperties viewConfigProperties{
-        .type = XR_TYPE_VIEW_CONFIGURATION_PROPERTIES,
-    };
-    CHECK_XRCMD(xrGetViewConfigurationProperties(
-        m_instance, m_systemId, viewConfigType, &viewConfigProperties));
-
-    Log::Write(
-        Log::Level::Verbose,
-        Fmt("  View configuration FovMutable=%s",
-            viewConfigProperties.fovMutable == XR_TRUE ? "True" : "False"));
-
-    uint32_t viewCount;
-    CHECK_XRCMD(xrEnumerateViewConfigurationViews(
-        m_instance, m_systemId, viewConfigType, 0, &viewCount, nullptr));
-    if (viewCount > 0) {
-      std::vector<XrViewConfigurationView> views(
-          viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
-      CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId,
-                                                    viewConfigType, viewCount,
-                                                    &viewCount, views.data()));
-
-      for (uint32_t i = 0; i < views.size(); i++) {
-        const XrViewConfigurationView &view = views[i];
-
-        Log::Write(Log::Level::Verbose,
-                   Fmt("    View [%d]: Recommended Width=%d Height=%d "
-                       "SampleCount=%d",
-                       i, view.recommendedImageRectWidth,
-                       view.recommendedImageRectHeight,
-                       view.recommendedSwapchainSampleCount));
-        Log::Write(Log::Level::Verbose,
-                   Fmt("    View [%d]:     Maximum Width=%d Height=%d "
-                       "SampleCount=%d",
-                       i, view.maxImageRectWidth, view.maxImageRectHeight,
-                       view.maxSwapchainSampleCount));
-      }
-    } else {
-      Log::Write(Log::Level::Error, Fmt("Empty view configuration type"));
-    }
-
-    LogEnvironmentBlendMode(viewConfigType);
-  }
-}
-
-void OpenXrProgram::LogEnvironmentBlendMode(XrViewConfigurationType type) {
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_systemId != 0);
-
-  uint32_t count;
-  CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, type, 0,
-                                               &count, nullptr));
-  CHECK(count > 0);
-
-  Log::Write(Log::Level::Info,
-             Fmt("Available Environment Blend Mode count : (%d)", count));
-
-  std::vector<XrEnvironmentBlendMode> blendModes(count);
-  CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(
-      m_instance, m_systemId, type, count, &count, blendModes.data()));
-
-  bool blendModeFound = false;
-  for (XrEnvironmentBlendMode mode : blendModes) {
-    const bool blendModeMatch = (mode == m_options.Parsed.EnvironmentBlendMode);
-    Log::Write(Log::Level::Info,
-               Fmt("Environment Blend Mode (%s) : %s", to_string(mode),
-                   blendModeMatch ? "(Selected)" : ""));
-    blendModeFound |= blendModeMatch;
-  }
-  CHECK(blendModeFound);
-}
-
-void OpenXrProgram::LogReferenceSpaces() {
-  CHECK(m_session != XR_NULL_HANDLE);
-
-  uint32_t spaceCount;
-  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, nullptr));
-  std::vector<XrReferenceSpaceType> spaces(spaceCount);
-  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount,
-                                         spaces.data()));
-
-  Log::Write(Log::Level::Info,
-             Fmt("Available reference spaces: %d", spaceCount));
-  for (XrReferenceSpaceType space : spaces) {
-    Log::Write(Log::Level::Verbose, Fmt("  Name: %s", to_string(space)));
-  }
 }
 
 void OpenXrProgram::InitializeActions() {
