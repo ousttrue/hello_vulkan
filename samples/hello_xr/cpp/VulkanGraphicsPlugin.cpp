@@ -11,6 +11,7 @@
 #include "vulkan_debug_object_namer.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <vulkan/vulkan_core.h>
 
 #ifdef USE_ONLINE_VULKAN_SHADERC
 #include <shaderc/shaderc.hpp>
@@ -193,10 +194,7 @@ int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
   return *swapchainFormatIt;
 }
 
-void VulkanGraphicsPlugin::RenderView(
-    const std::shared_ptr<SwapchainImageContext> &swapchainContext,
-    uint32_t imageIndex, const Vec4 &clearColor,
-    const std::vector<Mat4> &cubes) {
+VkCommandBuffer VulkanGraphicsPlugin::BeginCommand() {
   // CHECK(layerView.subImage.imageArrayIndex ==
   //       0); // Texture arrays not supported.
 
@@ -204,10 +202,18 @@ void VulkanGraphicsPlugin::RenderView(
   m_cmdBuffer->Wait();
   m_cmdBuffer->Reset();
   m_cmdBuffer->Begin();
+  return m_cmdBuffer->buf;
+}
+
+void VulkanGraphicsPlugin::RenderView(
+    VkCommandBuffer cmd,
+    const std::shared_ptr<SwapchainImageContext> &swapchainContext,
+    uint32_t imageIndex, const Vec4 &clearColor,
+    const std::vector<Mat4> &cubes) {
 
   // Ensure depth is in the right layout
   swapchainContext->m_depthBuffer->TransitionLayout(
-      m_cmdBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+      cmd, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
   // Bind and clear eye render target
   static std::array<VkClearValue, 2> clearValues;
@@ -217,39 +223,34 @@ void VulkanGraphicsPlugin::RenderView(
   clearValues[0].color.float32[3] = clearColor.w;
   clearValues[1].depthStencil.depth = 1.0f;
   clearValues[1].depthStencil.stencil = 0;
-
   VkRenderPassBeginInfo renderPassBeginInfo{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .clearValueCount = static_cast<uint32_t>(clearValues.size()),
       .pClearValues = clearValues.data(),
   };
-
   swapchainContext->BindRenderTarget(imageIndex, &renderPassBeginInfo);
+  vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBeginRenderPass(m_cmdBuffer->buf, &renderPassBeginInfo,
-                       VK_SUBPASS_CONTENTS_INLINE);
-
-  vkCmdBindPipeline(m_cmdBuffer->buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     swapchainContext->m_pipe->pipe);
 
   // Bind index and vertex buffers
-  vkCmdBindIndexBuffer(m_cmdBuffer->buf, m_drawBuffer->idxBuf, 0,
-                       VK_INDEX_TYPE_UINT16);
+  vkCmdBindIndexBuffer(cmd, m_drawBuffer->idxBuf, 0, VK_INDEX_TYPE_UINT16);
   VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(m_cmdBuffer->buf, 0, 1, &m_drawBuffer->vtxBuf,
-                         &offset);
+  vkCmdBindVertexBuffers(cmd, 0, 1, &m_drawBuffer->vtxBuf, &offset);
 
   // Render each cube
   for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(m_cmdBuffer->buf, m_pipelineLayout->layout,
+    vkCmdPushConstants(cmd, m_pipelineLayout->layout,
                        VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
-    vkCmdDrawIndexed(m_cmdBuffer->buf, m_drawBuffer->count.idx, 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmd, m_drawBuffer->count.idx, 1, 0, 0, 0);
   }
+}
 
-  vkCmdEndRenderPass(m_cmdBuffer->buf);
-
+void VulkanGraphicsPlugin::EndCommand(VkCommandBuffer cmd) {
+  vkCmdEndRenderPass(cmd);
   m_cmdBuffer->End();
   m_cmdBuffer->Exec(m_vkQueue);
 

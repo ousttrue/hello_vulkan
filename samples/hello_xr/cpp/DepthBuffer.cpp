@@ -92,22 +92,21 @@ std::shared_ptr<DepthBuffer> DepthBuffer::Create(
   return ptr;
 }
 
-void DepthBuffer::TransitionLayout(const std::shared_ptr<CmdBuffer> &cmdBuffer,
+void DepthBuffer::TransitionLayout(VkCommandBuffer cmd,
                                    VkImageLayout newLayout) {
-  if (newLayout == m_vkLayout) {
-    return;
+  if (newLayout != m_vkLayout) {
+    VkImageMemoryBarrier depthBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+        .oldLayout = m_vkLayout,
+        .newLayout = newLayout,
+        .image = depthImage,
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &depthBarrier);
+    m_vkLayout = newLayout;
   }
-
-  VkImageMemoryBarrier depthBarrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-  depthBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  depthBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-  depthBarrier.oldLayout = m_vkLayout;
-  depthBarrier.newLayout = newLayout;
-  depthBarrier.image = depthImage;
-  depthBarrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
-  vkCmdPipelineBarrier(cmdBuffer->buf, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                       VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
-                       nullptr, 1, &depthBarrier);
-
-  m_vkLayout = newLayout;
 }

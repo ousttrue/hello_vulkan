@@ -88,9 +88,16 @@ int main(int argc, char *argv[]) {
             auto info = projectionLayer->AcquireSwapchainForView(i);
             projectionLayerViews.push_back(info.CompositionLayer);
 
-            vulkan->RenderView(info.Swapchain, info.ImageIndex,
-                               options.GetBackgroundClearColor(),
-                               scene.CalcCubeMatrices(info.calcViewProjection()));
+            {
+              auto cmd = vulkan->BeginCommand();
+
+              vulkan->RenderView(
+                  cmd, info.Swapchain, info.ImageIndex,
+                  options.GetBackgroundClearColor(),
+                  scene.CalcCubeMatrices(info.calcViewProjection()));
+
+              vulkan->EndCommand(cmd);
+            }
 
             projectionLayer->EndSwapchain(
                 info.CompositionLayer.subImage.swapchain);

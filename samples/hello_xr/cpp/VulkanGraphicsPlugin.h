@@ -36,7 +36,11 @@ public:
   SelectColorSwapchainFormat(const std::vector<int64_t> &runtimeFormats) const;
 
   // Render to a swapchain image for a projection view.
+  VkCommandBuffer BeginCommand();
+  void EndCommand(VkCommandBuffer cmd);
+
   void RenderView(
+      VkCommandBuffer cmd,
       const std::shared_ptr<class SwapchainImageContext> &swapchainContext,
       uint32_t imageIndex, const Vec4 &clearColor,
       const std::vector<Mat4> &cubes);

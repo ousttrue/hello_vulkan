@@ -21,8 +21,7 @@ public:
          VkExtent2D size, VkFormat depthFormat,
          VkSampleCountFlagBits sampleCount);
 
-  void TransitionLayout(const std::shared_ptr<class CmdBuffer> &cmdBuffer,
-                        VkImageLayout newLayout);
+  void TransitionLayout(VkCommandBuffer cmd, VkImageLayout newLayout);
   DepthBuffer(const DepthBuffer &) = delete;
   DepthBuffer &operator=(const DepthBuffer &) = delete;
 };
