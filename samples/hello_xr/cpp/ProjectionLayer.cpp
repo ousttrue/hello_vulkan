@@ -146,37 +146,9 @@ ProjectionLayer::AllocateSwapchainImageStructs(
   return swapchainImageContext->m_bases;
 }
 
-static Cube MakeCube(XrPosef pose, XrVector3f scale) {
-  return Cube{
-      .Translaton =
-          {
-              pose.position.x,
-              pose.position.y,
-              pose.position.z,
-          },
-      .Rotation =
-          {
-              pose.orientation.x,
-              pose.orientation.y,
-              pose.orientation.z,
-              pose.orientation.w,
-          },
-      .Scaling =
-          {
-              scale.x,
-              scale.y,
-              scale.z,
-          },
-  };
-}
-
-XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
-    XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-    XrViewConfigurationType viewConfigType,
-    const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-    const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode) {
-
+bool ProjectionLayer::UpdateLocateView(XrSession session, XrSpace appSpace,
+                                       XrTime predictedDisplayTime,
+                                       XrViewConfigurationType viewConfigType) {
   // uint32_t viewCapacityInput = (uint32_t);
 
   XrViewLocateInfo viewLocateInfo{
@@ -194,10 +166,11 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
   auto res = xrLocateViews(session, &viewLocateInfo, &viewState,
                            static_cast<uint32_t>(m_views.size()),
                            &viewCountOutput, m_views.data());
+
   CHECK_XRRESULT(res, "xrLocateViews");
   if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
       (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-    return {}; // There is no valid tracking poses for the views.
+    return false; // There is no valid tracking poses for the views.
   }
 
   CHECK(viewCountOutput == m_views.size());
@@ -206,78 +179,58 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
 
   m_projectionLayerViews.resize(viewCountOutput);
 
-  // For each locatable space that we want to visualize, render a 25cm cube.
-  std::vector<Cube> cubes;
+  return true;
+}
 
-  for (XrSpace visualizedSpace : visualizedSpaces) {
-    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    res = xrLocateSpace(visualizedSpace, appSpace, predictedDisplayTime,
-                        &spaceLocation);
-    CHECK_XRRESULT(res, "xrLocateSpace");
-    if (XR_UNQUALIFIED_SUCCESS(res)) {
-      if ((spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-          (spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        cubes.push_back(MakeCube(spaceLocation.pose, {0.25f, 0.25f, 0.25f}));
-      }
-    } else {
-      Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized "
-                                          "reference space in app space: %d",
-                                          res));
-    }
+static std::vector<Mat4> calcCubeMatrices(const std::vector<Cube> &cubes,
+                                          const XrMatrix4x4f &vp) {
+  std::vector<Mat4> matrices;
+  for (auto &cube : cubes) {
+    // Compute the model-view-projection transform and push it.
+    XrMatrix4x4f model;
+    XrMatrix4x4f_CreateTranslationRotationScale(
+        &model, (XrVector3f *)&cube.Translaton, (XrQuaternionf *)&cube.Rotation,
+        (XrVector3f *)&cube.Scaling);
+    Mat4 mvp;
+    XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
+    matrices.push_back(mvp);
   }
+  return matrices;
+}
 
-  // Render a 10cm cube scaled by grabAction for each hand. Note renderHand
-  // will only be true when the application has focus.
-  for (auto hand : {Side::LEFT, Side::RIGHT}) {
-    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    res = xrLocateSpace(input.handSpace[hand], appSpace, predictedDisplayTime,
-                        &spaceLocation);
-    CHECK_XRRESULT(res, "xrLocateSpace");
-    if (XR_UNQUALIFIED_SUCCESS(res)) {
-      if ((spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-          (spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        float scale = 0.1f * input.handScale[hand];
-        cubes.push_back(MakeCube(spaceLocation.pose, {scale, scale, scale}));
-      }
-    } else {
-      // Tracking loss is expected when the hand is not active so only log a
-      // message if the hand is active.
-      if (input.handActive[hand] == XR_TRUE) {
-        const char *handName[] = {"left", "right"};
-        Log::Write(Log::Level::Verbose,
-                   Fmt("Unable to locate %s hand action space in app space: %d",
-                       handName[hand], res));
-      }
-    }
-  }
+XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
+    XrSpace appSpace, const std::vector<Cube> &cubes,
+    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
+    const Vec4 &clearColor, XrEnvironmentBlendMode environmentBlendMode) {
 
   // Render view to the appropriate part of the swapchain image.
-  for (uint32_t i = 0; i < viewCountOutput; i++) {
+  for (uint32_t i = 0; i < m_views.size(); i++) {
     // Each view has a separate swapchain which is acquired, rendered to, and
     // released.
     const Swapchain viewSwapchain = m_swapchains[i];
 
     XrSwapchainImageAcquireInfo acquireInfo{
-        XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-
+        .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
+    };
     uint32_t swapchainImageIndex;
     CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
                                         &swapchainImageIndex));
 
-    XrSwapchainImageWaitInfo waitInfo{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-    waitInfo.timeout = XR_INFINITE_DURATION;
+    XrSwapchainImageWaitInfo waitInfo{
+        .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
+        .timeout = XR_INFINITE_DURATION,
+    };
     CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
 
-    m_projectionLayerViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
-    m_projectionLayerViews[i].pose = m_views[i].pose;
-    m_projectionLayerViews[i].fov = m_views[i].fov;
-    m_projectionLayerViews[i].subImage.swapchain = viewSwapchain.handle;
-    m_projectionLayerViews[i].subImage.imageRect.offset = {0, 0};
-    m_projectionLayerViews[i].subImage.imageRect.extent = viewSwapchain.extent;
+    m_projectionLayerViews[i] = {
+        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+        .pose = m_views[i].pose,
+        .fov = m_views[i].fov,
+        .subImage = {.swapchain = viewSwapchain.handle,
+                     .imageRect = {
+                         .offset = {0, 0},
+                         .extent = viewSwapchain.extent,
+                     }}};
 
     const XrSwapchainImageBaseHeader *const swapchainImage =
         m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
@@ -299,17 +252,7 @@ XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
     XrMatrix4x4f vp;
     XrMatrix4x4f_Multiply(&vp, &proj, &view);
 
-    std::vector<Mat4> matrices;
-    for (auto &cube : cubes) {
-      // Compute the model-view-projection transform and push it.
-      XrMatrix4x4f model;
-      XrMatrix4x4f_CreateTranslationRotationScale(
-          &model, (XrVector3f *)&cube.Translaton,
-          (XrQuaternionf *)&cube.Rotation, (XrVector3f *)&cube.Scaling);
-      Mat4 mvp;
-      XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
-      matrices.push_back(mvp);
-    }
+    auto matrices = calcCubeMatrices(cubes, vp);
     vulkan->RenderView(swapchainContext, imageIndex, clearColor, matrices);
 
     XrSwapchainImageReleaseInfo releaseInfo{

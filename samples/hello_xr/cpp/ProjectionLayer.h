@@ -20,6 +20,7 @@ class ProjectionLayer {
            std::shared_ptr<SwapchainImageContext>>
       m_swapchainImageContextMap;
 
+public:
   struct Swapchain {
     XrSwapchain handle;
     XrExtent2Di extent;
@@ -49,10 +50,13 @@ public:
       VkSampleCountFlagBits sampleCount,
       const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
-  XrCompositionLayerProjection *RenderLayer(
-      XrSession session, XrTime predictedDisplayTime, XrSpace appSpace,
-      XrViewConfigurationType viewConfigType,
-      const std::vector<XrSpace> &visualizedSpaces, const InputState &input,
-      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-      const Vec4 clearColor, XrEnvironmentBlendMode environmentBlendMode);
+  bool UpdateLocateView(XrSession session, XrSpace appSpace,
+                        XrTime predictedDisplayTime,
+                        XrViewConfigurationType viewConfigType);
+
+  XrCompositionLayerProjection *
+  RenderLayer(XrSpace appSpace, const std::vector<Cube> &cubes,
+              const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
+              const Vec4 &clearColor,
+              XrEnvironmentBlendMode environmentBlendMode);
 };

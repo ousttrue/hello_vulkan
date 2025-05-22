@@ -1,4 +1,4 @@
-#include "VulkanGraphicsPlugin.h"
+#include "CubeScene.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
@@ -46,10 +46,11 @@ int main(int argc, char *argv[]) {
   }
 
   // Create VkDevice by OpenXR.
-  auto vulkan = program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
-                            getVulkanDeviceExtensions());
+  auto vulkan = program->InitializeDevice(getVulkanLayers(),
+                                          getVulkanInstanceExtensions(),
+                                          getVulkanDeviceExtensions());
   program->InitializeSession(vulkan);
-  program->CreateSwapchains(vulkan);
+  auto projectionLayer = program->CreateSwapchains(vulkan);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
@@ -61,7 +62,34 @@ int main(int argc, char *argv[]) {
 
     if (program->IsSessionRunning()) {
       program->PollActions();
-      program->RenderFrame(vulkan, options.GetBackgroundClearColor());
+
+      // program->RenderFrame(vulkan, options.GetBackgroundClearColor());
+      std::vector<XrCompositionLayerBaseHeader *> layers;
+      auto frameState = program->BeginFrame();
+      if (frameState.shouldRender == XR_TRUE) {
+        if (projectionLayer->UpdateLocateView(program->m_session,
+                                              program->m_appSpace,
+                                              frameState.predictedDisplayTime,
+                                              options.Parsed.ViewConfigType)) {
+
+          CubeScene scene;
+          scene.addSpaceCubes(program->m_appSpace,
+                              frameState.predictedDisplayTime,
+                              program->m_visualizedSpaces);
+          scene.addHandCubes(program->m_appSpace,
+                             frameState.predictedDisplayTime, program->m_input);
+
+          if (auto layer = projectionLayer->RenderLayer(
+                  program->m_appSpace, scene.cubes, vulkan,
+                  options.GetBackgroundClearColor(),
+                  options.Parsed.EnvironmentBlendMode)) {
+            layers.push_back(
+                reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+          }
+        }
+      }
+      program->EndFrame(frameState.predictedDisplayPeriod, layers);
+
     } else {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));

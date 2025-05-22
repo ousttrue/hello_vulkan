@@ -4,6 +4,7 @@
 
 #include <openxr/openxr_platform.h>
 
+#include "CubeScene.h"
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
@@ -177,20 +178,29 @@ void android_main(struct android_app *app) {
       program->PollActions();
 
       std::vector<XrCompositionLayerBaseHeader *> layers;
-
       auto frameState = program->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
-        if (auto layer = projectionLayer->RenderLayer(
-                program->m_session, frameState.predictedDisplayTime,
-                program->m_appSpace, options.Parsed.ViewConfigType,
-                program->m_visualizedSpaces, program->m_input, vulkan,
-                options.GetBackgroundClearColor(),
-                options.Parsed.EnvironmentBlendMode)) {
-          layers.push_back(
-              reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+        if (projectionLayer->UpdateLocateView(program->m_session,
+                                              program->m_appSpace,
+                                              frameState.predictedDisplayTime,
+                                              options.Parsed.ViewConfigType)) {
+
+          CubeScene scene;
+          scene.addSpaceCubes(program->m_appSpace,
+                              frameState.predictedDisplayTime,
+                              program->m_visualizedSpaces);
+          scene.addHandCubes(program->m_appSpace,
+                             frameState.predictedDisplayTime, program->m_input);
+
+          if (auto layer = projectionLayer->RenderLayer(
+                  program->m_appSpace, scene.cubes, vulkan,
+                  options.GetBackgroundClearColor(),
+                  options.Parsed.EnvironmentBlendMode)) {
+            layers.push_back(
+                reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+          }
         }
       }
-
       program->EndFrame(frameState.predictedDisplayPeriod, layers);
     }
 
