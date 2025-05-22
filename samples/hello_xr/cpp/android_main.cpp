@@ -139,7 +139,6 @@ void android_main(struct android_app *app) {
     if (!options.UpdateOptionsFromSystemProperties()) {
       ShowHelp();
     }
-    platformPlugin->UpdateOptions(options);
 
     program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
                               getVulkanDeviceExtensions());

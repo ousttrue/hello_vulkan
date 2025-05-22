@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "check.h"
+#include "options.h"
 #include "platformplugin.h"
 #include "to_string.h"
 #include <combaseapi.h>
@@ -40,8 +41,6 @@ struct Win32PlatformPlugin : public IPlatformPlugin {
   XrBaseInStructure *GetInstanceCreateExtension() const override {
     return nullptr;
   }
-
-  void UpdateOptions(const struct Options & /*unused*/) override {}
 };
 } // namespace
 

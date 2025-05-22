@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <memory>
 #include <openxr/openxr_reflection.h>
 #include <string>
 #include <vector>
@@ -18,7 +17,4 @@ struct IPlatformPlugin {
 
   // OpenXR instance-level extensions required by this platform.
   virtual std::vector<std::string> GetInstanceExtensions() const = 0;
-
-  // Perform required steps after updating Options
-  virtual void UpdateOptions(const struct Options &options) = 0;
 };

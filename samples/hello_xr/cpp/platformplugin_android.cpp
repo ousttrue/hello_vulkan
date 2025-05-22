@@ -48,8 +48,6 @@ struct AndroidPlatformPlugin : public IPlatformPlugin {
     return (XrBaseInStructure *)&instanceCreateInfoAndroid;
   }
 
-  void UpdateOptions(const struct Options & /*unused*/) override {}
-
   XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid;
 };
 } // namespace

@@ -57,7 +57,6 @@ int main(int argc, char *argv[]) {
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
     ShowHelp();
   }
-  platformPlugin->UpdateOptions(options);
 
   program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
                             getVulkanDeviceExtensions());
