@@ -4,7 +4,7 @@
 
 #pragma once
 #include "InputState.h"
-#include "ProjectionLayer.h"
+#include <common/xr_linear.h>
 #include <memory>
 #include <set>
 #include <string>
@@ -13,12 +13,13 @@
 
 class OpenXrProgram {
   const struct Options &m_options;
+  XrInstance m_instance;
+  XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
+  const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
 public:
-  XrInstance m_instance;
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
-  XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
 
   std::vector<XrSpace> m_visualizedSpaces;
 
@@ -29,9 +30,8 @@ public:
   XrEventDataBuffer m_eventDataBuffer;
   InputState m_input;
 
-  const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
-
-  OpenXrProgram(const Options &options, XrInstance instance);
+  OpenXrProgram(const Options &options, XrInstance instance,
+                XrSystemId systemId);
 
 public:
   ~OpenXrProgram();
@@ -53,8 +53,7 @@ public:
   // Create a Swapchain which requires coordinating with the graphics plugin to
   // select the format, getting the system graphics properties, getting the view
   // configuration and grabbing the resulting swapchain images.
-  std::shared_ptr<ProjectionLayer>
-  CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
+  void CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
 
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);
@@ -93,4 +92,68 @@ private:
 
   void LogActionSourceName(XrAction action,
                            const std::string &actionName) const;
+
+  int64_t m_colorSwapchainFormat{-1};
+
+  std::vector<XrViewConfigurationView> m_configViews;
+  std::vector<XrView> m_views;
+
+  std::list<std::shared_ptr<class SwapchainImageContext>>
+      m_swapchainImageContexts;
+  std::map<const XrSwapchainImageBaseHeader *,
+           std::shared_ptr<SwapchainImageContext>>
+      m_swapchainImageContextMap;
+
+public:
+  struct Swapchain {
+    XrSwapchain handle;
+    XrExtent2Di extent;
+  };
+  std::vector<Swapchain> m_swapchains;
+  std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
+      m_swapchainImages;
+
+  // static std::shared_ptr<ProjectionLayer>
+  // Create(XrInstance instance, XrSystemId systemId, XrSession session,
+  //        XrViewConfigurationType viewConfigurationType,
+  //        const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
+
+  bool LocateView(XrSession session, XrSpace appSpace,
+                  XrTime predictedDisplayTime,
+                  XrViewConfigurationType viewConfigType,
+                  uint32_t *viewCountOutput);
+
+  struct ViewSwapchainInfo {
+    std::shared_ptr<SwapchainImageContext> Swapchain;
+    uint32_t ImageIndex;
+    XrCompositionLayerProjectionView CompositionLayer;
+
+    XrMatrix4x4f calcViewProjection() const {
+      // Compute the view-projection transform. Note all matrixes
+      // (including OpenXR's) are column-major, right-handed.
+      XrMatrix4x4f proj;
+      XrMatrix4x4f_CreateProjectionFov(
+          &proj, GRAPHICS_VULKAN, this->CompositionLayer.fov, 0.05f, 100.0f);
+      XrMatrix4x4f toView;
+      XrMatrix4x4f_CreateFromRigidTransform(&toView,
+                                            &this->CompositionLayer.pose);
+      XrMatrix4x4f view;
+      XrMatrix4x4f_InvertRigidBody(&view, &toView);
+      XrMatrix4x4f vp;
+      XrMatrix4x4f_Multiply(&vp, &proj, &view);
+
+      return vp;
+    }
+  };
+  ViewSwapchainInfo AcquireSwapchainForView(uint32_t viewIndex);
+  void EndSwapchain(XrSwapchain swapchain);
+
+private:
+  // Allocate space for the swapchain image structures. These are different for
+  // each graphics API. The returned pointers are valid for the lifetime of the
+  // graphics plugin.
+  std::vector<XrSwapchainImageBaseHeader *> AllocateSwapchainImageStructs(
+      uint32_t capacity, VkExtent2D size, VkFormat format,
+      VkSampleCountFlagBits sampleCount,
+      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 };

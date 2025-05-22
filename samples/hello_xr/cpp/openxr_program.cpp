@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <cstdarg>
 #include <vulkan/vulkan.h>
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android_native_app_glue.h>
@@ -12,7 +11,7 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "ProjectionLayer.h"
+#include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
@@ -150,32 +149,12 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
 //
 // OpenXrProgram
 //
-OpenXrProgram::OpenXrProgram(const Options &options, XrInstance instance)
-    : m_options(options), m_instance(instance),
+OpenXrProgram::OpenXrProgram(const Options &options, XrInstance instance,
+                             XrSystemId systemId)
+    : m_options(options), m_instance(instance), m_systemId(systemId),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
                              XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
                              XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {
-
-  CHECK(m_instance != XR_NULL_HANDLE);
-
-  XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};
-  CHECK_XRCMD(xrGetInstanceProperties(m_instance, &instanceProperties));
-
-  Log::Write(
-      Log::Level::Info,
-      Fmt("Instance RuntimeName=%s RuntimeVersion=%s",
-          instanceProperties.runtimeName,
-          GetXrVersionString(instanceProperties.runtimeVersion).c_str()));
-
-  // Select a System for the view configuration specified in the Options
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_systemId == XR_NULL_SYSTEM_ID);
-
-  XrSystemGetInfo systemInfo{
-      .type = XR_TYPE_SYSTEM_GET_INFO,
-      .formFactor = m_options.Parsed.FormFactor,
-  };
-  CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
 
   Log::Write(Log::Level::Verbose,
              Fmt("Using system %d for form factor %s", m_systemId,
@@ -185,6 +164,10 @@ OpenXrProgram::OpenXrProgram(const Options &options, XrInstance instance)
 }
 
 OpenXrProgram::~OpenXrProgram() {
+  for (Swapchain swapchain : m_swapchains) {
+    xrDestroySwapchain(swapchain.handle);
+  }
+
   if (m_input.actionSet != XR_NULL_HANDLE) {
     for (auto hand : {Side::LEFT, Side::RIGHT}) {
       xrDestroySpace(m_input.handSpace[hand]);
@@ -250,9 +233,31 @@ OpenXrProgram::Create(const Options &options,
   };
   XrInstance instance;
   CHECK_XRCMD(xrCreateInstance(&createInfo, &instance));
+  CHECK(instance != XR_NULL_HANDLE);
 
-  auto ptr =
-      std::shared_ptr<OpenXrProgram>(new OpenXrProgram(options, instance));
+  XrInstanceProperties instanceProperties{XR_TYPE_INSTANCE_PROPERTIES};
+  CHECK_XRCMD(xrGetInstanceProperties(instance, &instanceProperties));
+
+  Log::Write(
+      Log::Level::Info,
+      Fmt("Instance RuntimeName=%s RuntimeVersion=%s",
+          instanceProperties.runtimeName,
+          GetXrVersionString(instanceProperties.runtimeVersion).c_str()));
+
+  // Select a System for the view configuration specified in the Options
+  CHECK(instance != XR_NULL_HANDLE);
+
+  XrSystemGetInfo systemInfo{
+      .type = XR_TYPE_SYSTEM_GET_INFO,
+      .formFactor = options.Parsed.FormFactor,
+  };
+  XrSystemId systemId;
+  if (xrGetSystem(instance, &systemInfo, &systemId) != XR_SUCCESS) {
+    return {};
+  }
+
+  auto ptr = std::shared_ptr<OpenXrProgram>(
+      new OpenXrProgram(options, instance, systemId));
 
   return ptr;
 }
@@ -621,7 +626,7 @@ void OpenXrProgram::InitializeSession(
   }
 }
 
-std::shared_ptr<ProjectionLayer> OpenXrProgram::CreateSwapchains(
+void OpenXrProgram::CreateSwapchains(
     const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
   CHECK(m_session != XR_NULL_HANDLE);
 
@@ -657,8 +662,117 @@ std::shared_ptr<ProjectionLayer> OpenXrProgram::CreateSwapchains(
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
 
-  return ProjectionLayer::Create(m_instance, m_systemId, m_session,
-                                 m_options.Parsed.ViewConfigType, vulkan);
+  // return ProjectionLayer::Create(m_instance, m_systemId, m_session,
+  //                                m_options.Parsed.ViewConfigType, vulkan);
+  // }
+  // std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
+  //     XrInstance instance, XrSystemId systemId, XrSession session,
+  //     XrViewConfigurationType viewConfigurationType,
+  //     const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
+  // auto ptr = std::shared_ptr<ProjectionLayer>(new ProjectionLayer);
+
+  // Query and cache view configuration views.
+  uint32_t viewCount;
+  CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId,
+                                                m_options.Parsed.ViewConfigType,
+                                                0, &viewCount, nullptr));
+  m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+  CHECK_XRCMD(xrEnumerateViewConfigurationViews(
+      m_instance, m_systemId, m_options.Parsed.ViewConfigType, viewCount,
+      &viewCount, m_configViews.data()));
+
+  // Create and cache view buffer for xrLocateViews later.
+  m_views.resize(viewCount, {XR_TYPE_VIEW});
+
+  // Create the swapchain and get the images.
+  if (viewCount > 0) {
+    // Select a swapchain format.
+    uint32_t swapchainFormatCount;
+    CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount,
+                                            nullptr));
+    std::vector<int64_t> swapchainFormats(swapchainFormatCount);
+    CHECK_XRCMD(xrEnumerateSwapchainFormats(
+        m_session, (uint32_t)swapchainFormats.size(), &swapchainFormatCount,
+        swapchainFormats.data()));
+    CHECK(swapchainFormatCount == swapchainFormats.size());
+    m_colorSwapchainFormat =
+        vulkan->SelectColorSwapchainFormat(swapchainFormats);
+
+    // Print swapchain formats and the selected one.
+    {
+      std::string swapchainFormatsString;
+      for (int64_t format : swapchainFormats) {
+        const bool selected = format == m_colorSwapchainFormat;
+        swapchainFormatsString += " ";
+        if (selected) {
+          swapchainFormatsString += "[";
+        }
+        swapchainFormatsString += std::to_string(format);
+        if (selected) {
+          swapchainFormatsString += "]";
+        }
+      }
+      Log::Write(Log::Level::Verbose,
+                 Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
+    }
+
+    // Create a swapchain for each view.
+    for (uint32_t i = 0; i < viewCount; i++) {
+      const XrViewConfigurationView &vp = m_configViews[i];
+      Log::Write(Log::Level::Info,
+                 Fmt("Creating swapchain for view %d with dimensions "
+                     "Width=%d Height=%d SampleCount=%d",
+                     i, vp.recommendedImageRectWidth,
+                     vp.recommendedImageRectHeight,
+                     vp.recommendedSwapchainSampleCount));
+
+      // Create the swapchain.
+      XrSwapchainCreateInfo swapchainCreateInfo{
+          .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
+          .createFlags = 0,
+          .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
+                        XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
+          .format = m_colorSwapchainFormat,
+          .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+          .width = vp.recommendedImageRectWidth,
+          .height = vp.recommendedImageRectHeight,
+          .faceCount = 1,
+          .arraySize = 1,
+          .mipCount = 1,
+      };
+
+      OpenXrProgram::Swapchain swapchain{
+          .extent =
+              {
+                  .width = static_cast<int32_t>(swapchainCreateInfo.width),
+                  .height = static_cast<int32_t>(swapchainCreateInfo.height),
+              },
+      };
+      CHECK_XRCMD(xrCreateSwapchain(m_session, &swapchainCreateInfo,
+                                    &swapchain.handle));
+      m_swapchains.push_back(swapchain);
+
+      uint32_t imageCount;
+      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount,
+                                             nullptr));
+      // XXX This should really just return XrSwapchainImageBaseHeader*
+      std::vector<XrSwapchainImageBaseHeader *> swapchainImages =
+          AllocateSwapchainImageStructs(
+              imageCount,
+              {swapchainCreateInfo.width, swapchainCreateInfo.height},
+              static_cast<VkFormat>(swapchainCreateInfo.format),
+              static_cast<VkSampleCountFlagBits>(
+                  swapchainCreateInfo.sampleCount),
+              vulkan);
+      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount,
+                                             &imageCount, swapchainImages[0]));
+
+      m_swapchainImages.insert(
+          std::make_pair(swapchain.handle, std::move(swapchainImages)));
+    }
+  }
+
+  // return ptr;
 }
 
 void OpenXrProgram::PollEvents(bool *exitRenderLoop, bool *requestRestart) {
@@ -1186,4 +1300,104 @@ void OpenXrProgram::LogActionSourceName(XrAction action,
   Log::Write(Log::Level::Info,
              Fmt("%s action is bound to %s", actionName.c_str(),
                  ((!sourceName.empty()) ? sourceName.c_str() : "nothing")));
+}
+
+std::vector<XrSwapchainImageBaseHeader *>
+OpenXrProgram::AllocateSwapchainImageStructs(
+    uint32_t capacity, VkExtent2D size, VkFormat format,
+    VkSampleCountFlagBits sampleCount,
+    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
+  // Allocate and initialize the buffer of image structs (must be sequential
+  // in memory for xrEnumerateSwapchainImages). Return back an array of
+  // pointers to each swapchain image struct so the consumer doesn't need to
+  // know the type/size. Keep the buffer alive by adding it into the list of
+  // buffers.
+  m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
+      vulkan->m_vkDevice, vulkan->m_memAllocator, capacity, size, format,
+      sampleCount, vulkan->m_pipelineLayout, vulkan->m_shaderProgram,
+      vulkan->m_drawBuffer));
+  auto swapchainImageContext = m_swapchainImageContexts.back();
+
+  // Map every swapchainImage base pointer to this context
+  for (auto &base : swapchainImageContext->m_bases) {
+    m_swapchainImageContextMap[base] = swapchainImageContext;
+  }
+
+  return swapchainImageContext->m_bases;
+}
+
+bool OpenXrProgram::LocateView(XrSession session, XrSpace appSpace,
+                               XrTime predictedDisplayTime,
+                               XrViewConfigurationType viewConfigType,
+                               uint32_t *viewCountOutput) {
+  XrViewLocateInfo viewLocateInfo{
+      .type = XR_TYPE_VIEW_LOCATE_INFO,
+      .viewConfigurationType = viewConfigType,
+      .displayTime = predictedDisplayTime,
+      .space = appSpace,
+  };
+
+  XrViewState viewState{
+      .type = XR_TYPE_VIEW_STATE,
+  };
+
+  auto res = xrLocateViews(session, &viewLocateInfo, &viewState,
+                           static_cast<uint32_t>(m_views.size()),
+                           viewCountOutput, m_views.data());
+  CHECK_XRRESULT(res, "xrLocateViews");
+  if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
+      (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
+    return false; // There is no valid tracking poses for the views.
+  }
+
+  CHECK(*viewCountOutput == m_views.size());
+  CHECK(*viewCountOutput == m_configViews.size());
+  CHECK(*viewCountOutput == m_swapchains.size());
+
+  return true;
+}
+
+OpenXrProgram::ViewSwapchainInfo
+OpenXrProgram::AcquireSwapchainForView(uint32_t i) {
+  // Each view has a separate swapchain which is acquired, rendered to, and
+  // released.
+  const Swapchain viewSwapchain = m_swapchains[i];
+
+  XrSwapchainImageAcquireInfo acquireInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
+  };
+  uint32_t swapchainImageIndex;
+  CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
+                                      &swapchainImageIndex));
+
+  XrSwapchainImageWaitInfo waitInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
+      .timeout = XR_INFINITE_DURATION,
+  };
+  CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+
+  const XrSwapchainImageBaseHeader *const swapchainImage =
+      m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
+
+  ViewSwapchainInfo info = {};
+
+  info.CompositionLayer = {
+      .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+      .pose = m_views[i].pose,
+      .fov = m_views[i].fov,
+      .subImage = {
+          .swapchain = viewSwapchain.handle,
+          .imageRect = {.offset = {0, 0}, .extent = viewSwapchain.extent}}};
+
+  info.Swapchain = m_swapchainImageContextMap[swapchainImage];
+  info.ImageIndex = info.Swapchain->ImageIndex(swapchainImage);
+
+  return info;
+}
+
+void OpenXrProgram::EndSwapchain(XrSwapchain swapchain) {
+  XrSwapchainImageReleaseInfo releaseInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
+  };
+  CHECK_XRCMD(xrReleaseSwapchainImage(swapchain, &releaseInfo));
 }

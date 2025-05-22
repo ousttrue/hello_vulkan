@@ -40,6 +40,10 @@ int main(int argc, char *argv[]) {
 
   // Initialize the OpenXR program.
   auto program = OpenXrProgram::Create(options, {}, nullptr);
+  if (!program) {
+    Log::Write(Log::Level::Error, "No system. QuestLink not ready ?");
+    return 1;
+  }
 
   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
@@ -51,7 +55,7 @@ int main(int argc, char *argv[]) {
                                           getVulkanInstanceExtensions(),
                                           getVulkanDeviceExtensions());
   program->InitializeSession(vulkan);
-  auto projectionLayer = program->CreateSwapchains(vulkan);
+  program->CreateSwapchains(vulkan);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
@@ -72,10 +76,10 @@ int main(int argc, char *argv[]) {
       auto frameState = program->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
         uint32_t viewCountOutput;
-        if (projectionLayer->LocateView(program->m_session, program->m_appSpace,
-                                        frameState.predictedDisplayTime,
-                                        options.Parsed.ViewConfigType,
-                                        &viewCountOutput)) {
+        if (program->LocateView(program->m_session, program->m_appSpace,
+                                frameState.predictedDisplayTime,
+                                options.Parsed.ViewConfigType,
+                                &viewCountOutput)) {
 
           CubeScene scene;
           scene.addSpaceCubes(program->m_appSpace,
@@ -85,7 +89,7 @@ int main(int argc, char *argv[]) {
                              frameState.predictedDisplayTime, program->m_input);
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
-            auto info = projectionLayer->AcquireSwapchainForView(i);
+            auto info = program->AcquireSwapchainForView(i);
             projectionLayerViews.push_back(info.CompositionLayer);
 
             {
@@ -99,8 +103,7 @@ int main(int argc, char *argv[]) {
               vulkan->EndCommand(cmd);
             }
 
-            projectionLayer->EndSwapchain(
-                info.CompositionLayer.subImage.swapchain);
+            program->EndSwapchain(info.CompositionLayer.subImage.swapchain);
           }
 
           layer = {

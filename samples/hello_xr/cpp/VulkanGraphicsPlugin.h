@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
+#include <list>
+#include <map>
 
 // Wraps a graphics API so the main openxr program can be graphics
 // API-independent.

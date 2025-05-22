@@ -364,3 +364,4 @@ VkBool32 VulkanGraphicsPlugin::debugMessage(
 
   return VK_FALSE;
 }
+
