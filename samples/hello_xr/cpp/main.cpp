@@ -44,8 +44,7 @@ int main(int argc, char *argv[]) {
   auto platformPlugin = CreatePlatformPlugin_Win32(options);
 
   // Create graphics API implementation.
-  auto graphicsPlugin =
-      std::make_shared<VulkanGraphicsPlugin>(options, platformPlugin);
+  auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
 
   // Initialize the OpenXR program.
   auto program =
@@ -59,7 +58,6 @@ int main(int argc, char *argv[]) {
     ShowHelp();
   }
   platformPlugin->UpdateOptions(options);
-  graphicsPlugin->UpdateOptions(options);
 
   program->InitializeDevice(getVulkanLayers(), getVulkanInstanceExtensions(),
                             getVulkanDeviceExtensions());
@@ -76,7 +74,7 @@ int main(int argc, char *argv[]) {
 
     if (program->IsSessionRunning()) {
       program->PollActions();
-      program->RenderFrame();
+      program->RenderFrame(options.GetBackgroundClearColor());
     } else {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));

@@ -284,10 +284,6 @@ void VulkanGraphicsPlugin::RenderView(
 #endif
 }
 
-// void VulkanGraphicsPlugin::UpdateOptions(const Options &options) {
-//   m_clearColor = options.GetBackgroundClearColor();
-// }
-
 static std::string vkObjectTypeToString(VkObjectType objectType) {
   std::string objName;
 
