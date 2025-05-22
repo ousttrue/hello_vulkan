@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "FloatTypes.h"
 #include "InputState.h"
+#include "ProjectionLayer.h"
 #include <memory>
 #include <set>
 #include <string>
@@ -14,12 +14,11 @@
 class OpenXrProgram {
   const struct Options &m_options;
 
+public:
   XrInstance m_instance;
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
   XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
-
-  std::shared_ptr<class ProjectionLayer> m_projectionLayer;
 
   std::vector<XrSpace> m_visualizedSpaces;
 
@@ -40,8 +39,7 @@ public:
   // Create an Instance and other basic instance-level initialization.
   static std::shared_ptr<OpenXrProgram>
   Create(const Options &options,
-                 const std::vector<std::string> &platformExtensions,
-                 void *next);
+         const std::vector<std::string> &platformExtensions, void *next);
 
   // Initialize the graphics device for the selected system.
   std::shared_ptr<class VulkanGraphicsPlugin>
@@ -55,7 +53,8 @@ public:
   // Create a Swapchain which requires coordinating with the graphics plugin to
   // select the format, getting the system graphics properties, getting the view
   // configuration and grabbing the resulting swapchain images.
-  void CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
+  std::shared_ptr<ProjectionLayer>
+  CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
 
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);
@@ -72,8 +71,9 @@ public:
   void PollActions();
 
   // Create and submit a frame.
-  void RenderFrame(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
-                   const Vec4 &clearColor);
+  XrFrameState BeginFrame();
+  void EndFrame(XrTime predictedDisplayTime,
+                const std::vector<XrCompositionLayerBaseHeader *> &layers);
 
   // Get preferred blend mode based on the view configuration specified in the
   // Options

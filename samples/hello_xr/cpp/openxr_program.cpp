@@ -210,13 +210,14 @@ OpenXrProgram::~OpenXrProgram() {
 }
 
 // OpenXR extensions required by this graphics API.
-static std::vector<const char*> GetInstanceExtensions() {
+static std::vector<const char *> GetInstanceExtensions() {
   return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
 }
 
-std::shared_ptr<OpenXrProgram> OpenXrProgram::Create(
-    const Options &options, const std::vector<std::string> &platformExtensions,
-    void *next) {
+std::shared_ptr<OpenXrProgram>
+OpenXrProgram::Create(const Options &options,
+                      const std::vector<std::string> &platformExtensions,
+                      void *next) {
   LogLayersAndExtensions();
 
   // Create union of extensions required by platform and graphics plugins.
@@ -620,7 +621,7 @@ void OpenXrProgram::InitializeSession(
   }
 }
 
-void OpenXrProgram::CreateSwapchains(
+std::shared_ptr<ProjectionLayer> OpenXrProgram::CreateSwapchains(
     const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
   CHECK(m_session != XR_NULL_HANDLE);
 
@@ -656,9 +657,8 @@ void OpenXrProgram::CreateSwapchains(
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
 
-  m_projectionLayer =
-      ProjectionLayer::Create(m_instance, m_systemId, m_session,
-                              m_options.Parsed.ViewConfigType, vulkan);
+  return ProjectionLayer::Create(m_instance, m_systemId, m_session,
+                                 m_options.Parsed.ViewConfigType, vulkan);
 }
 
 void OpenXrProgram::PollEvents(bool *exitRenderLoop, bool *requestRestart) {
@@ -755,9 +755,7 @@ void OpenXrProgram::PollActions() {
   }
 }
 
-void OpenXrProgram::RenderFrame(
-    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
-    const Vec4 &clearColor) {
+XrFrameState OpenXrProgram::BeginFrame() {
   CHECK(m_session != XR_NULL_HANDLE);
 
   XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
@@ -767,18 +765,14 @@ void OpenXrProgram::RenderFrame(
   XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
   CHECK_XRCMD(xrBeginFrame(m_session, &frameBeginInfo));
 
-  std::vector<XrCompositionLayerBaseHeader *> layers;
-  if (frameState.shouldRender == XR_TRUE) {
-    if (auto layer = m_projectionLayer->RenderLayer(
-            m_session, frameState.predictedDisplayTime, m_appSpace,
-            m_options.Parsed.ViewConfigType, m_visualizedSpaces, m_input,
-            vulkan, clearColor, m_options.Parsed.EnvironmentBlendMode)) {
-      layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
-    }
-  }
+  return frameState;
+}
 
+void OpenXrProgram::EndFrame(
+    XrTime predictedDisplayTime,
+    const std::vector<XrCompositionLayerBaseHeader *> &layers) {
   XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
-  frameEndInfo.displayTime = frameState.predictedDisplayTime;
+  frameEndInfo.displayTime = predictedDisplayTime;
   frameEndInfo.environmentBlendMode = m_options.Parsed.EnvironmentBlendMode;
   frameEndInfo.layerCount = (uint32_t)layers.size();
   frameEndInfo.layers = layers.data();

@@ -136,7 +136,7 @@ void android_main(struct android_app *app) {
                                             getVulkanInstanceExtensions(),
                                             getVulkanDeviceExtensions());
     program->InitializeSession(vulkan);
-    program->CreateSwapchains(vulkan);
+    auto projectionLayer = program->CreateSwapchains(vulkan);
 
     while (app->destroyRequested == 0) {
       // Read all pending events.
@@ -175,7 +175,23 @@ void android_main(struct android_app *app) {
       }
 
       program->PollActions();
-      program->RenderFrame(vulkan, options.GetBackgroundClearColor());
+
+      std::vector<XrCompositionLayerBaseHeader *> layers;
+
+      auto frameState = program->BeginFrame();
+      if (frameState.shouldRender == XR_TRUE) {
+        if (auto layer = projectionLayer->RenderLayer(
+                program->m_session, frameState.predictedDisplayTime,
+                program->m_appSpace, options.Parsed.ViewConfigType,
+                program->m_visualizedSpaces, program->m_input, vulkan,
+                options.GetBackgroundClearColor(),
+                options.Parsed.EnvironmentBlendMode)) {
+          layers.push_back(
+              reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+        }
+      }
+
+      program->EndFrame(frameState.predictedDisplayPeriod, layers);
     }
 
     app->activity->vm->DetachCurrentThread();
