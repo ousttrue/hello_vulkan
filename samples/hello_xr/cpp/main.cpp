@@ -1,4 +1,5 @@
 #include "CubeScene.h"
+#include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
@@ -65,12 +66,16 @@ int main(int argc, char *argv[]) {
 
       // program->RenderFrame(vulkan, options.GetBackgroundClearColor());
       std::vector<XrCompositionLayerBaseHeader *> layers;
+      XrCompositionLayerProjection layer;
+      std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+
       auto frameState = program->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
-        if (projectionLayer->UpdateLocateView(program->m_session,
-                                              program->m_appSpace,
-                                              frameState.predictedDisplayTime,
-                                              options.Parsed.ViewConfigType)) {
+        uint32_t viewCountOutput;
+        if (projectionLayer->LocateView(program->m_session, program->m_appSpace,
+                                        frameState.predictedDisplayTime,
+                                        options.Parsed.ViewConfigType,
+                                        &viewCountOutput)) {
 
           CubeScene scene;
           scene.addSpaceCubes(program->m_appSpace,
@@ -79,13 +84,33 @@ int main(int argc, char *argv[]) {
           scene.addHandCubes(program->m_appSpace,
                              frameState.predictedDisplayTime, program->m_input);
 
-          if (auto layer = projectionLayer->RenderLayer(
-                  program->m_appSpace, scene.cubes, vulkan,
-                  options.GetBackgroundClearColor(),
-                  options.Parsed.EnvironmentBlendMode)) {
-            layers.push_back(
-                reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+          for (uint32_t i = 0; i < viewCountOutput; ++i) {
+            auto info = projectionLayer->AcquireSwapchainForView(i);
+            projectionLayerViews.push_back(info.CompositionLayer);
+
+            vulkan->RenderView(info.Swapchain, info.ImageIndex,
+                               options.GetBackgroundClearColor(),
+                               scene.CalcCubeMatrices(info.calcViewProjection()));
+
+            projectionLayer->EndSwapchain(
+                info.CompositionLayer.subImage.swapchain);
           }
+
+          layer = {
+              .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+              .layerFlags = static_cast<XrCompositionLayerFlags>(
+                  options.Parsed.EnvironmentBlendMode ==
+                          XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
+                      ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                            XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                      : 0),
+              .space = program->m_appSpace,
+              .viewCount = static_cast<uint32_t>(projectionLayerViews.size()),
+              .views = projectionLayerViews.data(),
+          };
+
+          layers.push_back(
+              reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
         }
       }
       program->EndFrame(frameState.predictedDisplayPeriod, layers);

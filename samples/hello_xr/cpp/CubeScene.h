@@ -9,7 +9,6 @@
 
 struct CubeScene {
   std::vector<Cube> cubes;
-  std::vector<Mat4> matrices;
 
   static Cube MakeCube(XrPosef pose, XrVector3f scale) {
     return Cube{
@@ -89,5 +88,18 @@ struct CubeScene {
     }
   }
 
-
+  std::vector<Mat4> CalcCubeMatrices(const XrMatrix4x4f &vp) {
+    std::vector<Mat4> matrices;
+    for (auto &cube : cubes) {
+      // Compute the model-view-projection transform and push it.
+      XrMatrix4x4f model;
+      XrMatrix4x4f_CreateTranslationRotationScale(
+          &model, (XrVector3f *)&cube.Translaton,
+          (XrQuaternionf *)&cube.Rotation, (XrVector3f *)&cube.Scaling);
+      Mat4 mvp;
+      XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
+      matrices.push_back(mvp);
+    }
+    return matrices;
+  }
 };

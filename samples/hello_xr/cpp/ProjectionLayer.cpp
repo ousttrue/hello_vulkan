@@ -146,11 +146,10 @@ ProjectionLayer::AllocateSwapchainImageStructs(
   return swapchainImageContext->m_bases;
 }
 
-bool ProjectionLayer::UpdateLocateView(XrSession session, XrSpace appSpace,
-                                       XrTime predictedDisplayTime,
-                                       XrViewConfigurationType viewConfigType) {
-  // uint32_t viewCapacityInput = (uint32_t);
-
+bool ProjectionLayer::LocateView(XrSession session, XrSpace appSpace,
+                                 XrTime predictedDisplayTime,
+                                 XrViewConfigurationType viewConfigType,
+                                 uint32_t *viewCountOutput) {
   XrViewLocateInfo viewLocateInfo{
       .type = XR_TYPE_VIEW_LOCATE_INFO,
       .viewConfigurationType = viewConfigType,
@@ -162,111 +161,64 @@ bool ProjectionLayer::UpdateLocateView(XrSession session, XrSpace appSpace,
       .type = XR_TYPE_VIEW_STATE,
   };
 
-  uint32_t viewCountOutput;
   auto res = xrLocateViews(session, &viewLocateInfo, &viewState,
                            static_cast<uint32_t>(m_views.size()),
-                           &viewCountOutput, m_views.data());
-
+                           viewCountOutput, m_views.data());
   CHECK_XRRESULT(res, "xrLocateViews");
   if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
       (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
     return false; // There is no valid tracking poses for the views.
   }
 
-  CHECK(viewCountOutput == m_views.size());
-  CHECK(viewCountOutput == m_configViews.size());
-  CHECK(viewCountOutput == m_swapchains.size());
-
-  m_projectionLayerViews.resize(viewCountOutput);
+  CHECK(*viewCountOutput == m_views.size());
+  CHECK(*viewCountOutput == m_configViews.size());
+  CHECK(*viewCountOutput == m_swapchains.size());
 
   return true;
 }
 
-static std::vector<Mat4> calcCubeMatrices(const std::vector<Cube> &cubes,
-                                          const XrMatrix4x4f &vp) {
-  std::vector<Mat4> matrices;
-  for (auto &cube : cubes) {
-    // Compute the model-view-projection transform and push it.
-    XrMatrix4x4f model;
-    XrMatrix4x4f_CreateTranslationRotationScale(
-        &model, (XrVector3f *)&cube.Translaton, (XrQuaternionf *)&cube.Rotation,
-        (XrVector3f *)&cube.Scaling);
-    Mat4 mvp;
-    XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &vp, &model);
-    matrices.push_back(mvp);
-  }
-  return matrices;
+ProjectionLayer::ViewSwapchainInfo
+ProjectionLayer::AcquireSwapchainForView(uint32_t i) {
+  // Each view has a separate swapchain which is acquired, rendered to, and
+  // released.
+  const Swapchain viewSwapchain = m_swapchains[i];
+
+  XrSwapchainImageAcquireInfo acquireInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
+  };
+  uint32_t swapchainImageIndex;
+  CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
+                                      &swapchainImageIndex));
+
+  XrSwapchainImageWaitInfo waitInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
+      .timeout = XR_INFINITE_DURATION,
+  };
+  CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+
+  const XrSwapchainImageBaseHeader *const swapchainImage =
+      m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
+
+  ViewSwapchainInfo info = {
+  };
+
+  info.CompositionLayer = {
+      .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+      .pose = m_views[i].pose,
+      .fov = m_views[i].fov,
+      .subImage = {
+          .swapchain = viewSwapchain.handle,
+          .imageRect = {.offset = {0, 0}, .extent = viewSwapchain.extent}}};
+
+  info.Swapchain = m_swapchainImageContextMap[swapchainImage];
+  info.ImageIndex = info.Swapchain->ImageIndex(swapchainImage);
+
+   return info;
 }
 
-XrCompositionLayerProjection *ProjectionLayer::RenderLayer(
-    XrSpace appSpace, const std::vector<Cube> &cubes,
-    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-    const Vec4 &clearColor, XrEnvironmentBlendMode environmentBlendMode) {
-
-  // Render view to the appropriate part of the swapchain image.
-  for (uint32_t i = 0; i < m_views.size(); i++) {
-    // Each view has a separate swapchain which is acquired, rendered to, and
-    // released.
-    const Swapchain viewSwapchain = m_swapchains[i];
-
-    XrSwapchainImageAcquireInfo acquireInfo{
-        .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
-    };
-    uint32_t swapchainImageIndex;
-    CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
-                                        &swapchainImageIndex));
-
-    XrSwapchainImageWaitInfo waitInfo{
-        .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
-        .timeout = XR_INFINITE_DURATION,
-    };
-    CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
-
-    m_projectionLayerViews[i] = {
-        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-        .pose = m_views[i].pose,
-        .fov = m_views[i].fov,
-        .subImage = {.swapchain = viewSwapchain.handle,
-                     .imageRect = {
-                         .offset = {0, 0},
-                         .extent = viewSwapchain.extent,
-                     }}};
-
-    const XrSwapchainImageBaseHeader *const swapchainImage =
-        m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-
-    auto swapchainContext = m_swapchainImageContextMap[swapchainImage];
-    uint32_t imageIndex = swapchainContext->ImageIndex(swapchainImage);
-
-    auto layerView = m_projectionLayerViews[i];
-    // Compute the view-projection transform.
-    // Note all matrixes (including OpenXR's) are column-major, right-handed.
-    const auto &pose = layerView.pose;
-    XrMatrix4x4f proj;
-    XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, layerView.fov,
-                                     0.05f, 100.0f);
-    XrMatrix4x4f toView;
-    XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
-    XrMatrix4x4f view;
-    XrMatrix4x4f_InvertRigidBody(&view, &toView);
-    XrMatrix4x4f vp;
-    XrMatrix4x4f_Multiply(&vp, &proj, &view);
-
-    auto matrices = calcCubeMatrices(cubes, vp);
-    vulkan->RenderView(swapchainContext, imageIndex, clearColor, matrices);
-
-    XrSwapchainImageReleaseInfo releaseInfo{
-        XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-    CHECK_XRCMD(xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
-  }
-
-  m_layer.space = appSpace;
-  m_layer.layerFlags =
-      environmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
-          ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-          : 0;
-  m_layer.viewCount = (uint32_t)m_projectionLayerViews.size();
-  m_layer.views = m_projectionLayerViews.data();
-  return &m_layer;
+void ProjectionLayer::EndSwapchain(XrSwapchain swapchain) {
+  XrSwapchainImageReleaseInfo releaseInfo{
+      .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
+  };
+  CHECK_XRCMD(xrReleaseSwapchainImage(swapchain, &releaseInfo));
 }

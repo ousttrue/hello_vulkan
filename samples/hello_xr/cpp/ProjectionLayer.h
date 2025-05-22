@@ -1,6 +1,5 @@
 #pragma once
-#include "FloatTypes.h"
-#include "InputState.h"
+#include <common/xr_linear.h>
 #include <list>
 #include <map>
 #include <memory>
@@ -29,9 +28,6 @@ public:
   std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
       m_swapchainImages;
 
-  XrCompositionLayerProjection m_layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
-  std::vector<XrCompositionLayerProjectionView> m_projectionLayerViews;
-
   ProjectionLayer() = default;
 
 public:
@@ -50,13 +46,33 @@ public:
       VkSampleCountFlagBits sampleCount,
       const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
-  bool UpdateLocateView(XrSession session, XrSpace appSpace,
-                        XrTime predictedDisplayTime,
-                        XrViewConfigurationType viewConfigType);
+  bool LocateView(XrSession session, XrSpace appSpace,
+                  XrTime predictedDisplayTime,
+                  XrViewConfigurationType viewConfigType,
+                  uint32_t *viewCountOutput);
 
-  XrCompositionLayerProjection *
-  RenderLayer(XrSpace appSpace, const std::vector<Cube> &cubes,
-              const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-              const Vec4 &clearColor,
-              XrEnvironmentBlendMode environmentBlendMode);
+  struct ViewSwapchainInfo {
+    std::shared_ptr<SwapchainImageContext> Swapchain;
+    uint32_t ImageIndex;
+    XrCompositionLayerProjectionView CompositionLayer;
+
+    XrMatrix4x4f calcViewProjection() const {
+      // Compute the view-projection transform. Note all matrixes
+      // (including OpenXR's) are column-major, right-handed.
+      XrMatrix4x4f proj;
+      XrMatrix4x4f_CreateProjectionFov(
+          &proj, GRAPHICS_VULKAN, this->CompositionLayer.fov, 0.05f, 100.0f);
+      XrMatrix4x4f toView;
+      XrMatrix4x4f_CreateFromRigidTransform(&toView,
+                                            &this->CompositionLayer.pose);
+      XrMatrix4x4f view;
+      XrMatrix4x4f_InvertRigidBody(&view, &toView);
+      XrMatrix4x4f vp;
+      XrMatrix4x4f_Multiply(&vp, &proj, &view);
+
+      return vp;
+    }
+  };
+  ViewSwapchainInfo AcquireSwapchainForView(uint32_t viewIndex);
+  void EndSwapchain(XrSwapchain swapchain);
 };
