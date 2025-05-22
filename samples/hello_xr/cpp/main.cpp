@@ -2,7 +2,6 @@
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
-#include "platformplugin_win32.h"
 #include "vulkan_layers.h"
 #include <thread>
 
@@ -38,19 +37,13 @@ int main(int argc, char *argv[]) {
   }};
   exitPollingThread.detach();
 
-  //
-  // Create platform-specific implementation.
-  //
-  auto platformPlugin = CreatePlatformPlugin_Win32(options);
-
   // Create graphics API implementation.
   auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
 
   // Initialize the OpenXR program.
-  auto program =
-      std::make_shared<OpenXrProgram>(options, platformPlugin, graphicsPlugin);
+  auto program = std::make_shared<OpenXrProgram>(graphicsPlugin, options);
 
-  program->CreateInstance();
+  program->CreateInstance({}, nullptr);
   program->InitializeSystem();
 
   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());

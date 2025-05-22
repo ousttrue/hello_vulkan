@@ -8,7 +8,6 @@
 #include "logger.h"
 #include "openxr_program.h"
 #include "options.h"
-#include "platformplugin_android.h"
 #include "vulkan_layers.h"
 
 #include <thread>
@@ -101,23 +100,14 @@ void android_main(struct android_app *app) {
       return;
     }
 
-    std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
-    data->applicationVM = app->activity->vm;
-    data->applicationActivity = app->activity->clazz;
-
     bool requestRestart = false;
     bool exitRenderLoop = false;
-
-    // Create platform-specific implementation.
-    std::shared_ptr<IPlatformPlugin> platformPlugin =
-        CreatePlatformPlugin_Android(options, data);
 
     // Create graphics API implementation.
     auto graphicsPlugin = std::make_shared<VulkanGraphicsPlugin>();
 
     // Initialize the OpenXR program.
-    auto program = std::make_shared<OpenXrProgram>(options, platformPlugin,
-                                                   graphicsPlugin);
+    auto program = std::make_shared<OpenXrProgram>(graphicsPlugin, options);
 
     // Initialize the loader for this platform
     PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
@@ -132,7 +122,13 @@ void android_main(struct android_app *app) {
           (const XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfoAndroid);
     }
 
-    program->CreateInstance();
+    XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{
+        .type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
+        .applicationVM = app->activity->vm,
+        .applicationActivity = app->activity->clazz,
+    };
+    program->CreateInstance({XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME},
+                            &instanceCreateInfoAndroid);
     program->InitializeSystem();
 
     options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());

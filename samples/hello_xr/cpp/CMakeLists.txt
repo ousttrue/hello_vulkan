@@ -87,7 +87,7 @@ set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 if(ANDROID)
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
   add_library(
-    hello_xr MODULE android_main.cpp platformplugin_android.cpp ${LOCAL_SOURCE}
+    hello_xr MODULE android_main.cpp ${LOCAL_SOURCE}
                     ${VULKAN_SHADERS} $<TARGET_OBJECTS:android_native_app_glue>)
   target_compile_definitions(
     hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_VULKAN
@@ -98,7 +98,7 @@ if(ANDROID)
                      android_native_app_glue vulkan)
 
 else()
-  add_executable(hello_xr main.cpp platformplugin_win32.cpp ${LOCAL_SOURCE}
+  add_executable(hello_xr main.cpp ${LOCAL_SOURCE}
                           ${VULKAN_SHADERS})
   target_compile_definitions(
     hello_xr

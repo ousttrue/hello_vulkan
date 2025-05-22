@@ -18,7 +18,6 @@
 #include "openxr/openxr.h"
 #include "openxr_program.h"
 #include "options.h"
-#include "platformplugin.h"
 #include "to_string.h"
 #include "vulkan_debug_object_namer.hpp"
 #include <algorithm>
@@ -151,11 +150,9 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
 // OpenXrProgram
 //
 OpenXrProgram::OpenXrProgram(
-    const Options &options,
-    const std::shared_ptr<IPlatformPlugin> &platformPlugin,
-    const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin)
-    : m_options(options), m_platformPlugin(platformPlugin),
-      m_graphicsPlugin(graphicsPlugin),
+    const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin,
+    const Options &options)
+    : m_graphicsPlugin(graphicsPlugin), m_options(options),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
                              XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
                              XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {}
@@ -185,9 +182,10 @@ OpenXrProgram::~OpenXrProgram() {
   }
 }
 
-void OpenXrProgram::CreateInstance() {
+void OpenXrProgram::CreateInstance(
+    const std::vector<std::string> &platformExtensions, void *next) {
   LogLayersAndExtensions();
-  CreateInstanceInternal();
+  CreateInstanceInternal(platformExtensions, next);
   LogInstanceInfo();
 }
 
@@ -601,7 +599,8 @@ void OpenXrProgram::RenderFrame(const Vec4 &clearColor) {
     if (auto layer = m_projectionLayer->RenderLayer(
             m_session, frameState.predictedDisplayTime, m_appSpace,
             m_options.Parsed.ViewConfigType, m_visualizedSpaces, m_input,
-            m_graphicsPlugin, m_options.GetBackgroundClearColor(),m_options.Parsed.EnvironmentBlendMode)) {
+            m_graphicsPlugin, clearColor,
+            m_options.Parsed.EnvironmentBlendMode)) {
       layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
     }
   }
@@ -651,14 +650,14 @@ static std::vector<std::string> GetInstanceExtensions() {
   return {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
 }
 
-void OpenXrProgram::CreateInstanceInternal() {
+void OpenXrProgram::CreateInstanceInternal(
+    const std::vector<std::string> &platformExtensions, void *next) {
   CHECK(m_instance == XR_NULL_HANDLE);
 
   // Create union of extensions required by platform and graphics plugins.
   std::vector<const char *> extensions;
 
   // Transform platform and graphics extension std::strings to C strings.
-  auto platformExtensions = m_platformPlugin->GetInstanceExtensions();
   std::transform(platformExtensions.begin(), platformExtensions.end(),
                  std::back_inserter(extensions),
                  [](const std::string &ext) { return ext.c_str(); });
@@ -670,7 +669,7 @@ void OpenXrProgram::CreateInstanceInternal() {
 
   XrInstanceCreateInfo createInfo{
       .type = XR_TYPE_INSTANCE_CREATE_INFO,
-      .next = m_platformPlugin->GetInstanceCreateExtension(),
+      .next = next,
       .createFlags = 0,
       .applicationInfo =
           {.applicationName = "HelloXR",

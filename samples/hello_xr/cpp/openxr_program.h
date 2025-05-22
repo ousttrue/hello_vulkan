@@ -12,6 +12,8 @@
 #include <vulkan/vulkan.h>
 
 class OpenXrProgram {
+  std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
+  const struct Options &m_options;
 
   std::shared_ptr<class ProjectionLayer> m_projectionLayer;
 
@@ -20,10 +22,6 @@ class OpenXrProgram {
   VkDevice m_vkDevice = VK_NULL_HANDLE;
   uint32_t m_queueFamilyIndex = UINT_MAX;
 
-  const struct Options &m_options;
-
-  std::shared_ptr<struct IPlatformPlugin> m_platformPlugin;
-  std::shared_ptr<struct VulkanGraphicsPlugin> m_graphicsPlugin;
   XrInstance m_instance{XR_NULL_HANDLE};
   XrSession m_session{XR_NULL_HANDLE};
   XrSpace m_appSpace{XR_NULL_HANDLE};
@@ -41,20 +39,22 @@ class OpenXrProgram {
   const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
   void LogInstanceInfo();
-  void CreateInstanceInternal();
+  void
+  CreateInstanceInternal(const std::vector<std::string> &platformExtensions,
+                         void *next);
   void LogViewConfigurations();
   void LogEnvironmentBlendMode(XrViewConfigurationType type);
   void LogReferenceSpaces();
 
 public:
-  OpenXrProgram(const Options &options,
-                const std::shared_ptr<IPlatformPlugin> &platformPlugin,
-                const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin);
+  OpenXrProgram(const std::shared_ptr<VulkanGraphicsPlugin> &graphicsPlugin,
+                const Options &options);
 
   ~OpenXrProgram();
 
   // Create an Instance and other basic instance-level initialization.
-  void CreateInstance();
+  void CreateInstance(const std::vector<std::string> &platformExtensions,
+                      void *next);
 
   // Select a System for the view configuration specified in the Options
   void InitializeSystem();
