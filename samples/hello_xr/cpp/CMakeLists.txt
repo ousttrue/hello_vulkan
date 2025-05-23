@@ -2,7 +2,9 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(LOCAL_SOURCE
     logger.cpp
+    GetXrReferenceSpaceCreateInfo.cpp
     openxr_program.cpp
+    openxr_session.cpp
     vk_utils.cpp
     VertexBuffer.cpp
     MemoryAllocator.cpp
@@ -86,8 +88,8 @@ set(VULKAN_SHADERS vulkan_shaders/frag.glsl vulkan_shaders/vert.glsl)
 if(ANDROID)
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
   add_library(
-    hello_xr MODULE android_main.cpp ${LOCAL_SOURCE}
-                    ${VULKAN_SHADERS} $<TARGET_OBJECTS:android_native_app_glue>)
+    hello_xr MODULE android_main.cpp ${LOCAL_SOURCE} ${VULKAN_SHADERS}
+                    $<TARGET_OBJECTS:android_native_app_glue>)
   target_compile_definitions(
     hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_VULKAN
                      # -DUSE_ONLINE_VULKAN_SHADERC
@@ -97,8 +99,7 @@ if(ANDROID)
                      android_native_app_glue vulkan)
 
 else()
-  add_executable(hello_xr main.cpp ${LOCAL_SOURCE}
-                          ${VULKAN_SHADERS})
+  add_executable(hello_xr main.cpp ${LOCAL_SOURCE} ${VULKAN_SHADERS})
   target_compile_definitions(
     hello_xr
     PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN

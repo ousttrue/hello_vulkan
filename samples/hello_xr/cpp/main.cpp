@@ -2,6 +2,7 @@
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
+#include "openxr_session.h"
 #include "options.h"
 #include "vulkan_layers.h"
 #include <thread>
@@ -51,45 +52,45 @@ int main(int argc, char *argv[]) {
   }
 
   // Create VkDevice by OpenXR.
-  auto vulkan = program->InitializeDevice(getVulkanLayers(),
+  auto vulkan = program->InitializeVulkan(getVulkanLayers(),
                                           getVulkanInstanceExtensions(),
                                           getVulkanDeviceExtensions());
-  program->InitializeSession(vulkan);
-  program->CreateSwapchains(vulkan);
+  auto session = program->InitializeSession(vulkan);
+  session->CreateSwapchains(vulkan);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
     bool requestRestart = false;
-    program->PollEvents(&exitRenderLoop, &requestRestart);
+    session->PollEvents(&exitRenderLoop, &requestRestart);
     if (exitRenderLoop) {
       break;
     }
 
-    if (program->IsSessionRunning()) {
-      program->PollActions();
+    if (session->IsSessionRunning()) {
+      session->PollActions();
 
       // program->RenderFrame(vulkan, options.GetBackgroundClearColor());
       std::vector<XrCompositionLayerBaseHeader *> layers;
       XrCompositionLayerProjection layer;
       std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
 
-      auto frameState = program->BeginFrame();
+      auto frameState = session->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
         uint32_t viewCountOutput;
-        if (program->LocateView(program->m_session, program->m_appSpace,
+        if (session->LocateView(session->m_session, session->m_appSpace,
                                 frameState.predictedDisplayTime,
                                 options.Parsed.ViewConfigType,
                                 &viewCountOutput)) {
 
           CubeScene scene;
-          scene.addSpaceCubes(program->m_appSpace,
+          scene.addSpaceCubes(session->m_appSpace,
                               frameState.predictedDisplayTime,
-                              program->m_visualizedSpaces);
-          scene.addHandCubes(program->m_appSpace,
-                             frameState.predictedDisplayTime, program->m_input);
+                              session->m_visualizedSpaces);
+          scene.addHandCubes(session->m_appSpace,
+                             frameState.predictedDisplayTime, session->m_input);
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
-            auto info = program->AcquireSwapchainForView(i);
+            auto info = session->AcquireSwapchainForView(i);
             projectionLayerViews.push_back(info.CompositionLayer);
 
             {
@@ -103,7 +104,7 @@ int main(int argc, char *argv[]) {
               vulkan->EndCommand(cmd);
             }
 
-            program->EndSwapchain(info.CompositionLayer.subImage.swapchain);
+            session->EndSwapchain(info.CompositionLayer.subImage.swapchain);
           }
 
           layer = {
@@ -114,7 +115,7 @@ int main(int argc, char *argv[]) {
                       ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
                             XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
                       : 0),
-              .space = program->m_appSpace,
+              .space = session->m_appSpace,
               .viewCount = static_cast<uint32_t>(projectionLayerViews.size()),
               .views = projectionLayerViews.data(),
           };
@@ -123,7 +124,7 @@ int main(int argc, char *argv[]) {
               reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
         }
       }
-      program->EndFrame(frameState.predictedDisplayPeriod, layers);
+      session->EndFrame(frameState.predictedDisplayPeriod, layers);
 
     } else {
       // Throttle loop since xrWaitFrame won't be called.
