@@ -4,5 +4,5 @@
 
 struct SwapchainConfiguration {
   std::vector<XrViewConfigurationView> Views;
-  std::vector<int64_t> Formats;
+  int64_t Format;
 };

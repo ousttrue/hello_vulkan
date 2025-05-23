@@ -161,42 +161,6 @@ void VulkanGraphicsPlugin::InitializeResources() {
 #endif
 }
 
-int64_t VulkanGraphicsPlugin::SelectColorSwapchainFormat(
-    const std::vector<int64_t> &formats) const {
-  // List of supported color swapchain formats.
-  constexpr int64_t SupportedColorSwapchainFormats[] = {
-      VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB,
-      VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
-
-  auto swapchainFormatIt =
-      std::find_first_of(formats.begin(), formats.end(),
-                         std::begin(SupportedColorSwapchainFormats),
-                         std::end(SupportedColorSwapchainFormats));
-  if (swapchainFormatIt == formats.end()) {
-    throw std::runtime_error(
-        "No runtime swapchain format supported for color swapchain");
-  }
-
-  // Print swapchain formats and the selected one.
-  {
-    std::string swapchainFormatsString;
-    for (int64_t format : formats) {
-      const bool selected = format == *swapchainFormatIt;
-      swapchainFormatsString += " ";
-      if (selected) {
-        swapchainFormatsString += "[";
-      }
-      swapchainFormatsString += std::to_string(format);
-      if (selected) {
-        swapchainFormatsString += "]";
-      }
-    }
-    Log::Write(Log::Level::Verbose,
-               Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
-  }
-  return *swapchainFormatIt;
-}
-
 VkCommandBuffer VulkanGraphicsPlugin::BeginCommand() {
   // CHECK(layerView.subImage.imageArrayIndex ==
   //       0); // Texture arrays not supported.

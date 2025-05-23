@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "options.h"
 #include "to_string.h"
+#include <algorithm>
 
 OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
                              XrSystemId systemId, XrSession session,
@@ -66,6 +67,41 @@ OpenXrSession::~OpenXrSession() {
   }
 }
 
+static int64_t SelectColorSwapchainFormat(const std::vector<int64_t> &formats) {
+  // List of supported color swapchain formats.
+  constexpr int64_t SupportedColorSwapchainFormats[] = {
+      VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB,
+      VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM};
+
+  auto swapchainFormatIt =
+      std::find_first_of(formats.begin(), formats.end(),
+                         std::begin(SupportedColorSwapchainFormats),
+                         std::end(SupportedColorSwapchainFormats));
+  if (swapchainFormatIt == formats.end()) {
+    throw std::runtime_error(
+        "No runtime swapchain format supported for color swapchain");
+  }
+
+  // Print swapchain formats and the selected one.
+  {
+    std::string swapchainFormatsString;
+    for (int64_t format : formats) {
+      const bool selected = format == *swapchainFormatIt;
+      swapchainFormatsString += " ";
+      if (selected) {
+        swapchainFormatsString += "[";
+      }
+      swapchainFormatsString += std::to_string(format);
+      if (selected) {
+        swapchainFormatsString += "]";
+      }
+    }
+    Log::Write(Log::Level::Verbose,
+               Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
+  }
+  return *swapchainFormatIt;
+}
+
 SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() {
   SwapchainConfiguration config;
 
@@ -83,10 +119,12 @@ SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() {
   uint32_t swapchainFormatCount;
   CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount,
                                           nullptr));
-  config.Formats.resize(swapchainFormatCount);
-  CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, swapchainFormatCount,
-                                          &swapchainFormatCount,
-                                          config.Formats.data()));
+  std::vector<int64_t> formats(swapchainFormatCount);
+  // config.Formats.resize(swapchainFormatCount);
+  CHECK_XRCMD(xrEnumerateSwapchainFormats(
+      m_session, swapchainFormatCount, &swapchainFormatCount, formats.data()));
+
+  config.Format = SelectColorSwapchainFormat(formats);
 
   m_views.resize(viewCount, {XR_TYPE_VIEW});
 

@@ -31,10 +31,6 @@ public:
                        VkDevice device, uint32_t queueFamilyIndex,
                        VkDebugUtilsMessengerCreateInfoEXT debugInfo);
 
-  // Select the preferred swapchain format from the list of available formats.
-  int64_t
-  SelectColorSwapchainFormat(const std::vector<int64_t> &formats) const;
-
   // Render to a swapchain image for a projection view.
   VkCommandBuffer BeginCommand();
   void EndCommand(VkCommandBuffer cmd);

@@ -63,14 +63,13 @@ int main(int argc, char *argv[]) {
 
   // XrSwapchain
   auto config = session->GetSwapchainConfiguration();
-  auto swapchainFormat = vulkan->SelectColorSwapchainFormat(config.Formats);
 
   // Create a swapchain for each view.
   std::vector<std::shared_ptr<Swapchain>> swapchains;
   std::vector<std::shared_ptr<VulkanRenderer>> renderers;
   for (uint32_t i = 0; i < config.Views.size(); i++) {
     auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
-                                       swapchainFormat);
+                                       config.Format);
     swapchains.push_back(swapchain);
 
     auto renderer = VulkanRenderer::Create(
