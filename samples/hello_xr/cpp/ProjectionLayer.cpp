@@ -3,107 +3,87 @@
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
+#include "openxr/openxr.h"
 #include "to_string.h"
 
-ProjectionLayer::ProjectionLayer() {}
+Swapchain::~Swapchain() { xrDestroySwapchain(m_swapchain); }
 
-ProjectionLayer::~ProjectionLayer() {
-  for (Swapchain swapchain : m_swapchains) {
-    xrDestroySwapchain(swapchain.handle);
-  }
-}
+std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
+                                             const XrViewConfigurationView &vp,
+                                             int64_t format) {
 
-std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
-    XrSession session, const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
-    const SwapchainConfiguration &config, int64_t colorSwapchainFormat) {
+  Log::Write(Log::Level::Info,
+             Fmt("Creating swapchain for view %d with dimensions "
+                 "Width=%d Height=%d SampleCount=%d",
+                 i, vp.recommendedImageRectWidth, vp.recommendedImageRectHeight,
+                 vp.recommendedSwapchainSampleCount));
 
-  auto ptr = std::shared_ptr<ProjectionLayer>(new ProjectionLayer);
-
-  // Create the swapchain and get the images.
-  if (config.Views.size() > 0) {
-    // Create and cache view buffer for xrLocateViews later.
-    ptr->m_views.resize(config.Views.size(), {XR_TYPE_VIEW});
-
-    // Create a swapchain for each view.
-    for (uint32_t i = 0; i < config.Views.size(); i++) {
-      const XrViewConfigurationView &vp = config.Views[i];
-      Log::Write(Log::Level::Info,
-                 Fmt("Creating swapchain for view %d with dimensions "
-                     "Width=%d Height=%d SampleCount=%d",
-                     i, vp.recommendedImageRectWidth,
-                     vp.recommendedImageRectHeight,
-                     vp.recommendedSwapchainSampleCount));
-
-      // Create the swapchain.
-      XrSwapchainCreateInfo swapchainCreateInfo{
-          .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
-          .createFlags = 0,
-          .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
-                        XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
-          .format = colorSwapchainFormat,
-          .sampleCount = VK_SAMPLE_COUNT_1_BIT,
-          .width = vp.recommendedImageRectWidth,
-          .height = vp.recommendedImageRectHeight,
-          .faceCount = 1,
-          .arraySize = 1,
-          .mipCount = 1,
-      };
-
-      Swapchain swapchain{
-          .extent =
-              {
-                  .width = static_cast<int32_t>(swapchainCreateInfo.width),
-                  .height = static_cast<int32_t>(swapchainCreateInfo.height),
-              },
-      };
-      CHECK_XRCMD(
-          xrCreateSwapchain(session, &swapchainCreateInfo, &swapchain.handle));
-      ptr->m_swapchains.push_back(swapchain);
-
-      uint32_t imageCount;
-      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount,
-                                             nullptr));
-      // XXX This should really just return XrSwapchainImageBaseHeader*
-      std::vector<XrSwapchainImageBaseHeader *> swapchainImages =
-          ptr->AllocateSwapchainImageStructs(
-              imageCount,
-              {swapchainCreateInfo.width, swapchainCreateInfo.height},
-              static_cast<VkFormat>(swapchainCreateInfo.format),
-              static_cast<VkSampleCountFlagBits>(
-                  swapchainCreateInfo.sampleCount),
-              vulkan);
-      CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount,
-                                             &imageCount, swapchainImages[0]));
-
-      ptr->m_swapchainImages.insert(
-          std::make_pair(swapchain.handle, std::move(swapchainImages)));
-    }
-  }
-
+  // Create the swapchain.
+  auto ptr = std::shared_ptr<Swapchain>(new Swapchain);
+  ptr->m_swapchainCreateInfo = {
+      .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
+      .createFlags = 0,
+      .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
+                    XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
+      .format = format,
+      .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+      .width = vp.recommendedImageRectWidth,
+      .height = vp.recommendedImageRectHeight,
+      .faceCount = 1,
+      .arraySize = 1,
+      .mipCount = 1,
+  };
+  CHECK_XRCMD(xrCreateSwapchain(session, &ptr->m_swapchainCreateInfo,
+                                &ptr->m_swapchain));
   return ptr;
 }
 
-std::vector<XrSwapchainImageBaseHeader *>
-ProjectionLayer::AllocateSwapchainImageStructs(
-    uint32_t capacity, VkExtent2D size, VkFormat format,
-    VkSampleCountFlagBits sampleCount,
+void Swapchain::AllocateSwapchainImageStructs(
     const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
-  // Allocate and initialize the buffer of image structs (must be sequential
-  // in memory for xrEnumerateSwapchainImages). Return back an array of
-  // pointers to each swapchain image struct so the consumer doesn't need to
-  // know the type/size. Keep the buffer alive by adding it into the list of
-  // buffers.
-  m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
-      vulkan->m_vkDevice, vulkan->m_memAllocator, capacity, size, format,
-      sampleCount, vulkan->m_shaderProgram));
-  auto swapchainImageContext = m_swapchainImageContexts.back();
 
-  // Map every swapchainImage base pointer to this context
-  for (auto &base : swapchainImageContext->m_bases) {
-    m_swapchainImageContextMap[base] = swapchainImageContext;
+  uint32_t imageCount;
+  CHECK_XRCMD(xrEnumerateSwapchainImages(m_swapchain, 0, &imageCount, nullptr));
+  m_swapchainImages.resize(imageCount, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+
+  std::vector<XrSwapchainImageBaseHeader *> pointers;
+  for (auto &image : m_swapchainImages) {
+    pointers.push_back((XrSwapchainImageBaseHeader *)&image);
+  }
+  CHECK_XRCMD(xrEnumerateSwapchainImages(m_swapchain, imageCount, &imageCount,
+                                         pointers[0]));
+
+  m_context = SwapchainImageContext::Create(
+      vulkan->m_vkDevice, vulkan->m_memAllocator, imageCount,
+      {m_swapchainCreateInfo.width, m_swapchainCreateInfo.height},
+      static_cast<VkFormat>(m_swapchainCreateInfo.format),
+      static_cast<VkSampleCountFlagBits>(m_swapchainCreateInfo.sampleCount),
+      vulkan->m_shaderProgram);
+}
+
+//
+// ProjectionLayer
+//
+ProjectionLayer::ProjectionLayer() {}
+
+ProjectionLayer::~ProjectionLayer() {}
+
+std::shared_ptr<ProjectionLayer>
+ProjectionLayer::Create(XrSession session,
+                        const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+                        const SwapchainConfiguration &config, int64_t format) {
+
+  auto ptr = std::shared_ptr<ProjectionLayer>(new ProjectionLayer);
+
+  ptr->m_views.resize(config.Views.size(), {XR_TYPE_VIEW});
+
+  // Create a swapchain for each view.
+  for (uint32_t i = 0; i < config.Views.size(); i++) {
+    auto swapchain = Swapchain::Create(session, i, config.Views[i], format);
+    ptr->m_swapchains.push_back(swapchain);
+    swapchain->AllocateSwapchainImageStructs(vulkan);
   }
 
-  return swapchainImageContext->m_bases;
+  return ptr;
 }
 
 bool ProjectionLayer::LocateView(XrSession session, XrSpace appSpace,
@@ -138,38 +118,40 @@ bool ProjectionLayer::LocateView(XrSession session, XrSpace appSpace,
 }
 
 ViewSwapchainInfo ProjectionLayer::AcquireSwapchainForView(uint32_t i) {
-  // Each view has a separate swapchain which is acquired, rendered to, and
-  // released.
-  const Swapchain viewSwapchain = m_swapchains[i];
+  auto viewSwapchain = m_swapchains[i];
 
   XrSwapchainImageAcquireInfo acquireInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
   };
   uint32_t swapchainImageIndex;
-  CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo,
+  CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain->m_swapchain, &acquireInfo,
                                       &swapchainImageIndex));
 
   XrSwapchainImageWaitInfo waitInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
       .timeout = XR_INFINITE_DURATION,
   };
-  CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+  CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain->m_swapchain, &waitInfo));
 
-  const XrSwapchainImageBaseHeader *const swapchainImage =
-      m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-
-  ViewSwapchainInfo info = {};
-
-  info.CompositionLayer = {
-      .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-      .pose = m_views[i].pose,
-      .fov = m_views[i].fov,
-      .subImage = {
-          .swapchain = viewSwapchain.handle,
-          .imageRect = {.offset = {0, 0}, .extent = viewSwapchain.extent}}};
-
-  info.Swapchain = m_swapchainImageContextMap[swapchainImage];
-  info.ImageIndex = info.Swapchain->ImageIndex(swapchainImage);
+  ViewSwapchainInfo info = {
+      .Swapchain = viewSwapchain->m_context,
+      .Image = viewSwapchain->m_swapchainImages[swapchainImageIndex].image,
+      .CompositionLayer =
+          {.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+           .pose = m_views[i].pose,
+           .fov = m_views[i].fov,
+           .subImage =
+               {.swapchain = viewSwapchain->m_swapchain,
+                .imageRect =
+                    {.offset = {0, 0},
+                     .extent =
+                         {
+                             .width = static_cast<int32_t>(
+                                 viewSwapchain->m_swapchainCreateInfo.width),
+                             .height = static_cast<int32_t>(
+                                 viewSwapchain->m_swapchainCreateInfo.height),
+                         }}}},
+  };
 
   return info;
 }

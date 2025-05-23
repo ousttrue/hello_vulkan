@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -20,7 +21,7 @@ class SwapchainImageContext {
   // A packed array of XrSwapchainImageVulkan2KHR's for
   // xrEnumerateSwapchainImages
   std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
-  std::vector<std::shared_ptr<class RenderTarget>> m_renderTarget;
+  std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
   VkExtent2D m_size{};
   std::shared_ptr<class RenderPass> m_rp;
 
@@ -44,9 +45,9 @@ public:
     return (uint32_t)(p - &m_swapchainImages[0]);
   }
 
-  void BindRenderTarget(uint32_t index,
+  void BindRenderTarget(VkImage image,
                         VkRenderPassBeginInfo *renderPassBeginInfo);
 
-  void RenderView(VkCommandBuffer cmd, uint32_t imageIndex,
+  void RenderView(VkCommandBuffer cmd, VkImage image,
                   const Vec4 &clearColor, const std::vector<Mat4> &cubes);
 };

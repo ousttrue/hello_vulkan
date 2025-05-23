@@ -37,7 +37,6 @@ std::shared_ptr<SwapchainImageContext> SwapchainImageContext::Create(
 
   ptr->m_bases.resize(capacity);
   ptr->m_swapchainImages.resize(capacity);
-  ptr->m_renderTarget.resize(capacity);
   for (uint32_t i = 0; i < capacity; ++i) {
     ptr->m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
     ptr->m_bases[i] = reinterpret_cast<XrSwapchainImageBaseHeader *>(
@@ -48,19 +47,20 @@ std::shared_ptr<SwapchainImageContext> SwapchainImageContext::Create(
 }
 
 void SwapchainImageContext::BindRenderTarget(
-    uint32_t index, VkRenderPassBeginInfo *renderPassBeginInfo) {
-  if (!m_renderTarget[index]) {
-    m_renderTarget[index] =
-        RenderTarget::Create(m_vkDevice, m_swapchainImages[index].image,
-                             m_depthBuffer->depthImage, m_size, m_rp);
+    VkImage image, VkRenderPassBeginInfo *renderPassBeginInfo) {
+  auto found = m_renderTarget.find(image);
+  if (found == m_renderTarget.end()) {
+    auto rt = RenderTarget::Create(m_vkDevice, image, m_depthBuffer->depthImage,
+                                   m_size, m_rp);
+    found = m_renderTarget.insert({image, rt}).first;
   }
   renderPassBeginInfo->renderPass = m_rp->pass;
-  renderPassBeginInfo->framebuffer = m_renderTarget[index]->fb;
+  renderPassBeginInfo->framebuffer = found->second->fb;
   renderPassBeginInfo->renderArea.offset = {0, 0};
   renderPassBeginInfo->renderArea.extent = m_size;
 }
 
-void SwapchainImageContext::RenderView(VkCommandBuffer cmd, uint32_t imageIndex,
+void SwapchainImageContext::RenderView(VkCommandBuffer cmd, VkImage image,
                                        const Vec4 &clearColor,
                                        const std::vector<Mat4> &cubes) {
 
@@ -81,7 +81,7 @@ void SwapchainImageContext::RenderView(VkCommandBuffer cmd, uint32_t imageIndex,
       .clearValueCount = static_cast<uint32_t>(clearValues.size()),
       .pClearValues = clearValues.data(),
   };
-  BindRenderTarget(imageIndex, &renderPassBeginInfo);
+  BindRenderTarget(image, &renderPassBeginInfo);
   vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipe->pipe);

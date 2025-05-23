@@ -1,8 +1,15 @@
 #pragma once
+#include <vulkan/vulkan.h>
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Unknwn.h>
+#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+#include <openxr/openxr_platform.h>
+
 #include "SwapchainConfiguration.h"
 #include "common/xr_linear.h"
-#include <list>
-#include <map>
 #include <memory>
 #include <openxr/openxr.h>
 #include <vector>
@@ -10,7 +17,7 @@
 
 struct ViewSwapchainInfo {
   std::shared_ptr<class SwapchainImageContext> Swapchain;
-  uint32_t ImageIndex;
+  VkImage Image;
   XrCompositionLayerProjectionView CompositionLayer;
 
   XrMatrix4x4f calcViewProjection() const {
@@ -31,21 +38,30 @@ struct ViewSwapchainInfo {
   }
 };
 
-class ProjectionLayer {
-  struct Swapchain {
-    XrSwapchain handle;
-    XrExtent2Di extent;
-  };
-  std::vector<Swapchain> m_swapchains;
-  std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
-      m_swapchainImages;
+class Swapchain {
 
+public:
+  XrSwapchainCreateInfo m_swapchainCreateInfo;
+  XrSwapchain m_swapchain;
+  std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
+  std::shared_ptr<SwapchainImageContext> m_context;
+
+public:
+  ~Swapchain();
+  static std::shared_ptr<Swapchain> Create(XrSession session, uint32_t i,
+                                           const XrViewConfigurationView &vp,
+                                           int64_t format);
+
+  // Allocate space for the swapchain image structures. These are different for
+  // each graphics API. The returned pointers are valid for the lifetime of the
+  // graphics plugin.
+  void AllocateSwapchainImageStructs(
+      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
+};
+
+class ProjectionLayer {
+  std::vector<std::shared_ptr<class Swapchain>> m_swapchains;
   std::vector<XrView> m_views;
-  std::list<std::shared_ptr<class SwapchainImageContext>>
-      m_swapchainImageContexts;
-  std::map<const XrSwapchainImageBaseHeader *,
-           std::shared_ptr<SwapchainImageContext>>
-      m_swapchainImageContextMap;
 
   ProjectionLayer();
 
@@ -55,14 +71,6 @@ public:
   Create(XrSession session,
          const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
          const SwapchainConfiguration &config, int64_t colorSwapchainFormat);
-
-  // Allocate space for the swapchain image structures. These are different for
-  // each graphics API. The returned pointers are valid for the lifetime of the
-  // graphics plugin.
-  std::vector<XrSwapchainImageBaseHeader *> AllocateSwapchainImageStructs(
-      uint32_t capacity, VkExtent2D size, VkFormat format,
-      VkSampleCountFlagBits sampleCount,
-      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
   bool LocateView(XrSession session, XrSpace appSpace,
                   XrTime predictedDisplayTime,

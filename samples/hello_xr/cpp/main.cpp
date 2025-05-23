@@ -58,13 +58,12 @@ int main(int argc, char *argv[]) {
                                           getVulkanInstanceExtensions(),
                                           getVulkanDeviceExtensions());
 
+  // XrSession
   auto session = program->InitializeSession(vulkan);
 
+  // XrSwapchain
   auto config = session->GetSwapchainConfiguration();
-
   auto swapchainFormat = vulkan->SelectColorSwapchainFormat(config.Formats);
-
-  // session->CreateSwapchains(vulkan, config);
   auto projection = ProjectionLayer::Create(session->m_session, vulkan, config,
                                             swapchainFormat);
 
@@ -107,7 +106,7 @@ int main(int argc, char *argv[]) {
             {
               VkCommandBuffer cmd = vulkan->BeginCommand();
               info.Swapchain->RenderView(
-                  cmd, info.ImageIndex, options.GetBackgroundClearColor(),
+                  cmd, info.Image, options.GetBackgroundClearColor(),
                   scene.CalcCubeMatrices(info.calcViewProjection()));
               vulkan->EndCommand(cmd);
             }
