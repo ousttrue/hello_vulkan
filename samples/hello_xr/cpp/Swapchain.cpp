@@ -1,5 +1,4 @@
 #include "Swapchain.h"
-#include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
@@ -35,29 +34,21 @@ std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
   };
   CHECK_XRCMD(xrCreateSwapchain(session, &ptr->m_swapchainCreateInfo,
                                 &ptr->m_swapchain));
-  return ptr;
-}
-
-void Swapchain::AllocateSwapchainImageStructs(
-    const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan) {
 
   uint32_t imageCount;
-  CHECK_XRCMD(xrEnumerateSwapchainImages(m_swapchain, 0, &imageCount, nullptr));
-  m_swapchainImages.resize(imageCount, {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+  CHECK_XRCMD(
+      xrEnumerateSwapchainImages(ptr->m_swapchain, 0, &imageCount, nullptr));
+  ptr->m_swapchainImages.resize(imageCount,
+                                {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
 
   std::vector<XrSwapchainImageBaseHeader *> pointers;
-  for (auto &image : m_swapchainImages) {
+  for (auto &image : ptr->m_swapchainImages) {
     pointers.push_back((XrSwapchainImageBaseHeader *)&image);
   }
-  CHECK_XRCMD(xrEnumerateSwapchainImages(m_swapchain, imageCount, &imageCount,
-                                         pointers[0]));
+  CHECK_XRCMD(xrEnumerateSwapchainImages(ptr->m_swapchain, imageCount,
+                                         &imageCount, pointers[0]));
 
-  m_context = SwapchainImageContext::Create(
-      vulkan->m_vkDevice, vulkan->m_memAllocator, imageCount,
-      {m_swapchainCreateInfo.width, m_swapchainCreateInfo.height},
-      static_cast<VkFormat>(m_swapchainCreateInfo.format),
-      static_cast<VkSampleCountFlagBits>(m_swapchainCreateInfo.sampleCount),
-      vulkan->m_shaderProgram);
+  return ptr;
 }
 
 ViewSwapchainInfo Swapchain::AcquireSwapchainForView(const XrView &view) {
@@ -75,7 +66,6 @@ ViewSwapchainInfo Swapchain::AcquireSwapchainForView(const XrView &view) {
   CHECK_XRCMD(xrWaitSwapchainImage(m_swapchain, &waitInfo));
 
   ViewSwapchainInfo info = {
-      .Swapchain = m_context,
       .Image = m_swapchainImages[swapchainImageIndex].image,
       .CompositionLayer = {
           .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,

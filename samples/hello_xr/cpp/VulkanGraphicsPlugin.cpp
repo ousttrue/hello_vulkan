@@ -1,12 +1,9 @@
 #include "VulkanGraphicsPlugin.h"
 #include "CmdBuffer.h"
-#include "DepthBuffer.h"
 #include "MemoryAllocator.h"
 #include "Pipeline.h"
-#include "SwapchainImageContext.h"
 #include "VertexBuffer.h"
 #include "logger.h"
-#include "options.h"
 #include "to_string.h"
 #include "vulkan_debug_object_namer.hpp"
 #include <algorithm>

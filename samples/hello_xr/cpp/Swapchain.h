@@ -8,7 +8,6 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "SwapchainConfiguration.h"
 #include "common/xr_linear.h"
 #include <memory>
 #include <openxr/openxr.h>
@@ -16,7 +15,6 @@
 #include <vulkan/vulkan.h>
 
 struct ViewSwapchainInfo {
-  std::shared_ptr<class SwapchainImageContext> Swapchain;
   VkImage Image;
   XrCompositionLayerProjectionView CompositionLayer;
 
@@ -44,19 +42,12 @@ public:
   XrSwapchainCreateInfo m_swapchainCreateInfo;
   XrSwapchain m_swapchain;
   std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
-  std::shared_ptr<SwapchainImageContext> m_context;
 
 public:
   ~Swapchain();
   static std::shared_ptr<Swapchain> Create(XrSession session, uint32_t i,
                                            const XrViewConfigurationView &vp,
                                            int64_t format);
-
-  // Allocate space for the swapchain image structures. These are different for
-  // each graphics API. The returned pointers are valid for the lifetime of the
-  // graphics plugin.
-  void AllocateSwapchainImageStructs(
-      const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
 
   ViewSwapchainInfo AcquireSwapchainForView(const XrView &view);
   void EndSwapchain();

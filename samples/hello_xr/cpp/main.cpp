@@ -1,7 +1,7 @@
 #include "CubeScene.h"
 #include "Swapchain.h"
-#include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
+#include "VulkanRenderer.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "openxr_session.h"
@@ -67,11 +67,21 @@ int main(int argc, char *argv[]) {
 
   // Create a swapchain for each view.
   std::vector<std::shared_ptr<Swapchain>> swapchains;
+  std::vector<std::shared_ptr<VulkanRenderer>> renderers;
   for (uint32_t i = 0; i < config.Views.size(); i++) {
     auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
                                        swapchainFormat);
     swapchains.push_back(swapchain);
-    swapchain->AllocateSwapchainImageStructs(vulkan);
+
+    auto renderer = VulkanRenderer::Create(
+        vulkan->m_vkDevice, vulkan->m_memAllocator,
+        {swapchain->m_swapchainCreateInfo.width,
+         swapchain->m_swapchainCreateInfo.height},
+        static_cast<VkFormat>(swapchain->m_swapchainCreateInfo.format),
+        static_cast<VkSampleCountFlagBits>(
+            swapchain->m_swapchainCreateInfo.sampleCount),
+        vulkan->m_shaderProgram);
+    renderers.push_back(renderer);
   }
 
   while (!quitKeyPressed) {
@@ -111,8 +121,9 @@ int main(int argc, char *argv[]) {
             composition.pushView(info.CompositionLayer);
 
             {
+              // render vulkan
               VkCommandBuffer cmd = vulkan->BeginCommand();
-              info.Swapchain->RenderView(
+              renderers[i]->RenderView(
                   cmd, info.Image, options.GetBackgroundClearColor(),
                   scene.CalcCubeMatrices(info.calcViewProjection()));
               vulkan->EndCommand(cmd);

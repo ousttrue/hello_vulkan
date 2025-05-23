@@ -14,7 +14,7 @@ set(LOCAL_SOURCE
     Pipeline.cpp
     DepthBuffer.cpp
     CmdBuffer.cpp
-    SwapchainImageContext.cpp
+    VulkanRenderer.cpp
     vulkan_debug_object_namer.cpp
     VulkanGraphicsPlugin.cpp
     options.cpp

@@ -1,17 +1,17 @@
-#include "SwapchainImageContext.h"
+#include "VulkanRenderer.h"
 #include "DepthBuffer.h"
 #include "Pipeline.h"
 #include "RenderPass.h"
 #include "RenderTarget.h"
+#include "VertexBuffer.h"
 #include <vulkan/vulkan_core.h>
 
-std::shared_ptr<SwapchainImageContext> SwapchainImageContext::Create(
+std::shared_ptr<VulkanRenderer> VulkanRenderer::Create(
     VkDevice device, const std::shared_ptr<class MemoryAllocator> &memAllocator,
-    uint32_t capacity, VkExtent2D size, VkFormat format,
-    VkSampleCountFlagBits sampleCount,
+    VkExtent2D size, VkFormat format, VkSampleCountFlagBits sampleCount,
     const std::shared_ptr<class ShaderProgram> &sp) {
 
-  auto ptr = std::shared_ptr<SwapchainImageContext>(new SwapchainImageContext);
+  auto ptr = std::shared_ptr<VulkanRenderer>(new VulkanRenderer);
   ptr->m_vkDevice = device;
 
   ptr->m_size = size;
@@ -35,34 +35,20 @@ std::shared_ptr<SwapchainImageContext> SwapchainImageContext::Create(
       Pipeline::Create(ptr->m_vkDevice, ptr->m_size, ptr->m_pipelineLayout,
                        ptr->m_rp, sp, ptr->m_drawBuffer);
 
-  ptr->m_bases.resize(capacity);
-  ptr->m_swapchainImages.resize(capacity);
-  for (uint32_t i = 0; i < capacity; ++i) {
-    ptr->m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
-    ptr->m_bases[i] = reinterpret_cast<XrSwapchainImageBaseHeader *>(
-        &ptr->m_swapchainImages[i]);
-  }
+  // ptr->m_bases.resize(capacity);
+  // ptr->m_swapchainImages.resize(capacity);
+  // for (uint32_t i = 0; i < capacity; ++i) {
+  //   ptr->m_swapchainImages[i] = {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR};
+  //   ptr->m_bases[i] = reinterpret_cast<XrSwapchainImageBaseHeader *>(
+  //       &ptr->m_swapchainImages[i]);
+  // }
 
   return ptr;
 }
 
-void SwapchainImageContext::BindRenderTarget(
-    VkImage image, VkRenderPassBeginInfo *renderPassBeginInfo) {
-  auto found = m_renderTarget.find(image);
-  if (found == m_renderTarget.end()) {
-    auto rt = RenderTarget::Create(m_vkDevice, image, m_depthBuffer->depthImage,
-                                   m_size, m_rp);
-    found = m_renderTarget.insert({image, rt}).first;
-  }
-  renderPassBeginInfo->renderPass = m_rp->pass;
-  renderPassBeginInfo->framebuffer = found->second->fb;
-  renderPassBeginInfo->renderArea.offset = {0, 0};
-  renderPassBeginInfo->renderArea.extent = m_size;
-}
-
-void SwapchainImageContext::RenderView(VkCommandBuffer cmd, VkImage image,
-                                       const Vec4 &clearColor,
-                                       const std::vector<Mat4> &cubes) {
+void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
+                                const Vec4 &clearColor,
+                                const std::vector<Mat4> &cubes) {
 
   // Ensure depth is in the right layout
   m_depthBuffer->TransitionLayout(
@@ -81,7 +67,22 @@ void SwapchainImageContext::RenderView(VkCommandBuffer cmd, VkImage image,
       .clearValueCount = static_cast<uint32_t>(clearValues.size()),
       .pClearValues = clearValues.data(),
   };
-  BindRenderTarget(image, &renderPassBeginInfo);
+
+  // void VulkanRenderer::BindRenderTarget(
+  //     VkImage image, VkRenderPassBeginInfo *renderPassBeginInfo) {
+  // }
+  // BindRenderTarget(image, &renderPassBeginInfo);
+  auto found = m_renderTarget.find(image);
+  if (found == m_renderTarget.end()) {
+    auto rt = RenderTarget::Create(m_vkDevice, image, m_depthBuffer->depthImage,
+                                   m_size, m_rp);
+    found = m_renderTarget.insert({image, rt}).first;
+  }
+  renderPassBeginInfo.renderPass = m_rp->pass;
+  renderPassBeginInfo.framebuffer = found->second->fb;
+  renderPassBeginInfo.renderArea.offset = {0, 0};
+  renderPassBeginInfo.renderArea.extent = m_size;
+
   vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipe->pipe);
