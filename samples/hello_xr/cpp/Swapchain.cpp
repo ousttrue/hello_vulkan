@@ -1,5 +1,4 @@
 #include "Swapchain.h"
-#include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
 #include "openxr/openxr.h"
@@ -51,7 +50,7 @@ std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
   return ptr;
 }
 
-ViewSwapchainInfo Swapchain::AcquireSwapchainForView(const XrView &view) {
+ViewSwapchainInfo Swapchain::AcquireSwapchain(const XrView &view) {
   XrSwapchainImageAcquireInfo acquireInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
   };

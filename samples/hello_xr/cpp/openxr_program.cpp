@@ -11,8 +11,8 @@
 #endif
 #include <openxr/openxr_platform.h>
 
+#include "VulkanDebugMessageThunk.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "VulkanGraphicsPlugin.h"
 #include "check.h"
 #include "logger.h"
 #include "openxr/openxr.h"
@@ -170,15 +170,6 @@ OpenXrProgram::Create(const Options &options,
       new OpenXrProgram(options, instance, systemId));
 
   return ptr;
-}
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-debugMessageThunk(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-                  const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-                  void *pUserData) {
-  return static_cast<VulkanGraphicsPlugin *>(pUserData)->debugMessage(
-      messageSeverity, messageTypes, pCallbackData);
 }
 
 static XrResult
@@ -340,7 +331,7 @@ static XrResult GetVulkanGraphicsRequirements2KHR(
                                               graphicsRequirements);
 }
 
-std::shared_ptr<VulkanGraphicsPlugin> OpenXrProgram::InitializeVulkan(
+OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     const std::vector<const char *> &layers,
     const std::vector<const char *> &instanceExtensions,
     const std::vector<const char *> &deviceExtensions) {
@@ -409,6 +400,18 @@ std::shared_ptr<VulkanGraphicsPlugin> OpenXrProgram::InitializeVulkan(
   if (err != VK_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
+
+  auto vkCreateDebugUtilsMessengerEXT =
+      (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+          vkInstance, "vkCreateDebugUtilsMessengerEXT");
+  if (vkCreateDebugUtilsMessengerEXT != nullptr) {
+    if (vkCreateDebugUtilsMessengerEXT(vkInstance, &debugInfo, nullptr,
+                                       &m_vkDebugUtilsMessenger) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("vkCreateDebugUtilsMessengerEXT");
+    }
+  }
+
   SetDebugUtilsObjectNameEXT_GetProc(vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
@@ -474,11 +477,12 @@ std::shared_ptr<VulkanGraphicsPlugin> OpenXrProgram::InitializeVulkan(
     throw std::runtime_error("CreateVulkanDeviceKHR");
   }
 
-  // The graphics API can initialize the graphics device now that the systemId
-  // and instance handle are available.
-  return std::make_shared<VulkanGraphicsPlugin>(
-      vkInstance, vkPhysicalDevice, vkDevice, queueInfo.queueFamilyIndex,
-      debugInfo);
+  return {
+      .Instance = vkInstance,
+      .PhysicalDevice = vkPhysicalDevice,
+      .Device = vkDevice,
+      .QueueFamilyIndex = queueInfo.queueFamilyIndex,
+  };
 }
 
 static void LogReferenceSpaces(XrSession m_session) {
@@ -498,8 +502,8 @@ static void LogReferenceSpaces(XrSession m_session) {
   }
 }
 
-std::shared_ptr<OpenXrSession> OpenXrProgram::InitializeSession(
-    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
+std::shared_ptr<OpenXrSession>
+OpenXrProgram::InitializeSession(VulkanResources vulkan) {
   CHECK(m_instance != XR_NULL_HANDLE);
 
   XrSession session;
@@ -509,10 +513,10 @@ std::shared_ptr<OpenXrSession> OpenXrProgram::InitializeSession(
     XrGraphicsBindingVulkan2KHR graphicsBinding{
         .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
         .next = nullptr,
-        .instance = vulkan->m_vkInstance,
-        .physicalDevice = vulkan->m_vkPhysicalDevice,
-        .device = vulkan->m_vkDevice,
-        .queueFamilyIndex = vulkan->m_queueFamilyIndex,
+        .instance = vulkan.Instance,
+        .physicalDevice = vulkan.PhysicalDevice,
+        .device = vulkan.Device,
+        .queueFamilyIndex = vulkan.QueueFamilyIndex,
         .queueIndex = 0,
     };
     XrSessionCreateInfo createInfo{

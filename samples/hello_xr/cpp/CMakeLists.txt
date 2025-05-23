@@ -3,10 +3,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(LOCAL_SOURCE
     logger.cpp
     GetXrReferenceSpaceCreateInfo.cpp
+    VulkanDebugMessageThunk.cpp
     openxr_program.cpp
     openxr_session.cpp
     Swapchain.cpp
-    vk_utils.cpp
     VertexBuffer.cpp
     MemoryAllocator.cpp
     RenderPass.cpp
@@ -16,7 +16,6 @@ set(LOCAL_SOURCE
     CmdBuffer.cpp
     VulkanRenderer.cpp
     vulkan_debug_object_namer.cpp
-    VulkanGraphicsPlugin.cpp
     options.cpp
     vulkan_layers.cpp)
 

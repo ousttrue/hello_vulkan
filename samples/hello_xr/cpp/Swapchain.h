@@ -49,7 +49,7 @@ public:
                                            const XrViewConfigurationView &vp,
                                            int64_t format);
 
-  ViewSwapchainInfo AcquireSwapchainForView(const XrView &view);
+  ViewSwapchainInfo AcquireSwapchain(const XrView &view);
   void EndSwapchain();
 };
 
