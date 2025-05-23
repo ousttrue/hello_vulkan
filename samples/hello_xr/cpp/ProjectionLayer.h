@@ -40,7 +40,6 @@ class ProjectionLayer {
   std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader *>>
       m_swapchainImages;
 
-  int64_t m_colorSwapchainFormat{-1};
   std::vector<XrView> m_views;
   std::list<std::shared_ptr<class SwapchainImageContext>>
       m_swapchainImageContexts;
@@ -55,7 +54,7 @@ public:
   static std::shared_ptr<ProjectionLayer>
   Create(XrSession session,
          const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-         const SwapchainConfiguration &config);
+         const SwapchainConfiguration &config, int64_t colorSwapchainFormat);
 
   // Allocate space for the swapchain image structures. These are different for
   // each graphics API. The returned pointers are valid for the lifetime of the

@@ -13,38 +13,16 @@ ProjectionLayer::~ProjectionLayer() {
   }
 }
 
-std::shared_ptr<ProjectionLayer>
-ProjectionLayer::Create(XrSession session,
-                        const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
-                        const SwapchainConfiguration &config) {
+std::shared_ptr<ProjectionLayer> ProjectionLayer::Create(
+    XrSession session, const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+    const SwapchainConfiguration &config, int64_t colorSwapchainFormat) {
 
   auto ptr = std::shared_ptr<ProjectionLayer>(new ProjectionLayer);
-
-  ptr->m_colorSwapchainFormat =
-      vulkan->SelectColorSwapchainFormat(config.Formats);
 
   // Create the swapchain and get the images.
   if (config.Views.size() > 0) {
     // Create and cache view buffer for xrLocateViews later.
     ptr->m_views.resize(config.Views.size(), {XR_TYPE_VIEW});
-
-    // Print swapchain formats and the selected one.
-    {
-      std::string swapchainFormatsString;
-      for (int64_t format : config.Formats) {
-        const bool selected = format == ptr->m_colorSwapchainFormat;
-        swapchainFormatsString += " ";
-        if (selected) {
-          swapchainFormatsString += "[";
-        }
-        swapchainFormatsString += std::to_string(format);
-        if (selected) {
-          swapchainFormatsString += "]";
-        }
-      }
-      Log::Write(Log::Level::Verbose,
-                 Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
-    }
 
     // Create a swapchain for each view.
     for (uint32_t i = 0; i < config.Views.size(); i++) {
@@ -62,7 +40,7 @@ ProjectionLayer::Create(XrSession session,
           .createFlags = 0,
           .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
                         XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
-          .format = ptr->m_colorSwapchainFormat,
+          .format = colorSwapchainFormat,
           .sampleCount = VK_SAMPLE_COUNT_1_BIT,
           .width = vp.recommendedImageRectWidth,
           .height = vp.recommendedImageRectHeight,

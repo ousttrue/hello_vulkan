@@ -62,8 +62,11 @@ int main(int argc, char *argv[]) {
 
   auto config = session->GetSwapchainConfiguration();
 
+  auto swapchainFormat = vulkan->SelectColorSwapchainFormat(config.Formats);
+
   // session->CreateSwapchains(vulkan, config);
-  auto projection = ProjectionLayer::Create(session->m_session, vulkan, config);
+  auto projection = ProjectionLayer::Create(session->m_session, vulkan, config,
+                                            swapchainFormat);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
