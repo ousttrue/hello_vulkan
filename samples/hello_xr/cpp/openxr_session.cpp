@@ -66,7 +66,7 @@ OpenXrSession::~OpenXrSession() {
   }
 }
 
-SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() const {
+SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() {
   SwapchainConfiguration config;
 
   // Query and cache view configuration views.
@@ -87,6 +87,8 @@ SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() const {
   CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, swapchainFormatCount,
                                           &swapchainFormatCount,
                                           config.Formats.data()));
+
+  m_views.resize(viewCount, {XR_TYPE_VIEW});
 
   return config;
 }
@@ -282,6 +284,36 @@ void OpenXrSession::PollActions() {
       (quitValue.currentState == XR_TRUE)) {
     CHECK_XRCMD(xrRequestExitSession(m_session));
   }
+}
+
+bool OpenXrSession::LocateView(XrSpace appSpace, XrTime predictedDisplayTime,
+                               XrViewConfigurationType viewConfigType,
+                               uint32_t *viewCountOutput) {
+  XrViewLocateInfo viewLocateInfo{
+      .type = XR_TYPE_VIEW_LOCATE_INFO,
+      .viewConfigurationType = viewConfigType,
+      .displayTime = predictedDisplayTime,
+      .space = appSpace,
+  };
+
+  XrViewState viewState{
+      .type = XR_TYPE_VIEW_STATE,
+  };
+
+  auto res = xrLocateViews(m_session, &viewLocateInfo, &viewState,
+                           static_cast<uint32_t>(m_views.size()),
+                           viewCountOutput, m_views.data());
+  CHECK_XRRESULT(res, "xrLocateViews");
+  if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
+      (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
+    return false; // There is no valid tracking poses for the views.
+  }
+
+  CHECK(*viewCountOutput == m_views.size());
+  // CHECK(*viewCountOutput == m_configViews.size());
+  // CHECK(*viewCountOutput == m_swapchains.size());
+
+  return true;
 }
 
 XrFrameState OpenXrSession::BeginFrame() {

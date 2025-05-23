@@ -22,6 +22,7 @@ public:
   XrSpace m_appSpace;
   std::vector<XrSpace> m_visualizedSpaces;
   InputState m_input;
+  std::vector<XrView> m_views;
 
   OpenXrSession(const Options &options, XrInstance instance,
                 XrSystemId systemId, XrSession session, XrSpace appSpace);
@@ -35,13 +36,17 @@ public:
     return m_sessionState == XR_SESSION_STATE_FOCUSED;
   }
 
-  SwapchainConfiguration GetSwapchainConfiguration() const;
+  SwapchainConfiguration GetSwapchainConfiguration();
 
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);
 
   // Sample input actions and generate haptic feedback.
   void PollActions();
+
+  bool LocateView(XrSpace appSpace, XrTime predictedDisplayTime,
+                  XrViewConfigurationType viewConfigType,
+                  uint32_t *viewCountOutput);
 
   // Create and submit a frame.
   XrFrameState BeginFrame();

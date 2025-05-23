@@ -1,5 +1,5 @@
 #include "CubeScene.h"
-#include "ProjectionLayer.h"
+#include "Swapchain.h"
 #include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
@@ -64,8 +64,15 @@ int main(int argc, char *argv[]) {
   // XrSwapchain
   auto config = session->GetSwapchainConfiguration();
   auto swapchainFormat = vulkan->SelectColorSwapchainFormat(config.Formats);
-  auto projection = ProjectionLayer::Create(session->m_session, vulkan, config,
-                                            swapchainFormat);
+
+  // Create a swapchain for each view.
+  std::vector<std::shared_ptr<Swapchain>> swapchains;
+  for (uint32_t i = 0; i < config.Views.size(); i++) {
+    auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
+                                       swapchainFormat);
+    swapchains.push_back(swapchain);
+    swapchain->AllocateSwapchainImageStructs(vulkan);
+  }
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
@@ -84,10 +91,9 @@ int main(int argc, char *argv[]) {
       auto frameState = session->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
         uint32_t viewCountOutput;
-        if (projection->LocateView(session->m_session, session->m_appSpace,
-                                   frameState.predictedDisplayTime,
-                                   options.Parsed.ViewConfigType,
-                                   &viewCountOutput)) {
+        if (session->LocateView(
+                session->m_appSpace, frameState.predictedDisplayTime,
+                options.Parsed.ViewConfigType, &viewCountOutput)) {
           // XrCompositionLayerProjection
 
           // update scene
@@ -100,7 +106,8 @@ int main(int argc, char *argv[]) {
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
             // XrCompositionLayerProjectionView(left / right)
-            auto info = projection->AcquireSwapchainForView(i);
+            auto swapchain = swapchains[i];
+            auto info = swapchain->AcquireSwapchainForView(session->m_views[i]);
             composition.pushView(info.CompositionLayer);
 
             {
@@ -111,7 +118,7 @@ int main(int argc, char *argv[]) {
               vulkan->EndCommand(cmd);
             }
 
-            projection->EndSwapchain(info.CompositionLayer.subImage.swapchain);
+            swapchain->EndSwapchain();
           }
         }
       }

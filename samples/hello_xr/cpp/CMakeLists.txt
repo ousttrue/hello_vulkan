@@ -5,7 +5,7 @@ set(LOCAL_SOURCE
     GetXrReferenceSpaceCreateInfo.cpp
     openxr_program.cpp
     openxr_session.cpp
-    ProjectionLayer.cpp
+    Swapchain.cpp
     vk_utils.cpp
     VertexBuffer.cpp
     MemoryAllocator.cpp

@@ -57,28 +57,9 @@ public:
   // graphics plugin.
   void AllocateSwapchainImageStructs(
       const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan);
-};
 
-class ProjectionLayer {
-  std::vector<std::shared_ptr<class Swapchain>> m_swapchains;
-  std::vector<XrView> m_views;
-
-  ProjectionLayer();
-
-public:
-  ~ProjectionLayer();
-  static std::shared_ptr<ProjectionLayer>
-  Create(XrSession session,
-         const std::shared_ptr<class VulkanGraphicsPlugin> &vulkan,
-         const SwapchainConfiguration &config, int64_t colorSwapchainFormat);
-
-  bool LocateView(XrSession session, XrSpace appSpace,
-                  XrTime predictedDisplayTime,
-                  XrViewConfigurationType viewConfigType,
-                  uint32_t *viewCountOutput);
-
-  ViewSwapchainInfo AcquireSwapchainForView(uint32_t viewIndex);
-  void EndSwapchain(XrSwapchain swapchain);
+  ViewSwapchainInfo AcquireSwapchainForView(const XrView &view);
+  void EndSwapchain();
 };
 
 class LayerComposition {
