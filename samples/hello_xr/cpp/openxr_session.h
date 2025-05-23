@@ -12,10 +12,10 @@ class VulkanGraphicsPlugin;
 
 class OpenXrSession {
   const struct Options &m_options;
-
-public:
   XrInstance m_instance;
   XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
+
+public:
   XrSession m_session;
   XrSpace m_appSpace;
   std::vector<XrSpace> m_visualizedSpaces;
@@ -126,4 +126,42 @@ private:
   void HandleSessionStateChangedEvent(
       const XrEventDataSessionStateChanged &stateChangedEvent,
       bool *exitRenderLoop, bool *requestRestart);
+};
+
+class LayerComposition {
+  std::vector<XrCompositionLayerBaseHeader *> layers;
+  XrCompositionLayerProjection layer;
+  std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+
+public:
+  LayerComposition(XrEnvironmentBlendMode blendMode, XrSpace appSpace) {
+    this->layer = {
+        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+        .layerFlags = static_cast<XrCompositionLayerFlags>(
+            blendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
+                ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                      XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                : 0),
+        .space = appSpace,
+        .viewCount = 0,
+        .views = nullptr,
+    };
+  }
+
+  // left / right
+  void pushView(const XrCompositionLayerProjectionView &view) {
+    this->projectionLayerViews.push_back(view);
+  }
+
+  const std::vector<XrCompositionLayerBaseHeader *> &commitLayer() {
+    this->layers.clear();
+    if (projectionLayerViews.size()) {
+      this->layer.viewCount =
+          static_cast<uint32_t>(projectionLayerViews.size());
+      this->layer.views = projectionLayerViews.data();
+      this->layers.push_back(
+          reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
+    }
+    return this->layers;
+  }
 };

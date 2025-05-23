@@ -45,7 +45,6 @@ int main(int argc, char *argv[]) {
     Log::Write(Log::Level::Error, "No system. QuestLink not ready ?");
     return 1;
   }
-
   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
     ShowHelp();
@@ -55,6 +54,7 @@ int main(int argc, char *argv[]) {
   auto vulkan = program->InitializeVulkan(getVulkanLayers(),
                                           getVulkanInstanceExtensions(),
                                           getVulkanDeviceExtensions());
+
   auto session = program->InitializeSession(vulkan);
   session->CreateSwapchains(vulkan);
 
@@ -70,9 +70,8 @@ int main(int argc, char *argv[]) {
       session->PollActions();
 
       // program->RenderFrame(vulkan, options.GetBackgroundClearColor());
-      std::vector<XrCompositionLayerBaseHeader *> layers;
-      XrCompositionLayerProjection layer;
-      std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+      LayerComposition composition(options.Parsed.EnvironmentBlendMode,
+                                   session->m_appSpace);
 
       auto frameState = session->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
@@ -82,6 +81,7 @@ int main(int argc, char *argv[]) {
                                 options.Parsed.ViewConfigType,
                                 &viewCountOutput)) {
 
+          // XrCompositionLayerProjection
           CubeScene scene;
           scene.addSpaceCubes(session->m_appSpace,
                               frameState.predictedDisplayTime,
@@ -91,7 +91,9 @@ int main(int argc, char *argv[]) {
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
             auto info = session->AcquireSwapchainForView(i);
-            projectionLayerViews.push_back(info.CompositionLayer);
+
+            // XrCompositionLayerProjectionView
+            composition.pushView(info.CompositionLayer);
 
             {
               auto cmd = vulkan->BeginCommand();
@@ -106,24 +108,11 @@ int main(int argc, char *argv[]) {
 
             session->EndSwapchain(info.CompositionLayer.subImage.swapchain);
           }
-
-          layer = {
-              .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-              .layerFlags = static_cast<XrCompositionLayerFlags>(
-                  options.Parsed.EnvironmentBlendMode ==
-                          XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
-                      ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                            XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-                      : 0),
-              .space = session->m_appSpace,
-              .viewCount = static_cast<uint32_t>(projectionLayerViews.size()),
-              .views = projectionLayerViews.data(),
-          };
-
-          layers.push_back(
-              reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
         }
       }
+
+      // std::vector<XrCompositionLayerBaseHeader *>
+      auto &layers = composition.commitLayer();
       session->EndFrame(frameState.predictedDisplayPeriod, layers);
 
     } else {

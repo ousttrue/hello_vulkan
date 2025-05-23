@@ -384,11 +384,13 @@ XrFrameState OpenXrSession::BeginFrame() {
 void OpenXrSession::EndFrame(
     XrTime predictedDisplayTime,
     const std::vector<XrCompositionLayerBaseHeader *> &layers) {
-  XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
-  frameEndInfo.displayTime = predictedDisplayTime;
-  frameEndInfo.environmentBlendMode = m_options.Parsed.EnvironmentBlendMode;
-  frameEndInfo.layerCount = (uint32_t)layers.size();
-  frameEndInfo.layers = layers.data();
+  XrFrameEndInfo frameEndInfo{
+      .type = XR_TYPE_FRAME_END_INFO,
+      .displayTime = predictedDisplayTime,
+      .environmentBlendMode = m_options.Parsed.EnvironmentBlendMode,
+      .layerCount = static_cast<uint32_t>(layers.size()),
+      .layers = layers.data(),
+  };
   CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
 }
 
