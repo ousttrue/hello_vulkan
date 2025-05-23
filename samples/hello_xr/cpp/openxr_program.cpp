@@ -11,8 +11,8 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "VulkanDebugMessageThunk.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
+#include "VulkanDebugMessageThunk.h"
 #include "check.h"
 #include "logger.h"
 #include "openxr/openxr.h"
@@ -21,7 +21,7 @@
 #include "options.h"
 #include "to_string.h"
 #include "vulkan_debug_object_namer.hpp"
-#include <common/xr_linear.h>
+#include "xr_linear.h"
 #include <set>
 
 #if !defined(XR_USE_PLATFORM_WIN32)

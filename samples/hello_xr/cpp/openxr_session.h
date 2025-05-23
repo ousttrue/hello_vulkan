@@ -1,7 +1,7 @@
 #pragma once
 #include "InputState.h"
 #include "SwapchainConfiguration.h"
-#include <common/xr_linear.h>
+#include "xr_linear.h"
 #include <openxr/openxr.h>
 #include <vector>
 #include <vulkan/vulkan.h>

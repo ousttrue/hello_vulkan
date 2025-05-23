@@ -4,7 +4,7 @@
 #include "check.h"
 #include "logger.h"
 #include "to_string.h"
-#include <common/xr_linear.h>
+#include "xr_linear.h"
 #include <vector>
 
 struct CubeScene {

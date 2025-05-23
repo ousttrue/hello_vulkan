@@ -8,7 +8,7 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "common/xr_linear.h"
+#include "xr_linear.h"
 #include <memory>
 #include <openxr/openxr.h>
 #include <vector>

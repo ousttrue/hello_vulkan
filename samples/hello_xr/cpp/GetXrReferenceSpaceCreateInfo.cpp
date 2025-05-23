@@ -1,8 +1,8 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "options.h"
 #include "to_string.h"
+#include "xr_linear.h"
 #include <cmath>
-#include <common/xr_linear.h>
 
 namespace Math {
 namespace Pose {
