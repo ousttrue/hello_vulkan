@@ -5,9 +5,11 @@
 #include <openxr/openxr_platform.h>
 
 #include "CubeScene.h"
-#include "VulkanGraphicsPlugin.h"
+#include "Swapchain.h"
+#include "VulkanRenderer.h"
 #include "logger.h"
 #include "openxr_program.h"
+#include "openxr_session.h"
 #include "options.h"
 #include "vulkan_layers.h"
 
@@ -127,18 +129,40 @@ void android_main(struct android_app *app) {
     auto program = OpenXrProgram::Create(
         options, {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME},
         &instanceCreateInfoAndroid);
-
     options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
     if (!options.UpdateOptionsFromSystemProperties()) {
       ShowHelp();
     }
 
-    auto vulkan = program->InitializeDevice(getVulkanLayers(),
+    auto vulkan = program->InitializeVulkan(getVulkanLayers(),
                                             getVulkanInstanceExtensions(),
                                             getVulkanDeviceExtensions());
-    program->InitializeSession(vulkan);
-    auto projectionLayer = program->CreateSwapchains(vulkan);
 
+    // XrSession
+    auto session = program->InitializeSession(vulkan);
+
+    // Create resources for each view.
+    auto config = session->GetSwapchainConfiguration();
+    std::vector<std::shared_ptr<Swapchain>> swapchains;
+    std::vector<std::shared_ptr<VulkanRenderer>> renderers;
+    for (uint32_t i = 0; i < config.Views.size(); i++) {
+      // XrSwapchain
+      auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
+                                         config.Format);
+      swapchains.push_back(swapchain);
+
+      // VkPipeline... etc
+      auto renderer = std::make_shared<VulkanRenderer>(
+          vulkan.PhysicalDevice, vulkan.Device, vulkan.QueueFamilyIndex,
+          VkExtent2D{swapchain->m_swapchainCreateInfo.width,
+                     swapchain->m_swapchainCreateInfo.height},
+          static_cast<VkFormat>(swapchain->m_swapchainCreateInfo.format),
+          static_cast<VkSampleCountFlagBits>(
+              swapchain->m_swapchainCreateInfo.sampleCount));
+      renderers.push_back(renderer);
+    }
+
+    // mainloop
     while (app->destroyRequested == 0) {
       // Read all pending events.
       for (;;) {
@@ -148,7 +172,7 @@ void android_main(struct android_app *app) {
         // If the timeout is negative, waits indefinitely until an event
         // appears.
         const int timeoutMilliseconds =
-            (!appState.Resumed && !program->IsSessionRunning() &&
+            (!appState.Resumed && !session->IsSessionRunning() &&
              app->destroyRequested == 0)
                 ? -1
                 : 0;
@@ -163,45 +187,63 @@ void android_main(struct android_app *app) {
         }
       }
 
-      program->PollEvents(&exitRenderLoop, &requestRestart);
+      session->PollEvents(&exitRenderLoop, &requestRestart);
       if (exitRenderLoop) {
         ANativeActivity_finish(app->activity);
         continue;
       }
 
-      if (!program->IsSessionRunning()) {
+      if (!session->IsSessionRunning()) {
         // Throttle loop since xrWaitFrame won't be called.
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
         continue;
       }
 
-      program->PollActions();
+      session->PollActions();
 
-      std::vector<XrCompositionLayerBaseHeader *> layers;
-      auto frameState = program->BeginFrame();
+      auto frameState = session->BeginFrame();
+      LayerComposition composition(options.Parsed.EnvironmentBlendMode,
+                                   session->m_appSpace);
+
       if (frameState.shouldRender == XR_TRUE) {
-        if (projectionLayer->UpdateLocateView(program->m_session,
-                                              program->m_appSpace,
-                                              frameState.predictedDisplayTime,
-                                              options.Parsed.ViewConfigType)) {
+        uint32_t viewCountOutput;
+        if (session->LocateView(
+                session->m_appSpace, frameState.predictedDisplayTime,
+                options.Parsed.ViewConfigType, &viewCountOutput)) {
+          // XrCompositionLayerProjection
 
+          // update scene
           CubeScene scene;
-          scene.addSpaceCubes(program->m_appSpace,
+          scene.addSpaceCubes(session->m_appSpace,
                               frameState.predictedDisplayTime,
-                              program->m_visualizedSpaces);
-          scene.addHandCubes(program->m_appSpace,
-                             frameState.predictedDisplayTime, program->m_input);
+                              session->m_visualizedSpaces);
+          scene.addHandCubes(session->m_appSpace,
+                             frameState.predictedDisplayTime, session->m_input);
 
-          if (auto layer = projectionLayer->RenderLayer(
-                  program->m_appSpace, scene.cubes, vulkan,
-                  options.GetBackgroundClearColor(),
-                  options.Parsed.EnvironmentBlendMode)) {
-            layers.push_back(
-                reinterpret_cast<XrCompositionLayerBaseHeader *>(layer));
+          for (uint32_t i = 0; i < viewCountOutput; ++i) {
+            // XrCompositionLayerProjectionView(left / right)
+            auto swapchain = swapchains[i];
+            auto info = swapchain->AcquireSwapchain(session->m_views[i]);
+            composition.pushView(info.CompositionLayer);
+
+            {
+              // render vulkan
+              auto renderer = renderers[i];
+              VkCommandBuffer cmd = renderer->BeginCommand();
+              renderer->RenderView(
+                  cmd, info.Image, options.GetBackgroundClearColor(),
+                  scene.CalcCubeMatrices(info.calcViewProjection()));
+              renderer->EndCommand(cmd);
+            }
+
+            swapchain->EndSwapchain();
           }
         }
       }
-      program->EndFrame(frameState.predictedDisplayPeriod, layers);
+
+      // std::vector<XrCompositionLayerBaseHeader *>
+      auto &layers = composition.commitLayers();
+      session->EndFrame(frameState.predictedDisplayPeriod, layers);
     }
 
     app->activity->vm->DetachCurrentThread();

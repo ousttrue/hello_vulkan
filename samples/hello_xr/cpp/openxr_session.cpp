@@ -6,6 +6,10 @@
 #include "to_string.h"
 #include <algorithm>
 
+#if !defined(XR_USE_PLATFORM_WIN32)
+#define strcpy_s(dest, source) strncpy((dest), (source), sizeof(dest))
+#endif
+
 OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
                              XrSystemId systemId, XrSession session,
                              XrSpace appSpace)
