@@ -153,7 +153,7 @@ public:
     this->projectionLayerViews.push_back(view);
   }
 
-  const std::vector<XrCompositionLayerBaseHeader *> &commitLayer() {
+  const std::vector<XrCompositionLayerBaseHeader *> &commitLayers() {
     this->layers.clear();
     if (projectionLayerViews.size()) {
       this->layer.viewCount =

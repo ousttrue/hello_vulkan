@@ -430,8 +430,7 @@ OpenXrSession::AllocateSwapchainImageStructs(
   // buffers.
   m_swapchainImageContexts.emplace_back(SwapchainImageContext::Create(
       vulkan->m_vkDevice, vulkan->m_memAllocator, capacity, size, format,
-      sampleCount, vulkan->m_pipelineLayout, vulkan->m_shaderProgram,
-      vulkan->m_drawBuffer));
+      sampleCount, vulkan->m_shaderProgram));
   auto swapchainImageContext = m_swapchainImageContexts.back();
 
   // Map every swapchainImage base pointer to this context

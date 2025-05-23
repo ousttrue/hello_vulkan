@@ -152,16 +152,6 @@ void VulkanGraphicsPlugin::InitializeResources() {
     throw std::runtime_error("Failed to create command buffer");
   }
 
-  m_pipelineLayout = PipelineLayout::Create(m_vkDevice);
-
-  static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
-
-  m_drawBuffer = VertexBuffer::Create(
-      m_vkDevice, m_memAllocator,
-      {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
-       {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
-      c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
-      std::size(c_cubeIndices));
 
 #if defined(USE_MIRROR_WINDOW)
   m_swapchain.Create(m_vkInstance, m_vkPhysicalDevice, m_vkDevice,
@@ -203,50 +193,6 @@ VkCommandBuffer VulkanGraphicsPlugin::BeginCommand() {
   m_cmdBuffer->Reset();
   m_cmdBuffer->Begin();
   return m_cmdBuffer->buf;
-}
-
-void VulkanGraphicsPlugin::RenderView(
-    VkCommandBuffer cmd,
-    const std::shared_ptr<SwapchainImageContext> &swapchainContext,
-    uint32_t imageIndex, const Vec4 &clearColor,
-    const std::vector<Mat4> &cubes) {
-
-  // Ensure depth is in the right layout
-  swapchainContext->m_depthBuffer->TransitionLayout(
-      cmd, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-  // Bind and clear eye render target
-  static std::array<VkClearValue, 2> clearValues;
-  clearValues[0].color.float32[0] = clearColor.x;
-  clearValues[0].color.float32[1] = clearColor.y;
-  clearValues[0].color.float32[2] = clearColor.z;
-  clearValues[0].color.float32[3] = clearColor.w;
-  clearValues[1].depthStencil.depth = 1.0f;
-  clearValues[1].depthStencil.stencil = 0;
-  VkRenderPassBeginInfo renderPassBeginInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .clearValueCount = static_cast<uint32_t>(clearValues.size()),
-      .pClearValues = clearValues.data(),
-  };
-  swapchainContext->BindRenderTarget(imageIndex, &renderPassBeginInfo);
-  vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    swapchainContext->m_pipe->pipe);
-
-  // Bind index and vertex buffers
-  vkCmdBindIndexBuffer(cmd, m_drawBuffer->idxBuf, 0, VK_INDEX_TYPE_UINT16);
-  VkDeviceSize offset = 0;
-  vkCmdBindVertexBuffers(cmd, 0, 1, &m_drawBuffer->vtxBuf, &offset);
-
-  // Render each cube
-  for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(cmd, m_pipelineLayout->layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
-
-    // Draw the cube.
-    vkCmdDrawIndexed(cmd, m_drawBuffer->count.idx, 1, 0, 0, 0);
-  }
 }
 
 void VulkanGraphicsPlugin::EndCommand(VkCommandBuffer cmd) {
@@ -364,4 +310,3 @@ VkBool32 VulkanGraphicsPlugin::debugMessage(
 
   return VK_FALSE;
 }
-

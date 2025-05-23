@@ -25,6 +25,8 @@ class SwapchainImageContext {
   std::shared_ptr<class RenderPass> m_rp;
 
 public:
+  std::shared_ptr<class PipelineLayout> m_pipelineLayout{};
+  std::shared_ptr<struct VertexBuffer> m_drawBuffer;
   std::shared_ptr<class Pipeline> m_pipe;
   std::shared_ptr<class DepthBuffer> m_depthBuffer;
   std::vector<XrSwapchainImageBaseHeader *> m_bases;
@@ -34,9 +36,7 @@ public:
          const std::shared_ptr<class MemoryAllocator> &memAllocator,
          uint32_t capacity, VkExtent2D size, VkFormat format,
          VkSampleCountFlagBits sampleCount,
-         const std::shared_ptr<class PipelineLayout> &layout,
-         const std::shared_ptr<class ShaderProgram> &sp,
-         const std::shared_ptr<VertexBuffer> &vb);
+         const std::shared_ptr<class ShaderProgram> &sp);
 
   uint32_t ImageIndex(const XrSwapchainImageBaseHeader *swapchainImageHeader) {
     auto p = reinterpret_cast<const XrSwapchainImageVulkan2KHR *>(
@@ -46,4 +46,7 @@ public:
 
   void BindRenderTarget(uint32_t index,
                         VkRenderPassBeginInfo *renderPassBeginInfo);
+
+  void RenderView(VkCommandBuffer cmd, uint32_t imageIndex,
+                  const Vec4 &clearColor, const std::vector<Mat4> &cubes);
 };

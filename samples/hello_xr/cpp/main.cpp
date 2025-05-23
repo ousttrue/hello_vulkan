@@ -1,4 +1,5 @@
 #include "CubeScene.h"
+#include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
 #include "openxr_program.h"
@@ -6,6 +7,7 @@
 #include "options.h"
 #include "vulkan_layers.h"
 #include <thread>
+#include <vulkan/vulkan_core.h>
 
 void ShowHelp() {
   Log::Write(
@@ -56,6 +58,7 @@ int main(int argc, char *argv[]) {
                                           getVulkanDeviceExtensions());
 
   auto session = program->InitializeSession(vulkan);
+
   session->CreateSwapchains(vulkan);
 
   while (!quitKeyPressed) {
@@ -69,7 +72,6 @@ int main(int argc, char *argv[]) {
     if (session->IsSessionRunning()) {
       session->PollActions();
 
-      // program->RenderFrame(vulkan, options.GetBackgroundClearColor());
       LayerComposition composition(options.Parsed.EnvironmentBlendMode,
                                    session->m_appSpace);
 
@@ -80,8 +82,9 @@ int main(int argc, char *argv[]) {
                                 frameState.predictedDisplayTime,
                                 options.Parsed.ViewConfigType,
                                 &viewCountOutput)) {
-
           // XrCompositionLayerProjection
+
+          // update scene
           CubeScene scene;
           scene.addSpaceCubes(session->m_appSpace,
                               frameState.predictedDisplayTime,
@@ -90,19 +93,15 @@ int main(int argc, char *argv[]) {
                              frameState.predictedDisplayTime, session->m_input);
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
+            // XrCompositionLayerProjectionView(left / right)
             auto info = session->AcquireSwapchainForView(i);
-
-            // XrCompositionLayerProjectionView
             composition.pushView(info.CompositionLayer);
 
             {
-              auto cmd = vulkan->BeginCommand();
-
-              vulkan->RenderView(
-                  cmd, info.Swapchain, info.ImageIndex,
-                  options.GetBackgroundClearColor(),
+              VkCommandBuffer cmd = vulkan->BeginCommand();
+              info.Swapchain->RenderView(
+                  cmd, info.ImageIndex, options.GetBackgroundClearColor(),
                   scene.CalcCubeMatrices(info.calcViewProjection()));
-
               vulkan->EndCommand(cmd);
             }
 
@@ -112,7 +111,7 @@ int main(int argc, char *argv[]) {
       }
 
       // std::vector<XrCompositionLayerBaseHeader *>
-      auto &layers = composition.commitLayer();
+      auto &layers = composition.commitLayers();
       session->EndFrame(frameState.predictedDisplayPeriod, layers);
 
     } else {
