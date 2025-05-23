@@ -10,6 +10,11 @@
 
 class VulkanGraphicsPlugin;
 
+struct SwapchainConfiguration {
+  std::vector<XrViewConfigurationView> Views;
+  std::vector<int64_t> Formats;
+};
+
 class OpenXrSession {
   const struct Options &m_options;
   XrInstance m_instance;
@@ -29,7 +34,6 @@ private:
   XrEventDataBuffer m_eventDataBuffer;
 
   int64_t m_colorSwapchainFormat{-1};
-  std::vector<XrViewConfigurationView> m_configViews;
   std::vector<XrView> m_views;
 
   std::list<std::shared_ptr<class SwapchainImageContext>>
@@ -40,9 +44,7 @@ private:
 
 public:
   OpenXrSession(const Options &options, XrInstance instance,
-                XrSystemId systemId, XrSession session, XrSpace appSpace)
-      : m_options(options), m_instance(instance), m_systemId(systemId),
-        m_session(session), m_appSpace(appSpace) {}
+                XrSystemId systemId, XrSession session, XrSpace appSpace);
   ~OpenXrSession();
 
   // Manage session lifecycle to track if RenderFrame should be called.
@@ -53,10 +55,13 @@ public:
     return m_sessionState == XR_SESSION_STATE_FOCUSED;
   }
 
+  SwapchainConfiguration GetSwapchainConfiguration() const;
+
   // Create a Swapchain which requires coordinating with the graphics plugin to
   // select the format, getting the system graphics properties, getting the view
   // configuration and grabbing the resulting swapchain images.
-  void CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan);
+  void CreateSwapchains(const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+                        const SwapchainConfiguration &config);
 
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);

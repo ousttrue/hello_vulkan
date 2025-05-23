@@ -59,7 +59,9 @@ int main(int argc, char *argv[]) {
 
   auto session = program->InitializeSession(vulkan);
 
-  session->CreateSwapchains(vulkan);
+  auto config = session->GetSwapchainConfiguration();
+
+  session->CreateSwapchains(vulkan, config);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;

@@ -7,36 +7,11 @@
 #include "options.h"
 #include "to_string.h"
 
-//
-// OpenXrSession
-//
-OpenXrSession::~OpenXrSession() {
-  for (Swapchain swapchain : m_swapchains) {
-    xrDestroySwapchain(swapchain.handle);
-  }
-
-  if (m_input.actionSet != XR_NULL_HANDLE) {
-    for (auto hand : {Side::LEFT, Side::RIGHT}) {
-      xrDestroySpace(m_input.handSpace[hand]);
-    }
-    xrDestroyActionSet(m_input.actionSet);
-  }
-
-  for (XrSpace visualizedSpace : m_visualizedSpaces) {
-    xrDestroySpace(visualizedSpace);
-  }
-
-  if (m_appSpace != XR_NULL_HANDLE) {
-    xrDestroySpace(m_appSpace);
-  }
-
-  if (m_session != XR_NULL_HANDLE) {
-    xrDestroySession(m_session);
-  }
-}
-
-void OpenXrSession::CreateSwapchains(
-    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan) {
+OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
+                             XrSystemId systemId, XrSession session,
+                             XrSpace appSpace)
+    : m_options(options), m_instance(instance), m_systemId(systemId),
+      m_session(session), m_appSpace(appSpace) {
   CHECK(m_session != XR_NULL_HANDLE);
 
   // Read graphics properties for preferred swapchain length and logging.
@@ -70,38 +45,73 @@ void OpenXrSession::CreateSwapchains(
   CHECK_MSG(m_options.Parsed.ViewConfigType ==
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
+}
+
+OpenXrSession::~OpenXrSession() {
+  for (Swapchain swapchain : m_swapchains) {
+    xrDestroySwapchain(swapchain.handle);
+  }
+
+  if (m_input.actionSet != XR_NULL_HANDLE) {
+    for (auto hand : {Side::LEFT, Side::RIGHT}) {
+      xrDestroySpace(m_input.handSpace[hand]);
+    }
+    xrDestroyActionSet(m_input.actionSet);
+  }
+
+  for (XrSpace visualizedSpace : m_visualizedSpaces) {
+    xrDestroySpace(visualizedSpace);
+  }
+
+  if (m_appSpace != XR_NULL_HANDLE) {
+    xrDestroySpace(m_appSpace);
+  }
+
+  if (m_session != XR_NULL_HANDLE) {
+    xrDestroySession(m_session);
+  }
+}
+
+SwapchainConfiguration OpenXrSession::GetSwapchainConfiguration() const {
+  SwapchainConfiguration config;
 
   // Query and cache view configuration views.
   uint32_t viewCount;
   CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId,
                                                 m_options.Parsed.ViewConfigType,
                                                 0, &viewCount, nullptr));
-  m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+  config.Views.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
   CHECK_XRCMD(xrEnumerateViewConfigurationViews(
       m_instance, m_systemId, m_options.Parsed.ViewConfigType, viewCount,
-      &viewCount, m_configViews.data()));
+      &viewCount, config.Views.data()));
 
-  // Create and cache view buffer for xrLocateViews later.
-  m_views.resize(viewCount, {XR_TYPE_VIEW});
+  // Select a swapchain format.
+  uint32_t swapchainFormatCount;
+  CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount,
+                                          nullptr));
+  config.Formats.resize(swapchainFormatCount);
+  CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, swapchainFormatCount,
+                                          &swapchainFormatCount,
+                                          config.Formats.data()));
+
+  return config;
+}
+
+void OpenXrSession::CreateSwapchains(
+    const std::shared_ptr<VulkanGraphicsPlugin> &vulkan,
+    const SwapchainConfiguration &config) {
+
+  m_colorSwapchainFormat = vulkan->SelectColorSwapchainFormat(config.Formats);
 
   // Create the swapchain and get the images.
-  if (viewCount > 0) {
-    // Select a swapchain format.
-    uint32_t swapchainFormatCount;
-    CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount,
-                                            nullptr));
-    std::vector<int64_t> swapchainFormats(swapchainFormatCount);
-    CHECK_XRCMD(xrEnumerateSwapchainFormats(
-        m_session, (uint32_t)swapchainFormats.size(), &swapchainFormatCount,
-        swapchainFormats.data()));
-    CHECK(swapchainFormatCount == swapchainFormats.size());
-    m_colorSwapchainFormat =
-        vulkan->SelectColorSwapchainFormat(swapchainFormats);
+  if (config.Views.size() > 0) {
+    // Create and cache view buffer for xrLocateViews later.
+    m_views.resize(config.Views.size(), {XR_TYPE_VIEW});
 
     // Print swapchain formats and the selected one.
     {
       std::string swapchainFormatsString;
-      for (int64_t format : swapchainFormats) {
+      for (int64_t format : config.Formats) {
         const bool selected = format == m_colorSwapchainFormat;
         swapchainFormatsString += " ";
         if (selected) {
@@ -117,8 +127,8 @@ void OpenXrSession::CreateSwapchains(
     }
 
     // Create a swapchain for each view.
-    for (uint32_t i = 0; i < viewCount; i++) {
-      const XrViewConfigurationView &vp = m_configViews[i];
+    for (uint32_t i = 0; i < config.Views.size(); i++) {
+      const XrViewConfigurationView &vp = config.Views[i];
       Log::Write(Log::Level::Info,
                  Fmt("Creating swapchain for view %d with dimensions "
                      "Width=%d Height=%d SampleCount=%d",
@@ -171,8 +181,6 @@ void OpenXrSession::CreateSwapchains(
           std::make_pair(swapchain.handle, std::move(swapchainImages)));
     }
   }
-
-  // return ptr;
 }
 
 static void LogActionSourceName(XrSession session, XrAction action,
@@ -466,7 +474,7 @@ bool OpenXrSession::LocateView(XrSession session, XrSpace appSpace,
   }
 
   CHECK(*viewCountOutput == m_views.size());
-  CHECK(*viewCountOutput == m_configViews.size());
+  // CHECK(*viewCountOutput == m_configViews.size());
   CHECK(*viewCountOutput == m_swapchains.size());
 
   return true;
