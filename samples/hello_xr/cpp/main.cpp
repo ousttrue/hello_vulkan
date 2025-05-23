@@ -1,4 +1,5 @@
 #include "CubeScene.h"
+#include "ProjectionLayer.h"
 #include "SwapchainImageContext.h"
 #include "VulkanGraphicsPlugin.h"
 #include "logger.h"
@@ -61,7 +62,8 @@ int main(int argc, char *argv[]) {
 
   auto config = session->GetSwapchainConfiguration();
 
-  session->CreateSwapchains(vulkan, config);
+  // session->CreateSwapchains(vulkan, config);
+  auto projection = ProjectionLayer::Create(session->m_session, vulkan, config);
 
   while (!quitKeyPressed) {
     bool exitRenderLoop = false;
@@ -80,10 +82,10 @@ int main(int argc, char *argv[]) {
       auto frameState = session->BeginFrame();
       if (frameState.shouldRender == XR_TRUE) {
         uint32_t viewCountOutput;
-        if (session->LocateView(session->m_session, session->m_appSpace,
-                                frameState.predictedDisplayTime,
-                                options.Parsed.ViewConfigType,
-                                &viewCountOutput)) {
+        if (projection->LocateView(session->m_session, session->m_appSpace,
+                                   frameState.predictedDisplayTime,
+                                   options.Parsed.ViewConfigType,
+                                   &viewCountOutput)) {
           // XrCompositionLayerProjection
 
           // update scene
@@ -96,7 +98,7 @@ int main(int argc, char *argv[]) {
 
           for (uint32_t i = 0; i < viewCountOutput; ++i) {
             // XrCompositionLayerProjectionView(left / right)
-            auto info = session->AcquireSwapchainForView(i);
+            auto info = projection->AcquireSwapchainForView(i);
             composition.pushView(info.CompositionLayer);
 
             {
@@ -107,7 +109,7 @@ int main(int argc, char *argv[]) {
               vulkan->EndCommand(cmd);
             }
 
-            session->EndSwapchain(info.CompositionLayer.subImage.swapchain);
+            projection->EndSwapchain(info.CompositionLayer.subImage.swapchain);
           }
         }
       }

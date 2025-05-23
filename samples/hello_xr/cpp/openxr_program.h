@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "openxr/openxr.h"
 #include <common/xr_linear.h>
 #include <memory>
+#include <openxr/openxr.h>
 #include <set>
 #include <string>
 #include <vector>
