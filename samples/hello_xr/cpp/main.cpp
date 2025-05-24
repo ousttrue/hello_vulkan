@@ -1,13 +1,12 @@
-#include "openxr_program//CubeScene.h"
-#include "openxr_program/Swapchain.h"
+#include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_program.h"
 #include "openxr_program/openxr_session.h"
+#include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
-#include "openxr_program/vulkan_layers.h"
-#include "vkr/VulkanRenderer.h"
 #include <common/logger.h>
 #include <thread>
-#include <vulkan/vulkan_core.h>
+#include <vkr/vulkan_layers.h>
+#include <vkr/vulkan_renderer.h>
 
 void ShowHelp() {
   Log::Write(
@@ -62,12 +61,12 @@ int main(int argc, char *argv[]) {
 
   // Create resources for each view.
   auto config = session->GetSwapchainConfiguration();
-  std::vector<std::shared_ptr<Swapchain>> swapchains;
+  std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
   std::vector<std::shared_ptr<VulkanRenderer>> renderers;
   for (uint32_t i = 0; i < config.Views.size(); i++) {
     // XrSwapchain
-    auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
-                                       config.Format);
+    auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
+                                             config.Views[i], config.Format);
     swapchains.push_back(swapchain);
 
     // VkPipeline... etc

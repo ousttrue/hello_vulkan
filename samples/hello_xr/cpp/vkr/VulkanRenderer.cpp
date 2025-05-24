@@ -1,4 +1,5 @@
-#include "VulkanRenderer.h"
+#include <vkr/vulkan_renderer.h>
+
 #include "CmdBuffer.h"
 #include "DepthBuffer.h"
 #include "MemoryAllocator.h"
@@ -9,9 +10,8 @@
 #include "vulkan_debug_object_namer.hpp"
 #include <common/fmt.h>
 #include <common/logger.h>
-#include <vulkan/vulkan_core.h>
-
 #include <shaderc/shaderc.hpp>
+#include <vulkan/vulkan_core.h>
 // Compile a shader to a SPIR-V binary.
 static std::vector<uint32_t> CompileGlslShader(const std::string &name,
                                                shaderc_shader_kind kind,

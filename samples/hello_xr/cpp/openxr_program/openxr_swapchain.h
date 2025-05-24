@@ -28,21 +28,20 @@ struct ViewSwapchainInfo {
   }
 };
 
-struct SwapchainImpl;
-class Swapchain {
-  SwapchainImpl *m_impl;
+class OpenXrSwapchain {
+  struct SwapchainImpl *m_impl;
 
 public:
   XrSwapchainCreateInfo m_swapchainCreateInfo;
   XrSwapchain m_swapchain;
 
-  Swapchain();
+  OpenXrSwapchain();
 
 public:
-  ~Swapchain();
-  static std::shared_ptr<Swapchain> Create(XrSession session, uint32_t i,
-                                           const XrViewConfigurationView &vp,
-                                           int64_t format);
+  ~OpenXrSwapchain();
+  static std::shared_ptr<OpenXrSwapchain>
+  Create(XrSession session, uint32_t i, const XrViewConfigurationView &vp,
+         int64_t format);
 
   ViewSwapchainInfo AcquireSwapchain(const XrView &view);
   void EndSwapchain();

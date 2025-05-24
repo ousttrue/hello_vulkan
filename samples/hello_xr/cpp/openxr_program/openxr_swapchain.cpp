@@ -7,8 +7,8 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "Swapchain.h"
 #include "openxr/openxr.h"
+#include "openxr_swapchain.h"
 #include "xr_check.h"
 #include <common/fmt.h>
 #include <common/logger.h>
@@ -17,16 +17,16 @@ struct SwapchainImpl {
   std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
 };
 
-Swapchain::Swapchain() : m_impl(new SwapchainImpl) {}
+OpenXrSwapchain::OpenXrSwapchain() : m_impl(new SwapchainImpl) {}
 
-Swapchain::~Swapchain() {
+OpenXrSwapchain::~OpenXrSwapchain() {
   xrDestroySwapchain(m_swapchain);
   delete m_impl;
 }
 
-std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
-                                             const XrViewConfigurationView &vp,
-                                             int64_t format) {
+std::shared_ptr<OpenXrSwapchain>
+OpenXrSwapchain::Create(XrSession session, uint32_t i,
+                        const XrViewConfigurationView &vp, int64_t format) {
 
   Log::Write(Log::Level::Info,
              Fmt("Creating swapchain for view %d with dimensions "
@@ -35,7 +35,7 @@ std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
                  vp.recommendedSwapchainSampleCount));
 
   // Create the swapchain.
-  auto ptr = std::shared_ptr<Swapchain>(new Swapchain);
+  auto ptr = std::shared_ptr<OpenXrSwapchain>(new OpenXrSwapchain);
   ptr->m_swapchainCreateInfo = {
       .type = XR_TYPE_SWAPCHAIN_CREATE_INFO,
       .createFlags = 0,
@@ -68,7 +68,7 @@ std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
   return ptr;
 }
 
-ViewSwapchainInfo Swapchain::AcquireSwapchain(const XrView &view) {
+ViewSwapchainInfo OpenXrSwapchain::AcquireSwapchain(const XrView &view) {
   XrSwapchainImageAcquireInfo acquireInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
   };
@@ -105,7 +105,7 @@ ViewSwapchainInfo Swapchain::AcquireSwapchain(const XrView &view) {
   return info;
 }
 
-void Swapchain::EndSwapchain() {
+void OpenXrSwapchain::EndSwapchain() {
   XrSwapchainImageReleaseInfo releaseInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
   };
