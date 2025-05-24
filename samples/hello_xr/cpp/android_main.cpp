@@ -243,7 +243,7 @@ void android_main(struct android_app *app) {
 
       // std::vector<XrCompositionLayerBaseHeader *>
       auto &layers = composition.commitLayers();
-      session->EndFrame(frameState.predictedDisplayPeriod, layers);
+      session->EndFrame(frameState.predictedDisplayTime, layers);
     }
 
     app->activity->vm->DetachCurrentThread();

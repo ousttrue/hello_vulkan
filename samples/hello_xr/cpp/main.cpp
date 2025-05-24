@@ -134,7 +134,7 @@ int main(int argc, char *argv[]) {
 
       // std::vector<XrCompositionLayerBaseHeader *>
       auto &layers = composition.commitLayers();
-      session->EndFrame(frameState.predictedDisplayPeriod, layers);
+      session->EndFrame(frameState.predictedDisplayTime, layers);
 
     } else {
       // Throttle loop since xrWaitFrame won't be called.
