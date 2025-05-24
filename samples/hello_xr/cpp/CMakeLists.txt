@@ -1,5 +1,7 @@
 set(CMAKE_CXX_STANDARD 20)
 
+subdirs(vkr)
+
 set(LOCAL_SOURCE
     logger.cpp
     GetXrReferenceSpaceCreateInfo.cpp
@@ -7,15 +9,6 @@ set(LOCAL_SOURCE
     openxr_program.cpp
     openxr_session.cpp
     Swapchain.cpp
-    VertexBuffer.cpp
-    MemoryAllocator.cpp
-    RenderPass.cpp
-    RenderTarget.cpp
-    Pipeline.cpp
-    DepthBuffer.cpp
-    CmdBuffer.cpp
-    VulkanRenderer.cpp
-    vulkan_debug_object_namer.cpp
     options.cpp
     vulkan_layers.cpp)
 
@@ -60,7 +53,7 @@ else()
 endif()
 
 target_include_directories(hello_xr PRIVATE .)
-target_link_libraries(hello_xr PRIVATE OpenXR::openxr_loader vulkan shaderc)
+target_link_libraries(hello_xr PRIVATE OpenXR::openxr_loader vkr)
 
 add_dependencies(hello_xr run_hello_xr_glsl_compiles)
 
@@ -74,5 +67,3 @@ target_include_directories(
           "${PROJECT_SOURCE_DIR}/external/include"
           # For including compiled shaders
           "${CMAKE_CURRENT_BINARY_DIR}")
-
-target_link_libraries(hello_xr PRIVATE OpenXR::openxr_loader)

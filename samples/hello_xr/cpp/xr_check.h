@@ -1,9 +1,6 @@
-#pragma once
+#include "check.h"
+// #include <openxr/openxr.h>
 #include <openxr/openxr_reflection.h>
-#include <stdarg.h>
-#include <string>
-#include <stdexcept>
-#include <memory>
 
 // Macro to generate stringify functions for OpenXR enumerations based data
 // provided in openxr_reflection.h
@@ -25,45 +22,14 @@ MAKE_TO_STRING_FUNC(XrSessionState);
 MAKE_TO_STRING_FUNC(XrResult);
 MAKE_TO_STRING_FUNC(XrFormFactor);
 
-inline std::string Fmt(const char *fmt, ...) {
-  va_list vl;
-  va_start(vl, fmt);
-  int size = std::vsnprintf(nullptr, 0, fmt, vl);
-  va_end(vl);
-
-  if (size != -1) {
-    std::unique_ptr<char[]> buffer(new char[size + 1]);
-
-    va_start(vl, fmt);
-    size = std::vsnprintf(buffer.get(), size + 1, fmt, vl);
-    va_end(vl);
-    if (size != -1) {
-      return std::string(buffer.get(), size);
-    }
-  }
-
-  throw std::runtime_error("Unexpected vsnprintf failure");
-}
-
-[[noreturn]] inline void Throw(std::string failureMessage,
-                               const char *originator = nullptr,
-                               const char *sourceLocation = nullptr) {
-  if (originator != nullptr) {
-    failureMessage += Fmt("\n    Origin: %s", originator);
-  }
-  if (sourceLocation != nullptr) {
-    failureMessage += Fmt("\n    Source: %s", sourceLocation);
-  }
-
-  throw std::logic_error(failureMessage);
-}
-
 [[noreturn]] inline void ThrowXrResult(XrResult res,
                                        const char *originator = nullptr,
                                        const char *sourceLocation = nullptr) {
   Throw(Fmt("XrResult failure [%s]", to_string(res)), originator,
         sourceLocation);
 }
+
+#define THROW_XR(xr, cmd) ThrowXrResult(xr, #cmd, FILE_AND_LINE);
 
 inline XrResult CheckXrResult(XrResult res, const char *originator = nullptr,
                               const char *sourceLocation = nullptr) {
@@ -73,3 +39,5 @@ inline XrResult CheckXrResult(XrResult res, const char *originator = nullptr,
 
   return res;
 }
+#define CHECK_XRCMD(cmd) CheckXrResult(cmd, #cmd, FILE_AND_LINE);
+#define CHECK_XRRESULT(res, cmdStr) CheckXrResult(res, cmdStr, FILE_AND_LINE);

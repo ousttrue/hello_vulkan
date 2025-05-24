@@ -1,8 +1,8 @@
 #include "Swapchain.h"
-#include "check.h"
+#include "fmt.h"
 #include "logger.h"
 #include "openxr/openxr.h"
-#include "to_string.h"
+#include "xr_check.h"
 
 Swapchain::~Swapchain() { xrDestroySwapchain(m_swapchain); }
 

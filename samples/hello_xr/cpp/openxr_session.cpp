@@ -1,9 +1,9 @@
 #include "openxr_session.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "check.h"
+#include "fmt.h"
 #include "logger.h"
 #include "options.h"
-#include "to_string.h"
+#include "xr_check.h"
 #include <algorithm>
 
 #if !defined(XR_USE_PLATFORM_WIN32)

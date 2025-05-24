@@ -13,15 +13,14 @@
 
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "VulkanDebugMessageThunk.h"
-#include "check.h"
+#include "fmt.h"
 #include "logger.h"
 #include "openxr/openxr.h"
 #include "openxr_program.h"
 #include "openxr_session.h"
 #include "options.h"
-#include "to_string.h"
-#include "vulkan_debug_object_namer.hpp"
-#include "xr_linear.h"
+#include "vkr/vulkan_debug_object_namer.hpp"
+#include "xr_check.h"
 #include <set>
 
 #if !defined(XR_USE_PLATFORM_WIN32)

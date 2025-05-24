@@ -1,6 +1,7 @@
 #include "options.h"
+#include "fmt.h"
 #include "logger.h"
-#include "to_string.h"
+#include "xr_check.h"
 #include <vector>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,

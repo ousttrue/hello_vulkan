@@ -1,9 +1,9 @@
 #pragma once
 #include "FloatTypes.h"
 #include "InputState.h"
-#include "check.h"
+#include "fmt.h"
 #include "logger.h"
-#include "to_string.h"
+#include "xr_check.h"
 #include "xr_linear.h"
 #include <vector>
 

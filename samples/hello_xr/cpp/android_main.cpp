@@ -4,13 +4,13 @@
 
 #include <openxr/openxr_platform.h>
 
-#include "CubeScene.h"
 #include "Swapchain.h"
-#include "VulkanRenderer.h"
 #include "logger.h"
 #include "openxr_program.h"
 #include "openxr_session.h"
 #include "options.h"
+#include "vkr/CubeScene.h"
+#include "vkr/VulkanRenderer.h"
 #include "vulkan_layers.h"
 
 #include <thread>
