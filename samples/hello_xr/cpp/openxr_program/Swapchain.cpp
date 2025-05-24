@@ -1,10 +1,28 @@
+#include <vulkan/vulkan.h>
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Unknwn.h>
+#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+#include <openxr/openxr_platform.h>
+
 #include "Swapchain.h"
-#include "fmt.h"
-#include "logger.h"
 #include "openxr/openxr.h"
 #include "xr_check.h"
+#include <common/fmt.h>
+#include <common/logger.h>
 
-Swapchain::~Swapchain() { xrDestroySwapchain(m_swapchain); }
+struct SwapchainImpl {
+  std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
+};
+
+Swapchain::Swapchain() : m_impl(new SwapchainImpl) {}
+
+Swapchain::~Swapchain() {
+  xrDestroySwapchain(m_swapchain);
+  delete m_impl;
+}
 
 std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
                                              const XrViewConfigurationView &vp,
@@ -37,11 +55,11 @@ std::shared_ptr<Swapchain> Swapchain::Create(XrSession session, uint32_t i,
   uint32_t imageCount;
   CHECK_XRCMD(
       xrEnumerateSwapchainImages(ptr->m_swapchain, 0, &imageCount, nullptr));
-  ptr->m_swapchainImages.resize(imageCount,
-                                {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+  ptr->m_impl->m_swapchainImages.resize(imageCount,
+                                        {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
 
   std::vector<XrSwapchainImageBaseHeader *> pointers;
-  for (auto &image : ptr->m_swapchainImages) {
+  for (auto &image : ptr->m_impl->m_swapchainImages) {
     pointers.push_back((XrSwapchainImageBaseHeader *)&image);
   }
   CHECK_XRCMD(xrEnumerateSwapchainImages(ptr->m_swapchain, imageCount,
@@ -65,7 +83,7 @@ ViewSwapchainInfo Swapchain::AcquireSwapchain(const XrView &view) {
   CHECK_XRCMD(xrWaitSwapchainImage(m_swapchain, &waitInfo));
 
   ViewSwapchainInfo info = {
-      .Image = m_swapchainImages[swapchainImageIndex].image,
+      .Image = m_impl->m_swapchainImages[swapchainImageIndex].image,
       .CompositionLayer = {
           .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
           .pose = view.pose,

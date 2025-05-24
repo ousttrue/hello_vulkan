@@ -1,12 +1,9 @@
 #pragma once
 #include "InputState.h"
 #include "SwapchainConfiguration.h"
-#include "xr_linear.h"
 #include <openxr/openxr.h>
 #include <vector>
 #include <vulkan/vulkan.h>
-
-class VulkanGraphicsPlugin;
 
 class OpenXrSession {
   const struct Options &m_options;

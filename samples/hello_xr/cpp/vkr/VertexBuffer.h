@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <common/FloatTypes.h>
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
-#include "FloatTypes.h"
 
 constexpr Vec3 Red{1, 0, 0};
 constexpr Vec3 DarkRed{0.25f, 0, 0};

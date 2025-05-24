@@ -1,11 +1,11 @@
-#include "Swapchain.h"
-#include "logger.h"
-#include "openxr_program.h"
-#include "openxr_session.h"
-#include "options.h"
-#include "vkr/CubeScene.h"
+#include "openxr_program//CubeScene.h"
+#include "openxr_program/Swapchain.h"
+#include "openxr_program/openxr_program.h"
+#include "openxr_program/openxr_session.h"
+#include "openxr_program/options.h"
+#include "openxr_program/vulkan_layers.h"
 #include "vkr/VulkanRenderer.h"
-#include "vulkan_layers.h"
+#include <common/logger.h>
 #include <thread>
 #include <vulkan/vulkan_core.h>
 

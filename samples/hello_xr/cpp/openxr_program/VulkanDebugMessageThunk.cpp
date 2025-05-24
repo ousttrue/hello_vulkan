@@ -1,6 +1,6 @@
 #include "VulkanDebugMessageThunk.h"
-#include "logger.h"
-#include "fmt.h"
+#include <common/fmt.h>
+#include <common/logger.h>
 #include <vulkan/vulkan_core.h>
 
 static std::string vkObjectTypeToString(VkObjectType objectType) {

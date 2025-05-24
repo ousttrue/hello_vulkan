@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "vkr/FloatTypes.h"
+#include "common/FloatTypes.h"
 #include <locale>
 #include <openxr/openxr.h>
 

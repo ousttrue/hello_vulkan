@@ -13,5 +13,5 @@ add_library(
 
 target_link_libraries(
   vkr
-  PRIVATE shaderc
+  PRIVATE shaderc common
   PUBLIC vulkan)

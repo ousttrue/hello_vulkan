@@ -1,10 +1,10 @@
 #include "openxr_session.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "fmt.h"
-#include "logger.h"
 #include "options.h"
 #include "xr_check.h"
 #include <algorithm>
+#include <common/fmt.h>
+#include <common/logger.h>
 
 #if !defined(XR_USE_PLATFORM_WIN32)
 #define strcpy_s(dest, source) strncpy((dest), (source), sizeof(dest))

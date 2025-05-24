@@ -1,12 +1,4 @@
 #pragma once
-#include <vulkan/vulkan.h>
-#ifdef XR_USE_PLATFORM_WIN32
-#include <Unknwn.h>
-#endif
-#ifdef XR_USE_PLATFORM_ANDROID
-#include <android_native_app_glue.h>
-#endif
-#include <openxr/openxr_platform.h>
 
 #include "xr_linear.h"
 #include <memory>
@@ -36,12 +28,15 @@ struct ViewSwapchainInfo {
   }
 };
 
+struct SwapchainImpl;
 class Swapchain {
+  SwapchainImpl *m_impl;
 
 public:
   XrSwapchainCreateInfo m_swapchainCreateInfo;
   XrSwapchain m_swapchain;
-  std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
+
+  Swapchain();
 
 public:
   ~Swapchain();
