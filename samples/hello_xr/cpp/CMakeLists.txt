@@ -29,33 +29,17 @@ if(ANDROID)
   add_library(
     hello_xr MODULE android_main.cpp ${LOCAL_SOURCE} ${VULKAN_SHADERS}
                     $<TARGET_OBJECTS:android_native_app_glue>)
-  target_compile_definitions(
-    hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID -DXR_USE_GRAPHICS_API_VULKAN
-                     # -DUSE_ONLINE_VULKAN_SHADERC
-  )
+  target_compile_definitions(hello_xr PRIVATE -DXR_USE_PLATFORM_ANDROID
+                                              -DXR_USE_GRAPHICS_API_VULKAN)
   target_link_libraries(
     hello_xr PRIVATE ${ANDROID_LIBRARY} ${ANDROID_LOG_LIBRARY}
-                     android_native_app_glue vulkan)
+                     android_native_app_glue)
 
 else()
   add_executable(hello_xr main.cpp ${LOCAL_SOURCE} ${VULKAN_SHADERS})
   target_compile_definitions(
-    hello_xr
-    PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
-            -DWIN32_LEAN_AND_MEAN -DNOMINMAX -DUSE_ONLINE_VULKAN_SHADERC)
-
-  target_link_directories(hello_xr PRIVATE $ENV{vulkan_sdk}/Lib)
-  target_link_libraries(
-    hello_xr
-    PRIVATE vulkan_sdk
-            #
-            shadercd.lib
-            shaderc_utild.lib
-            SPIRV-Toolsd.lib
-            SPIRV-Tools-optd.lib
-            glslangd.lib
-            #
-  )
+    hello_xr PRIVATE -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
+                     -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 
   if(WIN32)
     target_link_libraries(hello_xr PRIVATE ole32)
@@ -76,7 +60,7 @@ else()
 endif()
 
 target_include_directories(hello_xr PRIVATE .)
-target_link_libraries(hello_xr PRIVATE OpenXR::openxr_loader)
+target_link_libraries(hello_xr PRIVATE OpenXR::openxr_loader vulkan shaderc)
 
 add_dependencies(hello_xr run_hello_xr_glsl_compiles)
 

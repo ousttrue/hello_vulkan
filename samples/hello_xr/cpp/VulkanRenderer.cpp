@@ -11,7 +11,6 @@
 #include "vulkan_debug_object_namer.hpp"
 #include <vulkan/vulkan_core.h>
 
-#ifdef USE_ONLINE_VULKAN_SHADERC
 #include <shaderc/shaderc.hpp>
 // Compile a shader to a SPIR-V binary.
 static std::vector<uint32_t> CompileGlslShader(const std::string &name,
@@ -34,7 +33,6 @@ static std::vector<uint32_t> CompileGlslShader(const std::string &name,
 
   return {module.cbegin(), module.cend()};
 }
-#endif
 
 constexpr char VertexShaderGlsl[] = R"_(
 #version 430
@@ -100,19 +98,10 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
   // XXX handle swapchainCreateInfo.sampleCount
 
-#ifdef USE_ONLINE_VULKAN_SHADERC
   auto vertexSPIRV = CompileGlslShader(
       "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
   auto fragmentSPIRV = CompileGlslShader(
       "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
-#else
-  std::vector<uint32_t> vertexSPIRV = SPV_PREFIX
-#include "vert.spv"
-      SPV_SUFFIX;
-  std::vector<uint32_t> fragmentSPIRV = SPV_PREFIX
-#include "frag.spv"
-      SPV_SUFFIX;
-#endif
   if (vertexSPIRV.empty()) {
     throw std::runtime_error("Failed to compile vertex shader");
   }
