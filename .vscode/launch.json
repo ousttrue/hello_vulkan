@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "xrvirtualkeyboard",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrVirtualKeyboard/cpp/xrvirtualkeyboard.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "xrhandsfb",
             "type": "cppvsdbg",
             "request": "launch",

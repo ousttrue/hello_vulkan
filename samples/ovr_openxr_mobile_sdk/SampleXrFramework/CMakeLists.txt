@@ -5,8 +5,8 @@ target_include_directories(samplexrframework
                            PUBLIC ${CMAKE_CURRENT_LIST_DIR}/Src)
 target_link_libraries(
   samplexrframework
-  PRIVATE minizip zlib stb ktx
-  PUBLIC OVR glext OpenXR::openxr_loader meta_openxr_preview xr_linear)
+  PRIVATE zlib stb ktx
+  PUBLIC OVR minizip glext OpenXR::openxr_loader meta_openxr_preview xr_linear)
 
 if(ANDROID)
 

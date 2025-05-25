@@ -667,31 +667,31 @@ class XrApp {
 
 } // namespace OVRFW
 
-// #if defined(ANDROID)
-//
-// #define ENTRY_POINT(appClass)                     \
-//     void android_main(struct android_app* app) {  \
-//         auto appl = std::make_unique<appClass>(); \
-//         appl->Run(app);                           \
-//     }
-//
-// #elif defined(WIN32)
-//
-// #define ENTRY_POINT(appClass)                               \
-//     __pragma(comment(linker, "/SUBSYSTEM:WINDOWS"));        \
-//     int APIENTRY WinMain(HINSTANCE, HINSTANCE, PSTR, int) { \
-//         auto appl = std::make_unique<appClass>();           \
-//         appl->Run();                                        \
-//         return 0;                                           \
-//     }
-//
-// #else
-//
-// #define ENTRY_POINT(appClass)                     \
-//     int main(int, const char**) {                 \
-//         auto appl = std::make_unique<appClass>(); \
-//         appl->Run();                              \
-//         return 0;                                 \
-//     }
-//
-// #endif // defined(ANDROID)
+#if defined(ANDROID)
+
+#define ENTRY_POINT(appClass)                     \
+    void android_main(struct android_app* app) {  \
+        auto appl = std::make_unique<appClass>(); \
+        appl->Run(app);                           \
+    }
+
+#elif defined(WIN32)
+
+#define ENTRY_POINT(appClass)                               \
+    __pragma(comment(linker, "/SUBSYSTEM:WINDOWS"));        \
+    int APIENTRY WinMain(HINSTANCE, HINSTANCE, PSTR, int) { \
+        auto appl = std::make_unique<appClass>();           \
+        appl->Run();                                        \
+        return 0;                                           \
+    }
+
+#else
+
+#define ENTRY_POINT(appClass)                     \
+    int main(int, const char**) {                 \
+        auto appl = std::make_unique<appClass>(); \
+        appl->Run();                              \
+        return 0;                                 \
+    }
+
+#endif // defined(ANDROID)

@@ -24,6 +24,12 @@ Swapchain 周りが難読。
 
 - `GameActivity` https://github.com/googlesamples/android-vulkan-tutorials/blob/master/tutorial05_triangle/app/src/main/cpp/AndroidMain.cpp
 
+# Meta OpenXR SDK
+
+https://github.com/meta-quest/Meta-OpenXR-SDK
+
+- https://developers.meta.com/horizon/documentation/native/android/mobile-openxr-sample
+
 # vk_mini_samples
 
 https://github.com/nvpro-samples/vk_mini_samples

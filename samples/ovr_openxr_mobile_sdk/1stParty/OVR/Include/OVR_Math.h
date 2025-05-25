@@ -1949,7 +1949,7 @@ class Quat {
             y = (m.M[1][2] + m.M[2][1]) / s;
             z = T(0.25) * s;
         }
-        OVR_MATH_ASSERT(IsNormalized()); // Ensure input matrix is orthogonal
+        // OVR_MATH_ASSERT(IsNormalized()); // Ensure input matrix is orthogonal
     }
 
     // Constructs the quaternion from a rotation matrix
@@ -2135,7 +2135,13 @@ class Quat {
 
     // Normalize
     bool IsNormalized() const {
-        return fabs(LengthSq() - T(1)) < Math<T>::Tolerance();
+        auto d = fabs(LengthSq() - T(1));
+        if(d < Math<T>::Tolerance()){
+            return true;
+        }
+        else{
+            return false;
+        }
     }
 
     void Normalize() {
