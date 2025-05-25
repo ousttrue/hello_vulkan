@@ -12,6 +12,9 @@ FetchContent_Populate(
 
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
+add_library(stb INTERFACE)
+target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+target_compile_definitions(stb INTERFACE STB_IMAGE_IMPLEMENTATION)
 
 FetchContent_Populate(
   magic_enum
@@ -99,6 +102,8 @@ else()
              $ENV{VULKAN_SDK}/Lib/SPIRV-Tools-optd.lib
              $ENV{VULKAN_SDK}/Lib/glslangd.lib)
 
+  FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
+  FetchContent_MakeAvailable(zlib)
 endif()
 
-subdirs(vulfwk hello_xr/cpp)
+subdirs(vulfwk hello_xr/cpp ovr_openxr_mobile_sdk)
