@@ -1040,6 +1040,7 @@ void VRMenuObject::Init(OvrGuiSys& guiSys, VRMenuObjectParms const& parms) {
             TextLocalPose.Translation.z};
         if (Surfaces.size() > 0) {
             Vector2f dims = Surfaces[0].GetDims();
+            assert(dims.x>0 && dims.y>0);
             LocalScale = Vector3f(LocalScale.x / dims.x, LocalScale.y / dims.y, LocalScale.z);
         }
         FontParms.WrapWidth *= DEFAULT_TEXEL_SCALE;
