@@ -16,6 +16,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "xrhandsandcontrollers",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrHandsAndControllers/cpp/xrhandsandcontrollers.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "xrhandsfb",
             "type": "cppvsdbg",
             "request": "launch",

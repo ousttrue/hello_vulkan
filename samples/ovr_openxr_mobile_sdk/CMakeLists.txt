@@ -17,5 +17,11 @@ else()
 
 endif()
 
-subdirs(3rdParty 1stParty SampleXrFramework XrHandsFB/cpp XrPassthrough/cpp
-        XrVirtualKeyboard/cpp)
+subdirs(
+  3rdParty
+  1stParty
+  SampleXrFramework
+  XrHandsFB/cpp
+  XrPassthrough/cpp
+  XrVirtualKeyboard/cpp
+  XrHandsAndControllers/cpp)

@@ -33,3 +33,9 @@ https://github.com/meta-quest/Meta-OpenXR-SDK
 # vk_mini_samples
 
 https://github.com/nvpro-samples/vk_mini_samples
+
+# android_openxr_gles
+
+openxr + GLES + imgui !
+
+https://github.com/terryky/android_openxr_gles
