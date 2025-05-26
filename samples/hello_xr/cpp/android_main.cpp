@@ -4,16 +4,16 @@
 
 #include <openxr/openxr_platform.h>
 
-#include "CubeScene.h"
-#include "Swapchain.h"
-#include "VulkanRenderer.h"
-#include "logger.h"
-#include "openxr_program.h"
-#include "openxr_session.h"
-#include "options.h"
-#include "vulkan_layers.h"
+#include "openxr_program/CubeScene.h"
+#include "openxr_program/openxr_program.h"
+#include "openxr_program/openxr_session.h"
+#include "openxr_program/openxr_swapchain.h"
+#include "openxr_program/options.h"
 
+#include <common/logger.h>
 #include <thread>
+#include <vkr/vulkan_layers.h>
+#include <vkr/vulkan_renderer.h>
 
 struct AndroidAppState {
   ANativeWindow *NativeWindow = nullptr;
@@ -143,12 +143,12 @@ void android_main(struct android_app *app) {
 
     // Create resources for each view.
     auto config = session->GetSwapchainConfiguration();
-    std::vector<std::shared_ptr<Swapchain>> swapchains;
+    std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
     std::vector<std::shared_ptr<VulkanRenderer>> renderers;
     for (uint32_t i = 0; i < config.Views.size(); i++) {
       // XrSwapchain
-      auto swapchain = Swapchain::Create(session->m_session, i, config.Views[i],
-                                         config.Format);
+      auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
+                                               config.Views[i], config.Format);
       swapchains.push_back(swapchain);
 
       // VkPipeline... etc
@@ -243,7 +243,7 @@ void android_main(struct android_app *app) {
 
       // std::vector<XrCompositionLayerBaseHeader *>
       auto &layers = composition.commitLayers();
-      session->EndFrame(frameState.predictedDisplayPeriod, layers);
+      session->EndFrame(frameState.predictedDisplayTime, layers);
     }
 
     app->activity->vm->DetachCurrentThread();

@@ -5,6 +5,39 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "xrvirtualkeyboard",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrVirtualKeyboard/cpp/xrvirtualkeyboard.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "xrhandsandcontrollers",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrHandsAndControllers/cpp/xrhandsandcontrollers.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "xrhandsfb",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrHandsFB/cpp/xrhandsfb.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "hello_xr",
             "type": "cppvsdbg",
             "request": "launch",

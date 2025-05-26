@@ -1,5 +1,5 @@
 # project
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.30)
 project(hello_vulkan VERSION 0.1.0)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)

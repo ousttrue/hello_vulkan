@@ -12,6 +12,9 @@ FetchContent_Populate(
 
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
+add_library(stb INTERFACE)
+target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+target_compile_definitions(stb INTERFACE STB_IMAGE_IMPLEMENTATION)
 
 FetchContent_Populate(
   magic_enum
@@ -47,15 +50,60 @@ if(ANDROID_NDK)
   target_include_directories(
     ${TARGET_NAME} PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 
+  FetchContent_Declare(
+    SPIRV-Headers
+    GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Headers.git
+    GIT_TAG vulkan-sdk-1.4.313.0)
+  FetchContent_MakeAvailable(SPIRV-Headers)
+
+  FetchContent_Declare(
+    SPIRV-Tools
+    GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Tools.git
+    GIT_TAG vulkan-sdk-1.4.313.0)
+  FetchContent_MakeAvailable(SPIRV-Tools)
+
+  FetchContent_Declare(
+    glslang
+    GIT_REPOSITORY https://github.com/KhronosGroup/glslang.git
+    GIT_TAG vulkan-sdk-1.4.313.0)
+  FetchContent_MakeAvailable(glslang)
+
+  set(SHADERC_SKIP_INSTALL OFF)
+  set(SHADERC_SKIP_TESTS ON)
+  set(SHADERC_SKIP_INSTALL ON)
+  FetchContent_Declare(
+    shaderc
+    GIT_REPOSITORY https://github.com/google/shaderc.git
+    GIT_TAG v2025.2)
+  FetchContent_MakeAvailable(shaderc)
+
+  # https://developer.android.com/ndk/guides/graphics/shader-compilers
   subdirs(hellotriangle/cpp)
 else()
-  set(TARGET_NAME vulkan_sdk)
+  set(TARGET_NAME vulkan)
   add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
   set_target_properties(
     ${TARGET_NAME}
     PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
                IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/vulkan-1.lib)
   subdirs(vulkan_tutorial)
+
+  set(TARGET_NAME shaderc)
+  add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
+  set_target_properties(
+    ${TARGET_NAME}
+    PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
+               IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shadercd.lib)
+  set_property(
+    TARGET ${TARGET_NAME}
+    PROPERTY INTERFACE_LINK_LIBRARIES
+             $ENV{VULKAN_SDK}/Lib/shaderc_utild.lib
+             $ENV{VULKAN_SDK}/Lib/SPIRV-Toolsd.lib
+             $ENV{VULKAN_SDK}/Lib/SPIRV-Tools-optd.lib
+             $ENV{VULKAN_SDK}/Lib/glslangd.lib)
+
+  FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
+  FetchContent_MakeAvailable(zlib)
 endif()
 
-subdirs(vulfwk hello_xr/cpp)
+subdirs(vulfwk hello_xr/cpp ovr_openxr_mobile_sdk)
