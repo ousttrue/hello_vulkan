@@ -697,11 +697,4 @@ class XrHandsApp : public OVRFW::XrApp {
     std::vector<OVRFW::GeometryRenderer> handCapsuleRenderersR_;
 };
 
-// ENTRY_POINT(XrHandsApp)
-    // __pragma(comment(linker, "/SUBSYSTEM:WINDOWS"));
-    // int APIENTRY WinMain(HINSTANCE, HINSTANCE, PSTR, int) {
-    int main(int argc, char **argv){
-        auto appl = std::make_unique<XrHandsApp>();
-        appl->Run();
-        return 0;
-    }
+ENTRY_POINT(XrHandsApp)

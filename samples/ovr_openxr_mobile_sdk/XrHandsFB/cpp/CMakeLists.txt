@@ -1,2 +1,6 @@
-add_executable(xrhandsfb main.cpp)
+if(ANDROID)
+  add_library(xrhandsfb SHARED main.cpp)
+else()
+  add_executable(xrhandsfb main.cpp)
+endif()
 target_link_libraries(xrhandsfb samplexrframework)

@@ -16,6 +16,6 @@ else()
   FetchContent_Declare(
     libktx
     GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
-    GIT_TAG v4.2.1)
+    GIT_TAG v4.4.0)
   FetchContent_MakeAvailable(libktx)
 endif()

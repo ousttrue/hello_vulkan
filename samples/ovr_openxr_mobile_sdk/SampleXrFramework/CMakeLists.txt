@@ -5,11 +5,12 @@ target_include_directories(samplexrframework
                            PUBLIC ${CMAKE_CURRENT_LIST_DIR}/Src)
 target_link_libraries(
   samplexrframework
-  PRIVATE zlib stb ktx
+  PRIVATE stb ktx
   PUBLIC OVR minizip glext OpenXR::openxr_loader meta_openxr_preview xr_linear)
 
 if(ANDROID)
-
+  target_link_libraries(samplexrframework PUBLIC android_native_app_glue
+                                                 android EGL GLESv3 log)
 else()
   target_compile_definitions(samplexrframework PUBLIC WIN32 KHRONOS_STATIC)
   if(MSVC)
