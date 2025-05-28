@@ -122,10 +122,27 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
+
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "ousttrue.simplehello",
+            .activity_class_name = "ousttrue.simplehello.MainActivity",
+            .apk_name = "SimpleHello",
+            .contents = .{
+                .android_manifest = b.path("samples/simple_activity/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/simple_activity/res"),
+                .java_files = &.{b.path("samples/simple_activity/java/ousttrue/simplehello/MainActivity.java")},
+            },
+        },
+    );
 }
 
 const ApkOpts = struct {
     package_name: []const u8,
+    activity_class_name: []const u8 = "android.app.NativeActivity",
     apk_name: []const u8,
     contents: ndk_build.ApkContents,
 };
@@ -144,6 +161,7 @@ fn build_apk(
         b,
         tools,
         so.step,
+        opts.package_name,
         opts.contents,
     );
 
@@ -180,6 +198,7 @@ fn build_apk(
         &install_apk.step,
         opts.apk_name,
         opts.package_name,
+        opts.activity_class_name,
     );
     b.step(b.fmt("run_{s}", .{opts.apk_name}), "adb install... && adb shell am start...").dependOn(&adb_start.step);
 }

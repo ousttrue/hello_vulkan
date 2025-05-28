@@ -14,12 +14,14 @@ const android = @import("android");
 pub fn link(
     b: *std.Build,
     tools: *android.Tools,
+    package_name: []const u8,
     android_manifest: std.Build.LazyPath,
     resource_directory: ?std.Build.LazyPath,
     assets_directory: ?std.Build.LazyPath,
 ) struct {
     step: *std.Build.Step.Run,
     file: std.Build.LazyPath,
+    r_java: std.Build.LazyPath,
 } {
     const aapt2link = b.addSystemCommand(&[_][]const u8{
         tools.build_tools.aapt2,
@@ -41,8 +43,10 @@ pub fn link(
     aapt2link.addFileArg(android_manifest);
 
     // resources
-    if (make_resources_flat_zip(b, tools, resource_directory)) |file| {
-        aapt2link.addFileArg(file);
+    if (resource_directory) |dir| {
+        const aapt = make_resources_flat_zip(b, tools, dir);
+        aapt2link.step.dependOn(aapt.step);
+        aapt2link.addFileArg(aapt.file);
     }
 
     // assets
@@ -53,38 +57,52 @@ pub fn link(
 
     aapt2link.addArg("-o");
     const resources_apk = aapt2link.addOutputFileArg("resources.apk");
+
+    aapt2link.addArg("--java");
+    const r_dir = aapt2link.addOutputDirectoryArg("r_dir");
+
+    const package_path = b.fmt("{s}", .{package_name});
+    for (package_path) |*c| {
+        if (c.* == '.') {
+            c.* = '/';
+        }
+    }
+
     return .{
         .step = aapt2link,
         .file = resources_apk,
+        .r_java = r_dir.path(b, b.fmt("{s}/R.java", .{package_path})),
     };
 }
 
 fn make_resources_flat_zip(
     b: *std.Build,
     tools: *android.Tools,
-    resource_directory: ?std.Build.LazyPath,
-) ?std.Build.LazyPath {
+    resource_directory: std.Build.LazyPath,
+) struct {
+    step: *std.Build.Step,
+    file: std.Build.LazyPath,
+} {
     // Add resource files
-    if (resource_directory) |dir| {
-        // Make zip of compiled resource files, ie.
-        // - res/values/strings.xml -> values_strings.arsc.flat
-        // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
+    // Make zip of compiled resource files, ie.
+    // - res/values/strings.xml -> values_strings.arsc.flat
+    // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
 
-        const aapt2compile = b.addSystemCommand(&[_][]const u8{
-            tools.build_tools.aapt2,
-            "compile",
-        });
-        aapt2compile.setName("aapt2 compile [dir]");
+    const aapt2compile = b.addSystemCommand(&[_][]const u8{
+        tools.build_tools.aapt2,
+        "compile",
+    });
+    aapt2compile.setName("aapt2 compile [dir]");
 
-        // add directory
-        aapt2compile.addArg("--dir");
-        aapt2compile.addDirectoryArg(dir);
+    // add directory
+    aapt2compile.addArg("--dir");
+    aapt2compile.addDirectoryArg(resource_directory);
 
-        aapt2compile.addArg("-o");
-        const resources_flat_zip_file = aapt2compile.addOutputFileArg("resource_dir.flat.zip");
+    aapt2compile.addArg("-o");
+    const resources_flat_zip_file = aapt2compile.addOutputFileArg("resource_dir.flat.zip");
 
-        return resources_flat_zip_file;
-    } else {
-        return null;
-    }
+    return .{
+        .step = &aapt2compile.step,
+        .file = resources_flat_zip_file,
+    };
 }

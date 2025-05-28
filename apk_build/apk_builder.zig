@@ -1,6 +1,7 @@
 const std = @import("std");
 const android = @import("android");
 const aapt2 = @import("aapt2.zig");
+const D8Glob = @import("d8glob.zig");
 
 pub const CopyFile = struct {
     src: std.Build.LazyPath,
@@ -16,7 +17,7 @@ pub const ApkContents = struct {
     android_manifest: std.Build.LazyPath,
     resource_directory: ?std.Build.LazyPath = null,
     assets_directory: ?std.Build.LazyPath = null,
-    java_directory: ?std.Build.LazyPath = null,
+    java_files: []const std.Build.LazyPath = &.{},
     appends: []const AppendFile = &.{},
 };
 
@@ -39,12 +40,13 @@ const ApkBuilder = struct {
     // - "Targeting R+ (version 30 and above) requires the resources.arsc of installed APKs to be stored uncompressed and aligned on a 4-byte boundary"
     //
     // https://developer.android.com/about/versions/11/behavior-changes-11
-    resources_arsc: std.Build.LazyPath,
+    resources_arsc_dir: *std.Build.Step.WriteFile,
 
     pub fn create(
         b: *std.Build,
         tools: *android.Tools,
         dependOn: *std.Build.Step,
+        package_name: []const u8,
         contents: ApkContents,
     ) @This() {
         // aapt2 link
@@ -53,6 +55,7 @@ const ApkBuilder = struct {
         const resources_apk = aapt2.link(
             b,
             tools,
+            package_name,
             contents.android_manifest,
             contents.resource_directory,
             contents.assets_directory,
@@ -64,6 +67,7 @@ const ApkBuilder = struct {
             tools.java_tools.jar,
         });
         jar.setName("jar (unzip resources.apk)");
+        jar.step.dependOn(dependOn);
         if (b.verbose) {
             jar.addArg("--verbose");
         }
@@ -79,27 +83,85 @@ const ApkBuilder = struct {
         const extracted_apk_dir = resources_apk.file.dirname();
         jar.setCwd(extracted_apk_dir);
 
-        const files = b.addWriteFiles();
-        files.step.dependOn(dependOn);
+        const self = @This(){
+            .files = b.addWriteFiles(),
+            .resources_arsc_dir = b.addWriteFiles(),
+        };
+        self.files.step.dependOn(&jar.step);
+        self.resources_arsc_dir.step.dependOn(&jar.step);
 
-        _ = files.addCopyDirectory(extracted_apk_dir, "", .{
+        _ = self.files.addCopyDirectory(extracted_apk_dir, "", .{
             .exclude_extensions = &.{
                 // ignore the *.apk that exists in this directory
                 ".apk",
                 // ignore resources.arsc as Android 30+ APIs does not supporting
                 // compressing this in the zip file
                 ".arsc",
+                // R.java
+                ".java",
             },
         });
-        files.step.dependOn(&jar.step);
 
-        // _ = self.files_not_compressed.addCopyFile(, "resources.arsc");
-        // self.files_not_compressed.step.dependOn(&jar.step);
+        if (contents.java_files.len > 0) {
+            const java_classes_output_dir = blk: {
+                // https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html
+                const javac_cmd = b.addSystemCommand(&[_][]const u8{
+                    tools.java_tools.javac,
+                    // NOTE(jae): 2024-09-22
+                    // Force encoding to be "utf8", this fixes the following error occuring in Windows:
+                    // error: unmappable character (0x8F) for encoding windows-1252
+                    // Source: https://github.com/libsdl-org/SDL/blob/release-2.30.7/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java#L2045
+                    "-encoding",
+                    "utf8",
+                    "-cp",
+                    tools.root_jar,
+                        // NOTE(jae): 2024-09-19
+                        // Debug issues with the SDL.java classes
+                        // "-Xlint:deprecation",
+                });
+                javac_cmd.setName("javac");
+                javac_cmd.addArg("-d");
+                const output_dir = javac_cmd.addOutputDirectoryArg("android_classes");
+                for (contents.java_files) |java_file| {
+                    javac_cmd.addFileArg(java_file);
+                }
+                javac_cmd.addFileArg(resources_apk.r_java);
 
-        return .{
-            .files = files,
-            .resources_arsc = extracted_apk_dir.path(b, "resources.arsc"),
-        };
+                break :blk output_dir;
+            };
+
+            // From d8.bat
+            // call "%java_exe%" %javaOpts% -cp "%jarpath%" com.android.tools.r8.D8 %params%
+            {
+                const d8 = b.addSystemCommand(&[_][]const u8{
+                    tools.build_tools.d8,
+                });
+                d8.setName("d8");
+
+                // ie. android_sdk/platforms/android-{api-level}/android.jar
+                d8.addArg("--lib");
+                d8.addArg(tools.root_jar);
+
+                d8.addArg("--output");
+                const dex_output_dir = d8.addOutputDirectoryArg("android_dex");
+
+                // NOTE(jae): 2024-09-22
+                // As per documentation for d8, we may want to specific the minimum API level we want
+                // to support. Not sure how to test or expose this yet. See: https://developer.android.com/tools/d8
+                // d8.addArg("--min-api");
+                // d8.addArg(number_as_string);
+
+                // add each output *.class file
+                D8Glob.create(b, d8, java_classes_output_dir);
+                const dex_file = dex_output_dir.path(b, "classes.dex");
+
+                // Append classes.dex to apk
+                _ = self.files.addCopyFile(dex_file, "classes.dex");
+            }
+        }
+        _ = self.resources_arsc_dir.addCopyFile(extracted_apk_dir.path(b, "resources.arsc"), "resources.arsc");
+
+        return self;
     }
 
     pub fn copy(
@@ -193,7 +255,7 @@ const ApkBuilder = struct {
 
         // NOTE(jae): 2025-03-23
         // Hack to ensure this side-effect re-triggers zipping this up
-        jar_update.addFileInput(self.resources_arsc);
+        jar_update.addFileInput(self.resources_arsc_dir.getDirectory().path(b, "resources.arsc"));
 
         // Written as-is from running "jar --help"
         // -u, --update      = Update an existing jar archive
@@ -203,7 +265,9 @@ const ApkBuilder = struct {
         const update_zip_arg = "-ufM0";
         if (b.verbose) jar_update.addArg(update_zip_arg ++ "v") else jar_update.addArg(update_zip_arg);
         jar_update.addFileArg(zip_file);
-        jar_update.addFileArg(self.resources_arsc);
+
+        jar_update.setCwd(self.resources_arsc_dir.getDirectory());
+        jar_update.addArg(".");
 
         return .{
             .step = &jar_update.step,
@@ -232,12 +296,14 @@ pub fn makeZipfile(
     b: *std.Build,
     tools: *android.Tools,
     dependOn: *std.Build.Step,
+    package_name: []const u8,
     zip: ApkContents,
 ) ZipFileStep {
     const builder = ApkBuilder.create(
         b,
         tools,
         dependOn,
+        package_name,
         zip,
     );
 
