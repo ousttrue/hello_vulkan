@@ -59,6 +59,18 @@ export default defineConfig({
         text: "OpenXR",
         items: [{ text: "初期化", link: "/openxr/initialization" }],
       },
+      {
+        text: "Gtk",
+        items: [{ text: "gtk", link: "gtk/index.md" }],
+      },
+      {
+        text: "Gstreamer",
+        items: [
+          { text: "gstreamer", link: "gst/index" },
+          { text: "gstreamer android", link: "gst/gst_android" },
+          { text: "gstreamer vulkan", link: "gst/gst_vulkan" },
+        ],
+      },
     ],
 
     socialLinks: [

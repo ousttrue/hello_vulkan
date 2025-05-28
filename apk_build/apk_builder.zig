@@ -1,5 +1,24 @@
 const std = @import("std");
 const android = @import("android");
+const aapt2 = @import("aapt2.zig");
+
+pub const CopyFile = struct {
+    src: std.Build.LazyPath,
+    dst: []const u8,
+};
+
+pub const AppendFile = union(enum) {
+    artifact: *std.Build.Step.Compile,
+    path: CopyFile,
+};
+
+pub const ApkContents = struct {
+    android_manifest: std.Build.LazyPath,
+    resource_directory: ?std.Build.LazyPath = null,
+    assets_directory: ?std.Build.LazyPath = null,
+    java_directory: ?std.Build.LazyPath = null,
+    appends: []const AppendFile = &.{},
+};
 
 // We could also use that information to create easy to use Zig step like
 // - zig build adb-uninstall (adb uninstall "com.zig.sdl2")
@@ -14,45 +33,33 @@ const ApkBuilder = struct {
     // - classes.dex
     files: *std.Build.Step.WriteFile,
 
-    // These files belong in root and *must not* be compressed
-    // - resources.arsc
-    files_not_compressed: *std.Build.Step.WriteFile,
+    // NOTE(jae): 2025-03-23 - https://github.com/silbinarywolf/zig-android-sdk/issues/23
+    // We apply resources.arsc seperately to the zip file to avoid compressing it, otherwise we get the following
+    // error when we "adb install"
+    // - "Targeting R+ (version 30 and above) requires the resources.arsc of installed APKs to be stored uncompressed and aligned on a 4-byte boundary"
+    //
+    // https://developer.android.com/about/versions/11/behavior-changes-11
+    resources_arsc: std.Build.LazyPath,
 
     pub fn create(
         b: *std.Build,
         tools: *android.Tools,
         dependOn: *std.Build.Step,
-        android_manifest_file: std.Build.LazyPath,
-        resource_directory: ?std.Build.LazyPath,
-        assets_directory: ?std.Build.LazyPath,
+        contents: ApkContents,
     ) @This() {
-        const self = @This(){
-            .files = b.addWriteFiles(),
-            .files_not_compressed = b.addWriteFiles(),
-        };
-        self.files.step.dependOn(dependOn);
-
-        self.run_jar(
+        // aapt2 link
+        // resource_directory
+        // assets_directory
+        const resources_apk = aapt2.link(
             b,
             tools,
-            android_manifest_file,
-            resource_directory,
-            assets_directory,
+            contents.android_manifest,
+            contents.resource_directory,
+            contents.assets_directory,
         );
 
-        return self;
-    }
-
-    // Extract compiled resources.apk and add contents to the folder we'll zip with "jar" below
-    // See: https://musteresel.github.io/posts/2019/07/build-android-app-bundle-on-command-line.html
-    fn run_jar(
-        self: *const @This(),
-        b: *std.Build,
-        tools: *android.Tools,
-        android_manifest_file: std.Build.LazyPath,
-        resource_directory: ?std.Build.LazyPath,
-        assets_directory: ?std.Build.LazyPath,
-    ) void {
+        // Extract compiled resources.apk and add contents to the folder we'll zip with "jar" below
+        // See: https://musteresel.github.io/posts/2019/07/build-android-app-bundle-on-command-line.html
         const jar = b.addSystemCommand(&[_][]const u8{
             tools.java_tools.jar,
         });
@@ -63,14 +70,6 @@ const ApkBuilder = struct {
 
         // Extract *.apk file created with "aapt2 link"
         jar.addArg("--extract");
-
-        const resources_apk = aapt2_link(
-            b,
-            tools,
-            android_manifest_file,
-            resource_directory,
-            assets_directory,
-        );
         jar.addPrefixedFileArg("--file=", resources_apk.file);
 
         // NOTE(jae): 2024-09-30
@@ -80,7 +79,10 @@ const ApkBuilder = struct {
         const extracted_apk_dir = resources_apk.file.dirname();
         jar.setCwd(extracted_apk_dir);
 
-        _ = self.files.addCopyDirectory(extracted_apk_dir, "", .{
+        const files = b.addWriteFiles();
+        files.step.dependOn(dependOn);
+
+        _ = files.addCopyDirectory(extracted_apk_dir, "", .{
             .exclude_extensions = &.{
                 // ignore the *.apk that exists in this directory
                 ".apk",
@@ -89,16 +91,15 @@ const ApkBuilder = struct {
                 ".arsc",
             },
         });
-        self.files.step.dependOn(&jar.step);
+        files.step.dependOn(&jar.step);
 
-        // Setup directory of additional files that should not be compressed
+        // _ = self.files_not_compressed.addCopyFile(, "resources.arsc");
+        // self.files_not_compressed.step.dependOn(&jar.step);
 
-        // NOTE(jae): 2025-03-23 - https://github.com/silbinarywolf/zig-android-sdk/issues/23
-        // We apply resources.arsc seperately to the zip file to avoid compressing it, otherwise we get the following
-        // error when we "adb install"
-        // - "Targeting R+ (version 30 and above) requires the resources.arsc of installed APKs to be stored uncompressed and aligned on a 4-byte boundary"
-        _ = self.files_not_compressed.addCopyFile(extracted_apk_dir.path(b, "resources.arsc"), "resources.arsc");
-        self.files_not_compressed.step.dependOn(&jar.step);
+        return .{
+            .files = files,
+            .resources_arsc = extracted_apk_dir.path(b, "resources.arsc"),
+        };
     }
 
     pub fn copy(
@@ -151,6 +152,64 @@ const ApkBuilder = struct {
             }
         }
     }
+
+    // Create zip via "jar" as it's cross-platform and aapt2 can't zip *.so or *.dex files.
+    // - lib/**/*.so
+    // - classes.dex
+    // - {directory with all resource files like: AndroidManifest.xml, res/values/strings.xml}
+    fn build(
+        self: *const @This(),
+        b: *std.Build,
+        tools: *android.Tools,
+    ) ZipFileStep {
+        const jar_make = b.addSystemCommand(&[_][]const u8{
+            tools.java_tools.jar,
+        });
+        jar_make.setName("jar (zip compress apk)");
+
+        const directory_to_zip = self.files.getDirectory();
+        jar_make.setCwd(directory_to_zip);
+        // NOTE(jae): 2024-09-30
+        // Hack to ensure this side-effect re-triggers zipping this up
+        jar_make.addFileInput(directory_to_zip.path(b, "AndroidManifest.xml"));
+
+        // Written as-is from running "jar --help"
+        // -c, --create      = Create the archive. When the archive file name specified
+        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
+        // -M, --no-manifest = Do not create a manifest file for the entries
+        const compress_zip_arg = "-cfM";
+        if (b.verbose) jar_make.addArg(compress_zip_arg ++ "v") else jar_make.addArg(compress_zip_arg);
+        const zip_file = jar_make.addOutputFileArg("compiled_code.zip");
+        jar_make.addArg(".");
+
+        //
+        // Update zip with files that are not compressed (ie. resources.arsc)
+        //
+        const jar_update = b.addSystemCommand(&[_][]const u8{
+            tools.java_tools.jar,
+        });
+        jar_update.step.dependOn(&jar_make.step);
+        jar_update.setName("jar (update zip with uncompressed files)");
+
+        // NOTE(jae): 2025-03-23
+        // Hack to ensure this side-effect re-triggers zipping this up
+        jar_update.addFileInput(self.resources_arsc);
+
+        // Written as-is from running "jar --help"
+        // -u, --update      = Update an existing jar archive
+        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
+        // -M, --no-manifest = Do not create a manifest file for the entries
+        // -0, --no-compress = Store only; use no ZIP compression
+        const update_zip_arg = "-ufM0";
+        if (b.verbose) jar_update.addArg(update_zip_arg ++ "v") else jar_update.addArg(update_zip_arg);
+        jar_update.addFileArg(zip_file);
+        jar_update.addFileArg(self.resources_arsc);
+
+        return .{
+            .step = &jar_update.step,
+            .file = zip_file,
+        };
+    }
 };
 
 fn getSoDir(artifact: *std.Build.Step.Compile) []const u8 {
@@ -163,113 +222,9 @@ fn getSoDir(artifact: *std.Build.Step.Compile) []const u8 {
     };
 }
 
-// Make resources.apk from:
-// - resources.flat.zip (created from "aapt2 compile")
-//    - res/values/strings.xml -> values_strings.arsc.flat
-// - AndroidManifest.xml
-//
-// This also validates your AndroidManifest.xml and can catch configuration errors
-// which "aapt" was not capable of.
-// See: https://developer.android.com/tools/aapt2#aapt2_element_hierarchy
-// Snapshot: http://web.archive.org/web/20241001070128/https://developer.android.com/tools/aapt2#aapt2_element_hierarchy
-fn aapt2_link(
-    b: *std.Build,
-    tools: *android.Tools,
-    android_manifest_file: std.Build.LazyPath,
-    resource_directory: ?std.Build.LazyPath,
-    assets_directory: ?std.Build.LazyPath,
-) struct {
-    step: *std.Build.Step.Run,
-    file: std.Build.LazyPath,
-} {
-    const aapt2link = b.addSystemCommand(&[_][]const u8{
-        tools.build_tools.aapt2,
-        "link",
-        "-I", // add an existing package to base include set
-        tools.root_jar,
-    });
-    aapt2link.setName("aapt2 link");
-
-    if (b.verbose) {
-        aapt2link.addArg("-v");
-    }
-
-    // full path to AndroidManifest.xml to include in APK
-    // ie. --manifest AndroidManifest.xml
-    aapt2link.addArg("--manifest");
-    aapt2link.addFileArg(android_manifest_file);
-
-    aapt2link.addArgs(&[_][]const u8{
-        "--target-sdk-version",
-        b.fmt("{d}", .{@intFromEnum(tools.api_level)}),
-    });
-
-    // NOTE(jae): 2024-10-02
-    // Explored just outputting to dir but it gets errors like:
-    //  - error: failed to write res/mipmap-mdpi-v4/ic_launcher.png to archive:
-    //      The system cannot find the file specified. (2).
-    //
-    // So... I'll stick with the creating an APK and extracting it approach.
-    // aapt2link.addArg("---to-dir"); // Requires: Android SDK Build Tools 28.0.0 or higher
-    // aapt2link.addArg("-o");
-    // const resources_apk_dir = aapt2link.addOutputDirectoryArg("resources");
-
-    aapt2link.addArg("-o");
-    const resources_apk = aapt2link.addOutputFileArg("resources.apk");
-
-    // Add resource files
-    if (resource_directory) |dir| {
-        const resources_flat_zip = resblk: {
-            // Make zip of compiled resource files, ie.
-            // - res/values/strings.xml -> values_strings.arsc.flat
-            // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
-
-            {
-                const aapt2compile = b.addSystemCommand(&[_][]const u8{
-                    tools.build_tools.aapt2,
-                    "compile",
-                });
-                aapt2compile.setName("aapt2 compile [dir]");
-
-                // add directory
-                aapt2compile.addArg("--dir");
-                aapt2compile.addDirectoryArg(dir);
-
-                aapt2compile.addArg("-o");
-                const resources_flat_zip_file = aapt2compile.addOutputFileArg("resource_dir.flat.zip");
-
-                break :resblk resources_flat_zip_file;
-            }
-        };
-
-        // Add resources.flat.zip
-        aapt2link.addFileArg(resources_flat_zip);
-    }
-
-    if (assets_directory) |dir| {
-        aapt2link.addArg("-A");
-        aapt2link.addDirectoryArg(dir);
-    }
-
-    return .{
-        .step = aapt2link,
-        .file = resources_apk,
-    };
-}
-
-pub const ZipFile = struct {
+pub const ZipFileStep = struct {
     step: *std.Build.Step,
     file: std.Build.LazyPath,
-};
-
-pub const CopyFile = struct {
-    src: std.Build.LazyPath,
-    dst: []const u8,
-};
-
-pub const EntryPoint = union(enum) {
-    artifact: *std.Build.Step.Compile,
-    bin: CopyFile,
 };
 
 // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
@@ -277,96 +232,28 @@ pub fn makeZipfile(
     b: *std.Build,
     tools: *android.Tools,
     dependOn: *std.Build.Step,
-    android_manifest_file: std.Build.LazyPath,
-    entrypoint: EntryPoint,
-    resource_directory: ?std.Build.LazyPath,
-    assets_directory: ?std.Build.LazyPath,
-    appends: ?[]const CopyFile,
-) ZipFile {
+    zip: ApkContents,
+) ZipFileStep {
     const builder = ApkBuilder.create(
         b,
         tools,
         dependOn,
-        android_manifest_file,
-        resource_directory,
-        assets_directory,
+        zip,
     );
 
-    switch (entrypoint) {
-        .artifact => |so| {
-            builder.copyRecursive(b, so);
-        },
-        .bin => |so| {
-            builder.copy(so.src, so.dst);
-        },
-    }
-
-    if (appends) |_copies| {
-        for (_copies) |copy| {
-            builder.copy(copy.src, copy.dst);
+    for (zip.appends) |append| {
+        switch (append) {
+            .artifact => |a| {
+                builder.copyRecursive(b, a);
+            },
+            .path => |p| {
+                builder.copy(p.src, p.dst);
+            },
         }
+        // builder.copy(append.src, append.dst);
     }
 
-    // Create zip via "jar" as it's cross-platform and aapt2 can't zip *.so or *.dex files.
-    // - lib/**/*.so
-    // - classes.dex
-    // - {directory with all resource files like: AndroidManifest.xml, res/values/strings.xml}
-    const zip_file = blk: {
-        const jar = b.addSystemCommand(&[_][]const u8{
-            tools.java_tools.jar,
-        });
-        jar.setName("jar (zip compress apk)");
-
-        const directory_to_zip = builder.files.getDirectory();
-        jar.setCwd(directory_to_zip);
-        // NOTE(jae): 2024-09-30
-        // Hack to ensure this side-effect re-triggers zipping this up
-        jar.addFileInput(directory_to_zip.path(b, "AndroidManifest.xml"));
-
-        // Written as-is from running "jar --help"
-        // -c, --create      = Create the archive. When the archive file name specified
-        // -u, --update      = Update an existing jar archive
-        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
-        // -M, --no-manifest = Do not create a manifest file for the entries
-        // -0, --no-compress = Store only; use no ZIP compression
-        const compress_zip_arg = "-cfM";
-        if (b.verbose) jar.addArg(compress_zip_arg ++ "v") else jar.addArg(compress_zip_arg);
-        const output_zip_file = jar.addOutputFileArg("compiled_code.zip");
-        jar.addArg(".");
-
-        break :blk output_zip_file;
-    };
-
-    // Update zip with files that are not compressed (ie. resources.arsc)
-    const update_zip_step = blk: {
-        const jar = b.addSystemCommand(&[_][]const u8{
-            tools.java_tools.jar,
-        });
-        jar.setName("jar (update zip with uncompressed files)");
-
-        const directory_to_zip = builder.files_not_compressed.getDirectory();
-        jar.setCwd(directory_to_zip);
-        // NOTE(jae): 2025-03-23
-        // Hack to ensure this side-effect re-triggers zipping this up
-        jar.addFileInput(builder.files_not_compressed.getDirectory().path(b, "resources.arsc"));
-
-        // Written as-is from running "jar --help"
-        // -c, --create      = Create the archive. When the archive file name specified
-        // -u, --update      = Update an existing jar archive
-        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
-        // -M, --no-manifest = Do not create a manifest file for the entries
-        // -0, --no-compress = Store only; use no ZIP compression
-        const update_zip_arg = "-ufM0";
-        if (b.verbose) jar.addArg(update_zip_arg ++ "v") else jar.addArg(update_zip_arg);
-        jar.addFileArg(zip_file);
-        jar.addArg(".");
-        break :blk &jar.step;
-    };
-
-    return .{
-        .step = update_zip_step,
-        .file = zip_file,
-    };
+    return builder.build(b, tools);
 }
 
 // Align contents of .apk (zip)

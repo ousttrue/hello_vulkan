@@ -34,79 +34,107 @@ pub fn build(b: *std.Build) void {
         b,
         tools,
         so,
-        "corg.khronos.openxr.hello_xr",
-        "hello_xr",
-        b.path("samples/hello_xr/android/AndroidManifest.xml"),
-        .{ .bin = .{
-            .src = so.build_dir.path(b, "samples/hello_xr/cpp/libhello_xr.so"),
-            .dst = "lib/arm64-v8a/libhello_xr.so",
-        } },
-        b.path("samples/hello_xr/android/res"),
-        null,
-        &.{
-            .{
-                .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
-                .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
-            },
-            .{
-                .src = so.build_dir.path(b, "_deps/openxr-build/src/loader/libopenxr_loader.so"),
-                .dst = "lib/arm64-v8a/libopenxr_loader.so",
+        .{
+            .package_name = "corg.khronos.openxr.hello_xr",
+            .apk_name = "hello_xr",
+            .contents = .{
+                .android_manifest = b.path("samples/hello_xr/android/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/hello_xr/android/res"),
+                .appends = &.{
+                    .{
+                        .path = .{
+                            .src = so.build_dir.path(b, "samples/hello_xr/cpp/libhello_xr.so"),
+                            .dst = "lib/arm64-v8a/libhello_xr.so",
+                        },
+                    },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                    .{
+                        .path = .{
+                            .src = so.build_dir.path(b, "_deps/openxr-build/src/loader/libopenxr_loader.so"),
+                            .dst = "lib/arm64-v8a/libopenxr_loader.so",
+                        },
+                    },
+                },
             },
         },
     );
+
     build_apk(
         b,
         tools,
         so,
-        "com.arm.vulkansdk.hellotriangle",
-        "hellotriangle",
-        b.path("samples/hellotriangle/android/AndroidManifest.xml"),
-        .{ .bin = .{
-            .src = so.build_dir.path(b, "samples/hellotriangle/cpp/libnative.so"),
-            .dst = "lib/arm64-v8a/libnative.so",
-        } },
-        b.path("samples/hellotriangle/android/res"),
-        b.path("samples/hellotriangle/android/assets"),
-        &.{.{
-            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
-            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
-        }},
+        .{
+            .package_name = "com.arm.vulkansdk.hellotriangle",
+            .apk_name = "hellotriangle",
+            .contents = .{
+                .android_manifest = b.path("samples/hellotriangle/android/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/hellotriangle/android/res"),
+                .assets_directory = b.path("samples/hellotriangle/android/assets"),
+                .appends = &.{
+                    .{
+                        .path = .{
+                            .src = so.build_dir.path(b, "samples/hellotriangle/cpp/libnative.so"),
+                            .dst = "lib/arm64-v8a/libnative.so",
+                        },
+                    },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
     );
     const shaders_wf = b.addWriteFiles();
     shaders_wf.step.dependOn(so.step);
     _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
     _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
+
     build_apk(
         b,
         tools,
         so,
-        "com.ousttrue.vulfwk",
-        "vulfwk",
-        b.path("samples/vulfwk/android/AndroidManifest.xml"),
-        .{ .bin = .{
-            .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),
-            .dst = "lib/arm64-v8a/libvulfwk.so",
-        } },
-        null,
-        shaders_wf.getDirectory(),
-        &.{.{
-            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
-            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
-        }},
+        .{
+            .package_name = "com.ousttrue.vulfwk",
+            .apk_name = "vulfwk",
+            .contents = .{
+                .android_manifest = b.path("samples/vulfwk/android/AndroidManifest.xml"),
+                .assets_directory = shaders_wf.getDirectory(),
+                .appends = &.{
+                    .{ .path = .{
+                        .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),
+                        .dst = "lib/arm64-v8a/libvulfwk.so",
+                    } },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
     );
 }
+
+const ApkOpts = struct {
+    package_name: []const u8,
+    apk_name: []const u8,
+    contents: ndk_build.ApkContents,
+};
 
 fn build_apk(
     b: *std.Build,
     tools: *android.Tools,
     so: ndk_build.CmakeAndroidToolchainStep,
-    package_name: []const u8,
-    apk_name: []const u8,
-    android_manifest: std.Build.LazyPath,
-    entry_point: ndk_build.EntryPoint,
-    resource_directory: ?std.Build.LazyPath,
-    assets_directory: ?std.Build.LazyPath,
-    appends: ?[]const ndk_build.CopyFile,
+    opts: ApkOpts,
 ) void {
 
     //
@@ -116,11 +144,7 @@ fn build_apk(
         b,
         tools,
         so.step,
-        android_manifest,
-        entry_point,
-        resource_directory,
-        assets_directory,
-        appends,
+        opts.contents,
     );
 
     // zipalign
@@ -128,7 +152,7 @@ fn build_apk(
         b,
         tools,
         zip_file.file,
-        apk_name,
+        opts.apk_name,
     );
     aligned_apk.step.dependOn(zip_file.step);
 
@@ -142,9 +166,9 @@ fn build_apk(
     // install to zig-out
     const install_apk = b.addInstallBinFile(
         apk,
-        b.fmt("{s}.apk", .{apk_name}),
+        b.fmt("{s}.apk", .{opts.apk_name}),
     );
-    b.step(apk_name, b.fmt("build {s}", .{apk_name})).dependOn(&install_apk.step);
+    b.step(opts.apk_name, b.fmt("build {s}", .{opts.apk_name})).dependOn(&install_apk.step);
     b.getInstallStep().dependOn(&install_apk.step);
 
     //
@@ -154,8 +178,8 @@ fn build_apk(
         b,
         tools,
         &install_apk.step,
-        apk_name,
-        package_name,
+        opts.apk_name,
+        opts.package_name,
     );
-    b.step(b.fmt("run_{s}", .{apk_name}), "adb install... && adb shell am start...").dependOn(&adb_start.step);
+    b.step(b.fmt("run_{s}", .{opts.apk_name}), "adb install... && adb shell am start...").dependOn(&adb_start.step);
 }

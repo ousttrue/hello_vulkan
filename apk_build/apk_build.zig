@@ -10,6 +10,7 @@ pub const link_native_app_glue = native_activity.link_native_app_glue;
 pub const createAndroidTools = android.Tools.create;
 pub const setup = native_activity.setup;
 
+pub const ApkContents = apk_builder.ApkContents;
 pub const makeZipfile = apk_builder.makeZipfile;
 pub const EntryPoint = apk_builder.EntryPoint;
 pub const CopyFile = apk_builder.CopyFile;
