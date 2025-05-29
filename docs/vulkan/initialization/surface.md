@@ -1,6 +1,6 @@
 # VkSurfaceKHR
 
-OS の Windows システムに依存して作成する。
+OS の Window システムに依存して作成する。
 
 ## dependencies
 

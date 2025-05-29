@@ -39,3 +39,8 @@ https://github.com/nvpro-samples/vk_mini_samples
 openxr + GLES + imgui !
 
 https://github.com/terryky/android_openxr_gles
+
+# openxr-vulkan-example
+
+https://github.com/janhsimon/openxr-vulkan-example
+
