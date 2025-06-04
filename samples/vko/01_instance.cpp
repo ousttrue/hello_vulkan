@@ -176,11 +176,51 @@ struct Instance {
                                      nullptr, &_debugUtilsMessenger);
     return result;
   }
+
+  struct SelectedPhysicalDevice {
+    VkPhysicalDevice physicalDevice;
+    uint32_t graphicsFamily;
+    uint32_t presentFamily;
+  };
+
+  SelectedPhysicalDevice pickPhysicakDevice(VkSurfaceKHR surface) {
+    SelectedPhysicalDevice ret{
+        .physicalDevice = VK_NULL_HANDLE,
+        .graphicsFamily = UINT_MAX,
+        .presentFamily = UINT_MAX,
+    };
+    for (auto d : _devices) {
+      auto _presentFamily = d.getPresentQueueFamily(surface);
+      if (d._deviceProperties.deviceType ==
+              VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+          d._deviceFeatures.geometryShader && d._graphicsFamily != UINT_MAX &&
+          _presentFamily) {
+        auto selected = ret.physicalDevice == VK_NULL_HANDLE;
+        if (selected) {
+          ret.physicalDevice = d._physicaldevice;
+          ret.graphicsFamily = d._graphicsFamily;
+          ret.presentFamily = _presentFamily.value();
+        }
+        LOGI("physical device: %s: graphics => %d, present => %d, %s\n",
+             d._deviceProperties.deviceName, d._graphicsFamily,
+             _presentFamily.value(), (selected ? "select" : ""));
+      } else {
+        LOGE("physical device: %s: not supported\n",
+             d._deviceProperties.deviceName);
+      }
+    }
+    return ret;
+  }
 };
 
 struct Device {
-  VkDevice _device;
-  ~Device() { vkDestroyDevice(_device, nullptr); }
+  VkDevice _device = VK_NULL_HANDLE;
+  operator VkDevice() { return _device; }
+  ~Device() {
+    if (_device != VK_NULL_HANDLE) {
+      vkDestroyDevice(_device, nullptr);
+    }
+  }
   std::vector<const char *> _validationLayers;
   std::vector<const char *> _deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -231,6 +271,107 @@ struct Device {
   }
 };
 
+struct Surface {
+  VkInstance _instance;
+  VkSurfaceKHR _surface;
+  VkPhysicalDevice _physicalDevice;
+  VkSurfaceCapabilitiesKHR _capabilities;
+  std::vector<VkSurfaceFormatKHR> _formats;
+  std::vector<VkPresentModeKHR> _presentModes;
+
+  Surface(VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice gpu)
+      : _instance(instance), _surface(surface), _physicalDevice(gpu) {
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &_capabilities);
+
+    uint32_t formatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount, nullptr);
+    if (formatCount != 0) {
+      _formats.resize(formatCount);
+      vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount,
+                                           _formats.data());
+    }
+
+    uint32_t presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &presentModeCount,
+                                              nullptr);
+    if (presentModeCount != 0) {
+      _presentModes.resize(presentModeCount);
+      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &presentModeCount,
+                                                _presentModes.data());
+    }
+  }
+
+  ~Surface() { vkDestroySurfaceKHR(_instance, _surface, nullptr); }
+
+  VkSurfaceFormatKHR chooseSwapSurfaceFormat() const {
+    for (const auto &availableFormat : _formats) {
+      if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
+          availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+        return availableFormat;
+      }
+    }
+    return _formats[0];
+  }
+
+  VkPresentModeKHR chooseSwapPresentMode() const {
+    for (const auto &availablePresentMode : _presentModes) {
+      if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        return availablePresentMode;
+      }
+    }
+    return VK_PRESENT_MODE_FIFO_KHR;
+  }
+};
+
+struct Swapchain {
+  VkDevice _device;
+  VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+  Swapchain(VkDevice device) : _device(device) {}
+  ~Swapchain() {
+    if (_swapchain != VK_NULL_HANDLE) {
+      vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+    }
+  }
+
+  uint32_t _queueFamilyIndices[2] = {};
+  VkSwapchainCreateInfoKHR _createInfo{
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .clipped = VK_TRUE,
+  };
+
+  VkResult create(VkSurfaceKHR surface, uint32_t imageCount,
+                  VkSurfaceFormatKHR surfaceFormat,
+                  VkPresentModeKHR presentMode,
+                  const VkSurfaceCapabilitiesKHR &capabilities,
+                  uint32_t graphicsFamily, uint32_t presentFamily,
+                  VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE) {
+    _createInfo.surface = surface;
+    _createInfo.minImageCount = imageCount;
+    _createInfo.imageFormat = surfaceFormat.format;
+    _createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    _createInfo.imageExtent = capabilities.currentExtent;
+    if (graphicsFamily == presentFamily) {
+      _createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      _createInfo.queueFamilyIndexCount = 0;     // Optional
+      _createInfo.pQueueFamilyIndices = nullptr; // Optional
+    } else {
+      _createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+      _createInfo.queueFamilyIndexCount = 2;
+      _queueFamilyIndices[0] = graphicsFamily;
+      _queueFamilyIndices[1] = presentFamily;
+      _createInfo.pQueueFamilyIndices = _queueFamilyIndices;
+    }
+    _createInfo.preTransform = capabilities.currentTransform;
+    _createInfo.presentMode = presentMode;
+    _createInfo.oldSwapchain = oldSwapchain;
+    return vkCreateSwapchainKHR(_device, &_createInfo, nullptr, &_swapchain);
+  }
+};
+
 } // namespace vko
 
 // https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
@@ -270,39 +411,21 @@ int main(int argc, char **argv) {
     //
     // vulkan device with glfw surface
     //
-    VkSurfaceKHR surface;
-    VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &surface));
-
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    uint32_t graphicsFamiliy = UINT_MAX;
-    uint32_t presentFamily = UINT_MAX;
-    for (auto d : instance._devices) {
-      auto _presentFamily = d.getPresentQueueFamily(surface);
-      if (d._deviceProperties.deviceType ==
-              VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-          d._deviceFeatures.geometryShader && d._graphicsFamily != UINT_MAX &&
-          _presentFamily) {
-        if (physicalDevice == VK_NULL_HANDLE) {
-          physicalDevice = d._physicaldevice;
-          graphicsFamiliy = d._graphicsFamily;
-          presentFamily = _presentFamily.value();
-          LOGI("device: %s: graphics => %d, present => %d\n",
-               d._deviceProperties.deviceName, d._graphicsFamily,
-               presentFamily);
-        } else {
-          LOGI("device: %s\n", d._deviceProperties.deviceName);
-        }
-      } else {
-        LOGE("device: %s: not supported\n", d._deviceProperties.deviceName);
-      }
-    }
-    if (physicalDevice == VK_NULL_HANDLE || presentFamily == UINT_MAX) {
-      return 2;
-    }
+    VkSurfaceKHR _surface;
+    VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &_surface));
+    auto picked = instance.pickPhysicakDevice(_surface);
+    vko::Surface surface(instance, _surface, picked.physicalDevice);
 
     vko::Device device;
     device._validationLayers = instance._validationLayers;
-    VK_CHECK(device.create(physicalDevice, graphicsFamiliy, presentFamily));
+    VK_CHECK(device.create(picked.physicalDevice, picked.graphicsFamily,
+                           picked.presentFamily));
+
+    vko::Swapchain swapchain(device);
+    VK_CHECK(swapchain.create(
+        surface._surface, surface._capabilities.minImageCount + 1,
+        surface.chooseSwapSurfaceFormat(), surface.chooseSwapPresentMode(),
+        surface._capabilities, picked.graphicsFamily, picked.presentFamily));
 
     //
     // main loop
@@ -310,8 +433,6 @@ int main(int argc, char **argv) {
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
     }
-
-    vkDestroySurfaceKHR(instance, surface, nullptr);
   }
 
   glfwDestroyWindow(window);
