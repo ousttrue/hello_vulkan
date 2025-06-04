@@ -1,4 +1,8 @@
+https://gstreamer.freedesktop.org/documentation/index.html
+
 https://gitlab.freedesktop.org/dabrain34/GstPipelineStudio
+
+- [Hello Library World: GStreamer でテキスト処理 1: Core機能だけで cat, cp, dd, & tee](https://hellolibraryworld.blogspot.com/2016/12/gstreamer-1-core-cat-cp-dd-tee.html)
 
 # cli
 
@@ -39,3 +43,10 @@ https://gstreamer.freedesktop.org/documentation/directshow/index.html
 ```sh
 > gst-launch-1.0 dshowvideosrc ! autovideosink
 ```
+
+# 環境変数
+
+- [今日からから使える GStreamer の環境変数 #Linux - Qiita](https://qiita.com/tetsukuz/items/43b9fff280c7d7e81d1d)
+
+`GST_DEBUG_DUMP_DOT_DIR` 
+

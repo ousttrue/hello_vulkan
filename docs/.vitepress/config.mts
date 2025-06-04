@@ -25,20 +25,41 @@ export default defineConfig({
         text: "Vulkan",
         items: [
           {
-            text: "初期化",
+            text: "device",
+            link: "/vulkan/device/",
             items: [
-              { text: "instance", link: "/vulkan/initialization/instance" },
-              { text: "surface", link: "/vulkan/initialization/surface" },
-              { text: "device", link: "/vulkan/initialization/device" },
-              { text: "swapchain", link: "/vulkan/initialization/swapchain" },
+              { text: "instance", link: "/vulkan/device/instance" },
+              { text: "surface", link: "/vulkan/device/surface" },
+              {
+                text: "physical device",
+                link: "/vulkan/device/physical_device",
+              },
+              { text: "logical device", link: "/vulkan/device/logical_device" },
             ],
           },
           {
-            text: "GraphicsPipeline",
+            text: "pipeline",
+            link: "/vulkan/pipeline/",
             items: [
-              { text: "command", link: "/vulkan/pipeline/command" },
-              { text: "spv", link: "/vulkan/pipeline/spv" },
+              { text: "vertex", link: "/vulkan/pipeline/vertex" },
+              { text: "ubo", link: "/vulkan/pipeline/ubo" },
+              { text: "image", link: "/vulkan/pipeline/image" },
+              { text: "descriptor", link: "/vulkan/pipeline/descriptor" },
+              { text: "graphics pipeline", link: "/vulkan/pipeline/pipeline" },
             ],
+          },
+          {
+            text: "swapchain",
+            link: "/vulkan/swapchain/",
+            items: [
+              { text: "command", link: "/vulkan/swapchain/command" },
+              { text: "swapchain", link: "/vulkan/swapchain/swapchain" },
+            ],
+          },
+          {
+            text: "shader",
+            link: "/vulkan/shader/",
+            items: [{ text: "spv", link: "/vulkan/pipeline/spv" }],
           },
         ],
       },
@@ -59,9 +80,19 @@ export default defineConfig({
         text: "Gstreamer",
         items: [
           { text: "Gstreamer", link: "/gst/" },
-          { text: "gstreamer android", link: "/gst/gst_android" },
-          { text: "gstreamer vulkan", link: "/gst/gst_vulkan" },
-          { text: "gstreamer opengl", link: "/gst/gst_opengl" },
+          {
+            text: "samples",
+            items: [
+              { text: "gstreamer android", link: "/gst/gst_android" },
+              { text: "gstreamer vulkan", link: "/gst/gst_vulkan" },
+              { text: "gstreamer opengl", link: "/gst/gst_opengl" },
+            ],
+          },
+          { text: "gst-launch-1.0", link: "/gst/gst-launch" },
+          { text: "GstPipeline", link: "/gst/gst_pipeline" },
+          { text: "GstSample", link: "/gst/gst_sample" },
+          { text: "GstScreenCapture", link: "/gst/gst_screencapture" },
+          { text: "app plugin", link: "/gst/app-plugin" },
         ],
       },
     ],
