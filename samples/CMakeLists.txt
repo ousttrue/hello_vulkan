@@ -78,7 +78,7 @@ if(ANDROID_NDK)
   FetchContent_MakeAvailable(shaderc)
 
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
-  subdirs(hellotriangle/cpp)
+  subdirs(hellotriangle/cpp ovr_openxr_mobile_sdk)
 else()
   set(TARGET_NAME vulkan)
   add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
@@ -106,4 +106,4 @@ else()
   FetchContent_MakeAvailable(zlib)
 endif()
 
-subdirs(vulfwk hello_xr/cpp ovr_openxr_mobile_sdk)
+subdirs(vulfwk hello_xr/cpp vko)
