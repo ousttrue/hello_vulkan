@@ -1,26 +1,68 @@
+#include <climits>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include "common.hpp"
 #include <GLFW/glfw3.h>
 
+#include <optional>
 #include <vector>
 
 auto WINDOW_TITLE = "vko";
 
 namespace vko {
 
+// https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
+struct PhysicalDevice {
+  VkPhysicalDevice _physicaldevice;
+  VkPhysicalDeviceProperties _deviceProperties;
+  VkPhysicalDeviceFeatures _deviceFeatures;
+  std::vector<VkQueueFamilyProperties> _queueFamilies;
+  uint32_t _graphicsFamily = UINT_MAX;
+  PhysicalDevice(VkPhysicalDevice physicalDevice)
+      : _physicaldevice(physicalDevice) {
+    vkGetPhysicalDeviceProperties(_physicaldevice, &_deviceProperties);
+    vkGetPhysicalDeviceFeatures(_physicaldevice, &_deviceFeatures);
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
+                                             nullptr);
+    _queueFamilies.resize(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
+                                             _queueFamilies.data());
+
+    for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
+      if (_queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        _graphicsFamily = i;
+        break;
+      }
+    }
+  }
+  std::optional<uint32_t> getPresentQueueFamily(VkSurfaceKHR surface) {
+    for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
+      VkBool32 presentSupport = false;
+      vkGetPhysicalDeviceSurfaceSupportKHR(_physicaldevice, i, surface,
+                                           &presentSupport);
+      if (presentSupport) {
+        return i;
+      }
+    }
+    return {};
+  }
+};
+
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 struct Instance {
   VkInstance _instance = VK_NULL_HANDLE;
-  std::vector<VkPhysicalDevice> _devices;
+  operator VkInstance() { return _instance; }
 
-  std::vector<const char *> validationLayers;
-  std::vector<const char *> instanceExtensions;
+  std::vector<PhysicalDevice> _devices;
+
+  std::vector<const char *> _validationLayers;
+  std::vector<const char *> _instanceExtensions;
 
   // VK_EXT_DEBUG_UTILS_EXTENSION_NAME
   VkDebugUtilsMessengerEXT _debugUtilsMessenger = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = {
+  VkDebugUtilsMessengerCreateInfoEXT _debug_messenger_create_info = {
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
       .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
@@ -41,6 +83,7 @@ struct Instance {
             return VK_FALSE;
           },
   };
+
   static VkResult CreateDebugUtilsMessengerEXT(
       VkInstance instance,
       const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
@@ -66,7 +109,7 @@ struct Instance {
     }
   }
 
-  VkApplicationInfo appInfo{
+  VkApplicationInfo _appInfo{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "VKO",
       .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
@@ -75,10 +118,10 @@ struct Instance {
       .apiVersion = VK_API_VERSION_1_0,
   };
 
-  VkInstanceCreateInfo createInfo{
+  VkInstanceCreateInfo _createInfo{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
-      .pApplicationInfo = &appInfo,
+      .pApplicationInfo = &_appInfo,
       .enabledLayerCount = 0,
       .enabledExtensionCount = 0,
   };
@@ -93,25 +136,25 @@ struct Instance {
   }
 
   VkResult create() {
-    if (validationLayers.size() > 0) {
-      for (auto name : validationLayers) {
+    if (_validationLayers.size() > 0) {
+      for (auto name : _validationLayers) {
         LOGI("layer: %s\n", name);
       }
-      createInfo.enabledLayerCount = validationLayers.size();
-      createInfo.ppEnabledLayerNames = validationLayers.data();
+      _createInfo.enabledLayerCount = _validationLayers.size();
+      _createInfo.ppEnabledLayerNames = _validationLayers.data();
     }
-    if (instanceExtensions.size() > 0) {
-      for (auto name : instanceExtensions) {
+    if (_instanceExtensions.size() > 0) {
+      for (auto name : _instanceExtensions) {
         LOGI("instance extension: %s\n", name);
         if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
-          createInfo.pNext = &debug_messenger_create_info;
+          _createInfo.pNext = &_debug_messenger_create_info;
         }
       }
-      createInfo.enabledExtensionCount = instanceExtensions.size();
-      createInfo.ppEnabledExtensionNames = instanceExtensions.data();
+      _createInfo.enabledExtensionCount = _instanceExtensions.size();
+      _createInfo.ppEnabledExtensionNames = _instanceExtensions.data();
     }
 
-    auto result = vkCreateInstance(&createInfo, nullptr, &_instance);
+    auto result = vkCreateInstance(&_createInfo, nullptr, &_instance);
     if (result != VK_SUCCESS) {
       return result;
     }
@@ -121,27 +164,25 @@ struct Instance {
     if (deviceCount == 0) {
       LOGE("no physical device\n");
     } else {
-      _devices.resize(deviceCount);
-      vkEnumeratePhysicalDevices(_instance, &deviceCount, _devices.data());
+      std::vector<VkPhysicalDevice> devices(deviceCount);
+      vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
+      for (auto d : devices) {
+        _devices.push_back(PhysicalDevice(d));
+      }
     }
 
     result =
-        CreateDebugUtilsMessengerEXT(_instance, &debug_messenger_create_info,
+        CreateDebugUtilsMessengerEXT(_instance, &_debug_messenger_create_info,
                                      nullptr, &_debugUtilsMessenger);
     return result;
   }
-
-  void debugPrint() {
-    for (auto device : _devices) {
-      VkPhysicalDeviceProperties prop;
-      vkGetPhysicalDeviceProperties(device, &prop);
-      LOGI("device: %s\n", prop.deviceName);
-    }
-  }
 };
+
+struct Device {};
 
 } // namespace vko
 
+// https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
 int main(int argc, char **argv) {
   glfwSetErrorCallback([](int error, const char *description) {
     LOGE("GLFW Error %d: %s\n", error, description);
@@ -159,26 +200,61 @@ int main(int argc, char **argv) {
   }
 
   {
+    //
+    // vulkan instance with debug layer
+    //
     vko::Instance instance;
-
     // vulkan extension for glfw surface
     uint32_t extensions_count = 0;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
     for (uint32_t i = 0; i < extensions_count; i++) {
-      instance.instanceExtensions.push_back(glfw_extensions[i]);
+      instance._instanceExtensions.push_back(glfw_extensions[i]);
+    }
+#ifndef NDEBUG
+    instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+    instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+    VK_CHECK(instance.create());
+
+    //
+    // vulkan device with glfw surface
+    //
+    VkSurfaceKHR surface;
+    VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &surface));
+
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    uint32_t presentFamily = UINT_MAX;
+    for (auto d : instance._devices) {
+      auto _presentFamily = d.getPresentQueueFamily(surface);
+      if (d._deviceProperties.deviceType ==
+              VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+          d._deviceFeatures.geometryShader && d._graphicsFamily != UINT_MAX &&
+          _presentFamily) {
+        if (physicalDevice == VK_NULL_HANDLE) {
+          physicalDevice = d._physicaldevice;
+          presentFamily = _presentFamily.value();
+          LOGI("device: %s: graphics => %d, present => %d\n",
+               d._deviceProperties.deviceName, d._graphicsFamily,
+               presentFamily);
+        } else {
+          LOGI("device: %s\n", d._deviceProperties.deviceName);
+        }
+      } else {
+        LOGE("device: %s: not supported\n", d._deviceProperties.deviceName);
+      }
+    }
+    if (physicalDevice == VK_NULL_HANDLE || presentFamily == UINT_MAX) {
+      return 2;
     }
 
-#ifndef NDEBUG
-    instance.validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-    instance.instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-#endif
-
-    VK_CHECK(instance.create());
-    instance.debugPrint();
-
+    //
+    // main loop
+    //
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
     }
+
+    vkDestroySurfaceKHR(instance, surface, nullptr);
   }
 
   glfwDestroyWindow(window);
