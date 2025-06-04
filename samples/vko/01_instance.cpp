@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include <optional>
+#include <set>
 #include <vector>
 
 auto WINDOW_TITLE = "vko";
@@ -54,6 +55,14 @@ struct PhysicalDevice {
 struct Instance {
   VkInstance _instance = VK_NULL_HANDLE;
   operator VkInstance() { return _instance; }
+  ~Instance() {
+    if (_debugUtilsMessenger != VK_NULL_HANDLE) {
+      DestroyDebugUtilsMessengerEXT(_instance, _debugUtilsMessenger, nullptr);
+    }
+    if (_instance != VK_NULL_HANDLE) {
+      vkDestroyInstance(_instance, nullptr);
+    }
+  }
 
   std::vector<PhysicalDevice> _devices;
 
@@ -126,19 +135,10 @@ struct Instance {
       .enabledExtensionCount = 0,
   };
 
-  ~Instance() {
-    if (_debugUtilsMessenger != VK_NULL_HANDLE) {
-      DestroyDebugUtilsMessengerEXT(_instance, _debugUtilsMessenger, nullptr);
-    }
-    if (_instance != VK_NULL_HANDLE) {
-      vkDestroyInstance(_instance, nullptr);
-    }
-  }
-
   VkResult create() {
     if (_validationLayers.size() > 0) {
       for (auto name : _validationLayers) {
-        LOGI("layer: %s\n", name);
+        LOGI("instance layer: %s\n", name);
       }
       _createInfo.enabledLayerCount = _validationLayers.size();
       _createInfo.ppEnabledLayerNames = _validationLayers.data();
@@ -178,7 +178,58 @@ struct Instance {
   }
 };
 
-struct Device {};
+struct Device {
+  VkDevice _device;
+  ~Device() { vkDestroyDevice(_device, nullptr); }
+  std::vector<const char *> _validationLayers;
+  std::vector<const char *> _deviceExtensions = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+  float _queuePriority = 1.0f;
+  std::vector<VkDeviceQueueCreateInfo> _queueCreateInfos;
+  VkPhysicalDeviceFeatures _deviceFeatures{};
+  VkDeviceCreateInfo _createInfo{
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = 0,
+      .enabledLayerCount = 0,
+      .enabledExtensionCount = 0,
+      .pEnabledFeatures = &_deviceFeatures,
+  };
+
+  VkResult create(VkPhysicalDevice physicalDevice, uint32_t graphics,
+                  uint32_t present) {
+    if (_validationLayers.size() > 0) {
+      for (auto name : _validationLayers) {
+        LOGI("device layer: %s\n", name);
+      }
+      _createInfo.enabledLayerCount = _validationLayers.size();
+      _createInfo.ppEnabledLayerNames = _validationLayers.data();
+    }
+    if (_deviceExtensions.size() > 0) {
+      for (auto name : _deviceExtensions) {
+        LOGI("device extension: %s\n", name);
+      }
+      _createInfo.enabledExtensionCount = _deviceExtensions.size();
+      _createInfo.ppEnabledExtensionNames = _deviceExtensions.data();
+    }
+
+    std::set<uint32_t> uniqueQueueFamilies = {graphics, present};
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+      VkDeviceQueueCreateInfo queueCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .queueFamilyIndex = queueFamily,
+          .queueCount = 1,
+          .pQueuePriorities = &_queuePriority,
+      };
+      _queueCreateInfos.push_back(queueCreateInfo);
+    }
+    _createInfo.queueCreateInfoCount =
+        static_cast<uint32_t>(_queueCreateInfos.size());
+    _createInfo.pQueueCreateInfos = _queueCreateInfos.data();
+
+    return vkCreateDevice(physicalDevice, &_createInfo, nullptr, &_device);
+  }
+};
 
 } // namespace vko
 
@@ -223,6 +274,7 @@ int main(int argc, char **argv) {
     VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &surface));
 
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    uint32_t graphicsFamiliy = UINT_MAX;
     uint32_t presentFamily = UINT_MAX;
     for (auto d : instance._devices) {
       auto _presentFamily = d.getPresentQueueFamily(surface);
@@ -232,6 +284,7 @@ int main(int argc, char **argv) {
           _presentFamily) {
         if (physicalDevice == VK_NULL_HANDLE) {
           physicalDevice = d._physicaldevice;
+          graphicsFamiliy = d._graphicsFamily;
           presentFamily = _presentFamily.value();
           LOGI("device: %s: graphics => %d, present => %d\n",
                d._deviceProperties.deviceName, d._graphicsFamily,
@@ -246,6 +299,10 @@ int main(int argc, char **argv) {
     if (physicalDevice == VK_NULL_HANDLE || presentFamily == UINT_MAX) {
       return 2;
     }
+
+    vko::Device device;
+    device._validationLayers = instance._validationLayers;
+    VK_CHECK(device.create(physicalDevice, graphicsFamiliy, presentFamily));
 
     //
     // main loop
