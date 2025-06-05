@@ -449,13 +449,20 @@ struct Swapchain : public not_copyable {
   VkDevice _device;
   VkQueue _presentQueue = VK_NULL_HANDLE;
   VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+
+  VkCommandPool _commandPool = VK_NULL_HANDLE;
   std::vector<VkImage> _images;
+  std::vector<VkCommandBuffer> _commandBuffers;
+
   Swapchain(VkDevice device) : _device(device) {}
 
   std::list<std::shared_ptr<Semaphore>> _imageAvailableSemaphorePool;
   std::vector<std::shared_ptr<Semaphore>> _submitCompleteSemaphores;
 
   ~Swapchain() {
+    if (_commandPool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(_device, _commandPool, nullptr);
+    }
     if (_swapchain != VK_NULL_HANDLE) {
       vkDestroySwapchainKHR(_device, _swapchain, nullptr);
     }
@@ -520,6 +527,26 @@ struct Swapchain : public not_copyable {
       _submitCompleteSemaphores[i] = std::make_shared<Semaphore>(_device);
     }
 
+    VkCommandPoolCreateInfo CommandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = graphicsFamily,
+    };
+    VK_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
+                                 &_commandPool));
+
+    _commandBuffers.resize(1);
+    VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .commandPool = _commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = static_cast<uint32_t>(_commandBuffers.size()),
+    };
+    VK_CHECK(vkAllocateCommandBuffers(_device, &CommandBufferAllocateInfo,
+                                      _commandBuffers.data()));
+
     return VK_SUCCESS;
   }
 
@@ -541,6 +568,7 @@ struct Swapchain : public not_copyable {
     uint32_t imageIndex;
     VkImage image;
     std::shared_ptr<Semaphore> imageAvailableSemaphore;
+    VkCommandBuffer commandBuffer;
     std::shared_ptr<Semaphore> submitCompleteSemaphore;
   };
 
@@ -566,6 +594,7 @@ struct Swapchain : public not_copyable {
             imageIndex,
             _images[imageIndex],
             imageAvailableSemaphore,
+            _commandBuffers[imageIndex],
             _submitCompleteSemaphores[imageIndex]};
   }
 
