@@ -472,6 +472,10 @@ struct Fence : public not_copyable {
     }
   }
   void reset() { vkResetFences(_device, 1, &_fence); }
+
+  void block() {
+    VK_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
+  }
 };
 
 struct Semaphore : public not_copyable {
@@ -657,15 +661,13 @@ int main(int argc, char **argv) {
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
-      fence.reset();
       auto [result, imageIndex, image] =
-          swapchain.acquireNextImage(imageAvailable, fence);
+          swapchain.acquireNextImage(imageAvailable, VK_NULL_HANDLE);
       VK_CHECK(result);
 
       auto commandBuffer =
           renderer.getRecordedCommand(image, picked.presentFamily);
 
-      VK_CHECK(vkWaitForFences(device, 1, &fence._fence, VK_TRUE, UINT64_MAX));
       VkSubmitInfo submitInfo = {
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .waitSemaphoreCount = 1,
@@ -677,7 +679,7 @@ int main(int argc, char **argv) {
       fence.reset();
       VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence));
 
-      VK_CHECK(vkWaitForFences(device, 1, &fence._fence, VK_TRUE, UINT64_MAX));
+      fence.block();
       VK_CHECK(swapchain.present(imageIndex, VK_NULL_HANDLE));
     }
 
