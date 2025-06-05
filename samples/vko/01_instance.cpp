@@ -9,8 +9,7 @@
 #include <set>
 #include <vector>
 
-auto WINDOW_TITLE = "vko";
-
+// vk object sunawati vko
 namespace vko {
 
 struct not_copyable {
@@ -497,6 +496,8 @@ struct Semaphore : public not_copyable {
 
 } // namespace vko
 
+auto WINDOW_TITLE = "vko";
+
 class Renderer {
   VkDevice _device;
   VkCommandPool _commandPool = VK_NULL_HANDLE;
@@ -527,7 +528,7 @@ public:
   ~Renderer() { vkDestroyCommandPool(_device, _commandPool, nullptr); }
 
   VkCommandBuffer getRecordedCommand(VkImage image,
-                                     uint32_t presentQueueFamily) {
+                                     uint32_t graphicsQueueFamily) {
     auto commandBuffer = _commandBuffers[0];
 
     VkCommandBufferBeginInfo CommandBufferBeginInfo{
@@ -552,8 +553,8 @@ public:
         .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = presentQueueFamily,
-        .dstQueueFamilyIndex = presentQueueFamily,
+        .srcQueueFamilyIndex = graphicsQueueFamily,
+        .dstQueueFamilyIndex = graphicsQueueFamily,
         .image = image,
         .subresourceRange = subResourceRange,
     };
@@ -579,8 +580,8 @@ public:
         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
         .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .srcQueueFamilyIndex = presentQueueFamily,
-        .dstQueueFamilyIndex = presentQueueFamily,
+        .srcQueueFamilyIndex = graphicsQueueFamily,
+        .dstQueueFamilyIndex = graphicsQueueFamily,
         .image = image,
         .subresourceRange = subResourceRange,
     };
@@ -647,6 +648,9 @@ int main(int argc, char **argv) {
                               surface.chooseSwapPresentMode(),
                               picked.graphicsFamily, picked.presentFamily));
 
+    //
+    // renderer
+    //
     VkQueue graphicsQueue;
     vkGetDeviceQueue(device, picked.graphicsFamily, 0, &graphicsQueue);
 
@@ -655,32 +659,42 @@ int main(int argc, char **argv) {
     //
     // main loop
     //
-    vko::Fence fence(device, false);
-    vko::Semaphore imageAvailable(device);
+    // vko::Fence imageAvailableFence(device, false);
+    vko::Semaphore imageAvailableSemaphore(device);
+    vko::Fence submitCompleteFence(device, true);
+    vko::Semaphore submitCompleteSemaphore(device);
 
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
+      // imageAvailableFence.reset();
       auto [result, imageIndex, image] =
-          swapchain.acquireNextImage(imageAvailable, VK_NULL_HANDLE);
+          swapchain.acquireNextImage(imageAvailableSemaphore,
+                                     //
+                                     // imageAvailableFence
+                                     VK_NULL_HANDLE);
       VK_CHECK(result);
 
+      // imageAvailableFence.block();
       auto commandBuffer =
-          renderer.getRecordedCommand(image, picked.presentFamily);
+          renderer.getRecordedCommand(image, picked.graphicsFamily);
 
       VkSubmitInfo submitInfo = {
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &imageAvailable._semaphore,
-          .pWaitDstStageMask = &imageAvailable._waitDstStageMask,
+          .pWaitSemaphores = &imageAvailableSemaphore._semaphore,
+          .pWaitDstStageMask = &imageAvailableSemaphore._waitDstStageMask,
           .commandBufferCount = 1,
           .pCommandBuffers = &commandBuffer,
+          .signalSemaphoreCount = 1,
+          .pSignalSemaphores = &submitCompleteSemaphore._semaphore,
       };
-      fence.reset();
-      VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence));
+      submitCompleteFence.reset();
+      VK_CHECK(
+          vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
 
-      fence.block();
-      VK_CHECK(swapchain.present(imageIndex, VK_NULL_HANDLE));
+      submitCompleteFence.block();
+      VK_CHECK(swapchain.present(imageIndex, submitCompleteSemaphore));
     }
 
     vkDeviceWaitIdle(device);
