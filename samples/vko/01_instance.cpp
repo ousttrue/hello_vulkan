@@ -1,9 +1,13 @@
 #include <climits>
+#include <ratio>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <chrono>
+#include <cmath>
+#include <iostream>
 #include <list>
 #include <memory>
 #include <optional>
@@ -516,16 +520,37 @@ struct Swapchain : public not_copyable {
     return s;
   }
 
-  std::tuple<VkResult, uint32_t, VkImage, std::shared_ptr<Semaphore>,
-             std::shared_ptr<Semaphore>>
-  acquireNextImage() {
+  struct AcquiredImage {
+    VkResult result;
+    int64_t presentTimeNano;
+    uint32_t imageIndex;
+    VkImage image;
+    std::shared_ptr<Semaphore> imageAvailableSemaphore;
+    std::shared_ptr<Semaphore> submitCompleteSemaphore;
+  };
+
+  AcquiredImage acquireNextImage() {
     auto imageAvailableSemaphore = getOrCreateImageAvailableSemaphore();
 
     uint32_t imageIndex;
     auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
                                         *imageAvailableSemaphore,
                                         VK_NULL_HANDLE, &imageIndex);
-    return {result, imageIndex, _images[imageIndex], imageAvailableSemaphore,
+    if (result != VK_SUCCESS) {
+      return {result};
+    }
+
+    auto now = std::chrono::system_clock::now();
+    auto epoch_time = now.time_since_epoch();
+    auto epoch_time_nano =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(epoch_time)
+            .count();
+
+    return {result,
+            epoch_time_nano,
+            imageIndex,
+            _images[imageIndex],
+            imageAvailableSemaphore,
             _submitCompleteSemaphores[imageIndex]};
   }
 
@@ -579,7 +604,7 @@ public:
   }
   ~Renderer() { vkDestroyCommandPool(_device, _commandPool, nullptr); }
 
-  VkCommandBuffer getRecordedCommand(VkImage image,
+  VkCommandBuffer getRecordedCommand(int64_t presentTimeNano, VkImage image,
                                      uint32_t graphicsQueueFamily) {
     auto commandBuffer = _commandBuffers[0];
 
@@ -614,7 +639,14 @@ public:
                          VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &presentToClearBarrier);
 
-    VkClearColorValue clearColorValue = {1.0, 0.0, 0.0, 0.0};
+    std::chrono::nanoseconds nano(presentTimeNano);
+    // auto sec = std::chrono::duration_cast<std::chrono::seconds>(nano);
+    auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(nano);
+    const auto SPD = 3.0f;
+    float v = (std::sin(sec.count() * SPD) + 1.0f) * 0.5;
+    // std::cout << nano << ": " << std::fmod(sec.count(), 1.0) << ": "
+    //           << std::sin(sec.count()) << ": " << v << std::endl;
+    VkClearColorValue clearColorValue = {v, 0.0, 0.0, 0.0};
     VkImageSubresourceRange imageSubresourceRange{
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .baseMipLevel = 0,
@@ -716,30 +748,30 @@ int main(int argc, char **argv) {
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
-      auto [result, imageIndex, image, imageAvailableSemaphore,
-            submitCompleteSemaphore] = swapchain.acquireNextImage();
-      VK_CHECK(result);
+      auto acquired = swapchain.acquireNextImage();
+      VK_CHECK(acquired.result);
 
-      auto commandBuffer =
-          renderer.getRecordedCommand(image, picked.graphicsFamily);
+      auto commandBuffer = renderer.getRecordedCommand(
+          acquired.presentTimeNano, acquired.image, picked.graphicsFamily);
 
       VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
       VkSubmitInfo submitInfo = {
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &imageAvailableSemaphore->_semaphore,
+          .pWaitSemaphores = &acquired.imageAvailableSemaphore->_semaphore,
           .pWaitDstStageMask = &waitDstStageMask,
           .commandBufferCount = 1,
           .pCommandBuffers = &commandBuffer,
           .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &submitCompleteSemaphore->_semaphore,
+          .pSignalSemaphores = &acquired.submitCompleteSemaphore->_semaphore,
       };
       submitCompleteFence.reset();
       VK_CHECK(
           vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
 
       submitCompleteFence.block();
-      VK_CHECK(swapchain.present(imageIndex, imageAvailableSemaphore));
+      VK_CHECK(swapchain.present(acquired.imageIndex,
+                                 acquired.imageAvailableSemaphore));
     }
 
     vkDeviceWaitIdle(device);
