@@ -5,9 +5,9 @@
 #include <vector>
 
 class Glfw {
-  GLFWwindow *_window = nullptr;
 
 public:
+  GLFWwindow *_window = nullptr;
   Glfw();
   ~Glfw();
   void *createWindow(int width, int height, const char *title);

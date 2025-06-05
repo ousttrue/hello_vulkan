@@ -24,22 +24,31 @@ inline void LOGE(const char *fmt, ...) {
 }
 #else
 #include <stdarg.h>
-inline void LOGE(const char *fmt, ...) {
+inline void LOGE(const char *_fmt, ...) {
   va_list arg;
-  va_start(arg, fmt);
-  vfprintf(stderr, (std::string("ERROR: ") + fmt).c_str(), arg);
+  va_start(arg, _fmt);
+  auto fmt = (std::string("ERROR: ") + _fmt);
+  if (!fmt.ends_with('\n')) {
+    fmt += '\n';
+  }
+  vfprintf(stderr, fmt.c_str(), arg);
   va_end(arg);
 }
-inline void LOGI(const char *fmt, ...) {
+inline void LOGI(const char *_fmt, ...) {
   va_list arg;
-  va_start(arg, fmt);
-  vfprintf(stderr, (std::string("INFO: ") + fmt).c_str(), arg);
+  va_start(arg, _fmt);
+  auto fmt = (std::string("INFO: ") + _fmt);
+  if (!fmt.ends_with('\n')) {
+    fmt += '\n';
+  }
+  vfprintf(stderr, fmt.c_str(), arg);
   va_end(arg);
 }
 #endif
 
 /// @brief Helper macro to test the result of Vulkan calls which can return an
 /// error.
+#ifndef VK_CHECK
 #define VK_CHECK(x)                                                            \
   do {                                                                         \
     VkResult err = x;                                                          \
@@ -49,14 +58,7 @@ inline void LOGI(const char *fmt, ...) {
       abort();                                                                 \
     }                                                                          \
   } while (0)
-
-#define ASSERT_VK_HANDLE(handle)                                               \
-  do {                                                                         \
-    if ((handle) == VK_NULL_HANDLE) {                                          \
-      LOGE("Handle is NULL at %s:%d.\n", __FILE__, __LINE__);                  \
-      abort();                                                                 \
-    }                                                                          \
-  } while (0)
+#endif
 
 // vk object sunawati vko
 namespace vko {
@@ -536,7 +538,7 @@ struct Swapchain : public not_copyable {
     VK_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
                                  &_commandPool));
 
-    _commandBuffers.resize(1);
+    _commandBuffers.resize(imageCount);
     VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = nullptr,

@@ -1,29 +1,31 @@
 #pragma once
-#include <vulkan/vulkan.h>
-
 #include <memory>
 #include <string>
 #include <vector>
-#include <vulkan/vulkan_core.h>
+#include <vko.h>
 
-class SwapchainImpl;
 class PipelineImpl;
 class VulkanFramework {
-  std::shared_ptr<SwapchainImpl> Swapchain;
+public:
+  vko::Instance Instance;
+  vko::Instance::SelectedPhysicalDevice _picked;
+  vko::Device Device;
+  std::shared_ptr<vko::Surface> Surface;
+  std::shared_ptr<vko::Swapchain> Swapchain;
+  VkQueue _graphicsQueue = VK_NULL_HANDLE;
+  std::shared_ptr<vko::Fence> SubmitCompleteFence;
+
+  std::vector<std::shared_ptr<struct SwapchainImage>> _images;
+
+private:
   std::shared_ptr<PipelineImpl> Pipeline;
 
   std::string _appName;
   std::string _engineName;
-  VkInstance Instance = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerEXT DebugUtilsMessengerEXT = VK_NULL_HANDLE;
-  VkSurfaceKHR Surface = VK_NULL_HANDLE;
-  VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
-  VkDevice Device = VK_NULL_HANDLE;
+
+private:
   VkQueue GraphicsQueue = VK_NULL_HANDLE;
   VkQueue PresentQueue = VK_NULL_HANDLE;
-
-  VkFormat SwapchainImageFormat = {};
-
   void *AssetManager = nullptr;
 
 public:
@@ -33,23 +35,14 @@ public:
   bool
   initializeInstance(const std::vector<const char *> &layerNames,
                      const std::vector<const char *> &instanceExtensionNames);
-  void cleanup();
+
 #ifdef ANDROID
   bool createSurfaceAndroid(void *window);
 #else
-  bool createSurfaceWin32(void *hInstance, void *hWnd);
 #endif
   bool initializeDevice(const std::vector<const char *> &layerNames,
-                        const std::vector<const char *> &deviceExtensionNames);
+                        const std::vector<const char *> &deviceExtensionNames,
+                        VkSurfaceKHR surface);
 
   bool drawFrame(uint32_t width, uint32_t height);
-
-private:
-  bool createInstance(const std::vector<const char *> &layerNames,
-                      const std::vector<const char *> &instanceExtensionNames);
-  bool
-  pickPhysicalDevice(const std::vector<const char *> &deviceExtensionNames);
-  bool
-  createLogicalDevice(const std::vector<const char *> &layerNames,
-                      const std::vector<const char *> &deviceExtensionNames);
 };

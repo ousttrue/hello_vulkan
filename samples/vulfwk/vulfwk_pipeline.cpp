@@ -1,7 +1,5 @@
 #include "vulfwk_pipeline.h"
-#include "logger.h"
-#include "vulfwk_queuefamily.h"
-#include "vulfwk_swapchain.h"
+#include <vko.h>
 
 #if ANDROID
 #include <android_native_app_glue.h>
@@ -65,9 +63,6 @@ PipelineImpl::PipelineImpl(VkDevice device, VkRenderPass renderPass,
       GraphicsPipeline(graphicsPipeline) {}
 
 PipelineImpl::~PipelineImpl() {
-  if (CommandPool) {
-    vkDestroyCommandPool(Device, CommandPool, nullptr);
-  }
   if (GraphicsPipeline) {
     vkDestroyPipeline(Device, GraphicsPipeline, nullptr);
   }
@@ -222,13 +217,6 @@ PipelineImpl::create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
   auto p =
       new PipelineImpl(device, renderPass, pipelineLayout, graphicsPipeline);
 
-  if (!p->createCommandPool(physicalDevice, surface)) {
-    return {};
-  }
-  if (!p->createCommandBuffers()) {
-    return {};
-  }
-
   return std::shared_ptr<PipelineImpl>(p);
 }
 
@@ -280,52 +268,11 @@ VkRenderPass PipelineImpl::createRenderPass(VkDevice device,
   return renderPass;
 }
 
-bool PipelineImpl::createCommandPool(VkPhysicalDevice physicalDevice,
-                                     VkSurfaceKHR surface) {
-  auto queueFamilyIndices =
-      QueueFamilyIndices ::findQueueFamilies(physicalDevice, surface);
-
-  VkCommandPoolCreateInfo poolInfo{};
-  poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-  poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-
-  if (vkCreateCommandPool(Device, &poolInfo, nullptr, &CommandPool) !=
-      VK_SUCCESS) {
-    LOGE("failed to create command pool!");
-    return false;
-  }
-  return true;
-}
-
-bool PipelineImpl::createCommandBuffers() {
-  CommandBuffers.resize(SwapchainImpl::MAX_FRAMES_IN_FLIGHT);
-
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = CommandPool;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = (uint32_t)CommandBuffers.size();
-
-  if (vkAllocateCommandBuffers(Device, &allocInfo, CommandBuffers.data()) !=
-      VK_SUCCESS) {
-    LOGE("failed to allocate command buffers!");
-    return false;
-  }
-  return true;
-}
-
-VkCommandBuffer PipelineImpl::draw(uint32_t imageIndex, uint32_t currentFrame,
-                                   VkFramebuffer framebuffer,
-                                   VkExtent2D extent) {
-  vkResetCommandBuffer(CommandBuffers[currentFrame],
+void PipelineImpl::draw(VkCommandBuffer commandBuffer, uint32_t imageIndex,
+                        VkFramebuffer framebuffer, VkExtent2D imageExtent) {
+  vkResetCommandBuffer(commandBuffer,
                        /*VkCommandBufferResetFlagBits*/ 0);
-  if (!recordCommandBuffer(CommandBuffers[currentFrame], imageIndex,
-                           framebuffer, extent)) {
-    return {};
-  }
-
-  return CommandBuffers[currentFrame];
+  recordCommandBuffer(commandBuffer, imageIndex, framebuffer, imageExtent);
 }
 
 bool PipelineImpl::recordCommandBuffer(VkCommandBuffer commandBuffer,

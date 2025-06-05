@@ -63,10 +63,10 @@
             "name": "vulfwk",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/builddir/samples/vulfwk/vulfwk.exe",
+            "program": "${workspaceFolder}/build/samples/vulfwk/vulfwk.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/builddir/samples/vulfwk",
+            "cwd": "${workspaceFolder}/build/samples/vulfwk",
             "environment": [],
             "console": "integratedTerminal"
         }

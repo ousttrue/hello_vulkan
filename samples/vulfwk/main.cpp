@@ -1,5 +1,5 @@
-#include "logger.h"
 #include "vulfwk.h"
+#include <vko.h>
 
 #ifdef ANDROID
 #include <android_native_app_glue.h>
@@ -130,10 +130,12 @@ int main(int argc, char **argv) {
   if (!vulfwk.initializeInstance(validationLayers, instanceExtensions)) {
     return 1;
   }
-  if (!vulfwk.createSurfaceWin32(GetModuleHandle(nullptr), hwnd)) {
-    return 2;
-  }
-  if (!vulfwk.initializeDevice(validationLayers, deviceExtensions)) {
+
+  VkSurfaceKHR _surface;
+  VK_CHECK(glfwCreateWindowSurface(vulfwk.Instance, glfw._window, nullptr,
+                                   &_surface));
+
+  if (!vulfwk.initializeDevice(validationLayers, deviceExtensions, _surface)) {
     return 3;
   }
 

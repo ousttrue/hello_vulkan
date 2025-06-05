@@ -2,8 +2,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(TARGET_NAME vulfwk)
 
-set(SRCS main.cpp vulfwk.cpp vulfwk_swapchain.cpp vulfwk_pipeline.cpp
-         vulfwk_queuefamily.cpp)
+set(SRCS main.cpp vulfwk.cpp vulfwk_pipeline.cpp)
 if(ANDROID_NDK)
   add_library(${TARGET_NAME} SHARED ${SRCS})
   target_compile_definitions(${TARGET_NAME}
@@ -13,7 +12,7 @@ if(ANDROID_NDK)
 else()
   add_executable(${TARGET_NAME} ${SRCS} platform_win32.cpp)
   target_compile_definitions(${TARGET_NAME} PRIVATE VK_USE_PLATFORM_WIN32_KHR=1)
-  target_link_libraries(${TARGET_NAME} PRIVATE vulkan glfw)
+  target_link_libraries(${TARGET_NAME} PRIVATE vko glfw)
   target_compile_options(${TARGET_NAME} PRIVATE /EHsc)
 endif()
 
