@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -614,6 +615,51 @@ struct Swapchain : public not_copyable {
         .pImageIndices = &imageIndex,
     };
     return vkQueuePresentKHR(_presentQueue, &presentInfo);
+  }
+};
+
+struct SwapchainFramebuffer {
+  VkDevice _device;
+  VkImageView _imageView;
+  VkFramebuffer _framebuffer;
+
+  VkImageViewCreateInfo _createInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                           .baseMipLevel = 0,
+                           .levelCount = 1,
+                           .baseArrayLayer = 0,
+                           .layerCount = 1},
+  };
+  VkFramebufferCreateInfo _framebufferInfo{
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .layers = 1,
+  };
+
+  SwapchainFramebuffer(VkDevice device, VkImage image, VkExtent2D extent,
+                       VkFormat format, VkRenderPass renderPass)
+      : _device(device) {
+    _createInfo.image = image;
+    _createInfo.format = format;
+    VK_CHECK(vkCreateImageView(device, &_createInfo, nullptr, &_imageView));
+
+    _framebufferInfo.pAttachments = &_imageView;
+    _framebufferInfo.attachmentCount = 1;
+    _framebufferInfo.renderPass = renderPass;
+    _framebufferInfo.width = extent.width;
+    _framebufferInfo.height = extent.height;
+    VK_CHECK(
+        vkCreateFramebuffer(device, &_framebufferInfo, nullptr, &_framebuffer));
+  }
+
+  ~SwapchainFramebuffer() {
+    vkDestroyFramebuffer(_device, _framebuffer, nullptr);
+    vkDestroyImageView(_device, _imageView, nullptr);
   }
 };
 

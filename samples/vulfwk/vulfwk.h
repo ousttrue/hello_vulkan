@@ -15,7 +15,7 @@ public:
   VkQueue _graphicsQueue = VK_NULL_HANDLE;
   std::shared_ptr<vko::Fence> SubmitCompleteFence;
 
-  std::vector<std::shared_ptr<struct SwapchainImage>> _images;
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> _images;
 
 private:
   std::shared_ptr<PipelineImpl> Pipeline;

@@ -2,61 +2,6 @@
 #include "vulfwk_pipeline.h"
 #include <vko.h>
 
-struct SwapchainImage {
-  VkDevice _device;
-  VkImageView _imageView;
-  VkFramebuffer _framebuffer;
-
-  SwapchainImage(VkDevice device, VkImageView imageView,
-                 VkFramebuffer framebuffer)
-      : _device(device), _imageView(imageView), _framebuffer(framebuffer) {}
-
-  ~SwapchainImage() {
-    vkDestroyFramebuffer(_device, _framebuffer, nullptr);
-    vkDestroyImageView(_device, _imageView, nullptr);
-  }
-
-  static std::shared_ptr<SwapchainImage> create(VkDevice device, VkImage image,
-                                                VkExtent2D extent,
-                                                VkFormat format,
-                                                VkRenderPass renderPass) {
-    VkImageViewCreateInfo createInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = format,
-        .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                       .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                       .a = VK_COMPONENT_SWIZZLE_IDENTITY},
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1},
-    };
-    VkImageView imageView;
-    VK_CHECK(vkCreateImageView(device, &createInfo, nullptr, &imageView));
-
-    VkImageView attachments[] = {imageView};
-    VkFramebufferCreateInfo framebufferInfo{
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = renderPass,
-        .attachmentCount = 1,
-        .pAttachments = attachments,
-        .width = extent.width,
-        .height = extent.height,
-        .layers = 1,
-    };
-    VkFramebuffer framebuffer;
-    VK_CHECK(
-        vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffer));
-
-    auto ptr = std::make_shared<SwapchainImage>(device, imageView, framebuffer);
-    return ptr;
-  }
-};
-
 VulkanFramework::VulkanFramework(const char *appName, const char *engineName) {
   _appName = appName;
   _engineName = engineName;
@@ -147,7 +92,7 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
 
   auto image = _images[acquired.imageIndex];
   if (!image) {
-    image = SwapchainImage::create(
+    image = std::make_shared<vko::SwapchainFramebuffer>(
         Device, acquired.image, Swapchain->_createInfo.imageExtent,
         Swapchain->_createInfo.imageFormat, Pipeline->renderPass());
     _images[acquired.imageIndex] = image;
