@@ -2,12 +2,42 @@
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
-#include "common.hpp"
 #include <GLFW/glfw3.h>
 
+#include <list>
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
+
+#ifdef ANDROID
+#include <android/log.h>
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "MaliSDK", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "MaliSDK", __VA_ARGS__)
+#else
+#define LOGE(...) fprintf(stderr, "ERROR: " __VA_ARGS__)
+#define LOGI(...) fprintf(stderr, "INFO: " __VA_ARGS__)
+#endif
+
+/// @brief Helper macro to test the result of Vulkan calls which can return an
+/// error.
+#define VK_CHECK(x)                                                            \
+  do {                                                                         \
+    VkResult err = x;                                                          \
+    if (err) {                                                                 \
+      LOGE("Detected Vulkan error %d at %s:%d.\n", int(err), __FILE__,         \
+           __LINE__);                                                          \
+      abort();                                                                 \
+    }                                                                          \
+  } while (0)
+
+#define ASSERT_VK_HANDLE(handle)                                               \
+  do {                                                                         \
+    if ((handle) == VK_NULL_HANDLE) {                                          \
+      LOGE("Handle is NULL at %s:%d.\n", __FILE__, __LINE__);                  \
+      abort();                                                                 \
+    }                                                                          \
+  } while (0)
 
 // vk object sunawati vko
 namespace vko {
@@ -302,6 +332,47 @@ struct Device : public not_copyable {
   }
 };
 
+struct Fence : public not_copyable {
+  VkDevice _device;
+  VkFence _fence = VK_NULL_HANDLE;
+  operator VkFence() { return _fence; }
+  Fence(VkDevice device, bool signaled) : _device(device) {
+    VkFenceCreateInfo fenceInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    if (signaled) {
+      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    }
+    VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
+  }
+  ~Fence() {
+    if (_fence != VK_NULL_HANDLE) {
+      vkDestroyFence(_device, _fence, nullptr);
+    }
+  }
+  void reset() { vkResetFences(_device, 1, &_fence); }
+
+  void block() {
+    VK_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
+  }
+};
+
+struct Semaphore : public not_copyable {
+  VkDevice _device;
+  VkSemaphore _semaphore = VK_NULL_HANDLE;
+  operator VkSemaphore() { return _semaphore; }
+  Semaphore(VkDevice device) : _device(device) {
+    VkSemaphoreCreateInfo semaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
+    VK_CHECK(
+        vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
+  }
+  ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
+};
+
 struct Surface : public not_copyable {
   VkInstance _instance;
   VkSurfaceKHR _surface;
@@ -361,6 +432,10 @@ struct Swapchain : public not_copyable {
   VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
   std::vector<VkImage> _images;
   Swapchain(VkDevice device) : _device(device) {}
+
+  std::list<std::shared_ptr<Semaphore>> _imageAvailableSemaphorePool;
+  std::vector<std::shared_ptr<Semaphore>> _submitCompleteSemaphores;
+
   ~Swapchain() {
     if (_swapchain != VK_NULL_HANDLE) {
       vkDestroySwapchainKHR(_device, _swapchain, nullptr);
@@ -421,77 +496,54 @@ struct Swapchain : public not_copyable {
       vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, _images.data());
     }
 
+    _submitCompleteSemaphores.resize(imageCount);
+    for (uint32_t i = 0; i < imageCount; ++i) {
+      _submitCompleteSemaphores[i] = std::make_shared<Semaphore>(_device);
+    }
+
     return VK_SUCCESS;
   }
 
-  std::tuple<VkResult, uint32_t, VkImage>
-  acquireNextImage(VkSemaphore imageAvailableSemaphore,
-                   VkFence imageAvailableFence) {
-    uint32_t imageIndex;
-    auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
-                                        imageAvailableSemaphore,
-                                        imageAvailableFence, &imageIndex);
-    return {result, imageIndex, _images[imageIndex]};
+  std::shared_ptr<Semaphore> getOrCreateImageAvailableSemaphore() {
+    if (!_imageAvailableSemaphorePool.empty()) {
+      auto s = _imageAvailableSemaphorePool.front();
+      _imageAvailableSemaphorePool.pop_front();
+      return s;
+    }
+
+    LOGI("new semaphore\n");
+    auto s = std::make_shared<Semaphore>(_device);
+    return s;
   }
 
-  VkResult present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+  std::tuple<VkResult, uint32_t, VkImage, std::shared_ptr<Semaphore>,
+             std::shared_ptr<Semaphore>>
+  acquireNextImage() {
+    auto imageAvailableSemaphore = getOrCreateImageAvailableSemaphore();
+
+    uint32_t imageIndex;
+    auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
+                                        *imageAvailableSemaphore,
+                                        VK_NULL_HANDLE, &imageIndex);
+    return {result, imageIndex, _images[imageIndex], imageAvailableSemaphore,
+            _submitCompleteSemaphores[imageIndex]};
+  }
+
+  VkResult present(uint32_t imageIndex,
+                   const std::shared_ptr<Semaphore> &imageAvailableSemaphore) {
+    _imageAvailableSemaphorePool.push_back(imageAvailableSemaphore);
+
     VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 0,
-        .pWaitSemaphores = nullptr,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &_submitCompleteSemaphores[imageIndex]->_semaphore,
         // swapchain
         .swapchainCount = 1,
         .pSwapchains = &_swapchain,
         .pImageIndices = &imageIndex,
     };
-    if (waitSemaphore != VK_NULL_HANDLE) {
-      presentInfo.pWaitSemaphores = &waitSemaphore;
-      presentInfo.waitSemaphoreCount = 1;
-    }
     return vkQueuePresentKHR(_presentQueue, &presentInfo);
   }
-};
-
-struct Fence : public not_copyable {
-  VkDevice _device;
-  VkFence _fence = VK_NULL_HANDLE;
-  operator VkFence() { return _fence; }
-  Fence(VkDevice device, bool signaled) : _device(device) {
-    VkFenceCreateInfo fenceInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    };
-    if (signaled) {
-      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-    }
-    VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
-  }
-  ~Fence() {
-    if (_fence != VK_NULL_HANDLE) {
-      vkDestroyFence(_device, _fence, nullptr);
-    }
-  }
-  void reset() { vkResetFences(_device, 1, &_fence); }
-
-  void block() {
-    VK_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
-  }
-};
-
-struct Semaphore : public not_copyable {
-  VkDevice _device;
-  VkSemaphore _semaphore = VK_NULL_HANDLE;
-  VkPipelineStageFlags _waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  operator VkSemaphore() { return _semaphore; }
-  Semaphore(VkDevice device) : _device(device) {
-    VkSemaphoreCreateInfo semaphoreCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-    };
-    VK_CHECK(
-        vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
-  }
-  ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
 };
 
 } // namespace vko
@@ -659,42 +711,35 @@ int main(int argc, char **argv) {
     //
     // main loop
     //
-    // vko::Fence imageAvailableFence(device, false);
-    vko::Semaphore imageAvailableSemaphore(device);
     vko::Fence submitCompleteFence(device, true);
-    vko::Semaphore submitCompleteSemaphore(device);
 
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
-      // imageAvailableFence.reset();
-      auto [result, imageIndex, image] =
-          swapchain.acquireNextImage(imageAvailableSemaphore,
-                                     //
-                                     // imageAvailableFence
-                                     VK_NULL_HANDLE);
+      auto [result, imageIndex, image, imageAvailableSemaphore,
+            submitCompleteSemaphore] = swapchain.acquireNextImage();
       VK_CHECK(result);
 
-      // imageAvailableFence.block();
       auto commandBuffer =
           renderer.getRecordedCommand(image, picked.graphicsFamily);
 
+      VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
       VkSubmitInfo submitInfo = {
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &imageAvailableSemaphore._semaphore,
-          .pWaitDstStageMask = &imageAvailableSemaphore._waitDstStageMask,
+          .pWaitSemaphores = &imageAvailableSemaphore->_semaphore,
+          .pWaitDstStageMask = &waitDstStageMask,
           .commandBufferCount = 1,
           .pCommandBuffers = &commandBuffer,
           .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &submitCompleteSemaphore._semaphore,
+          .pSignalSemaphores = &submitCompleteSemaphore->_semaphore,
       };
       submitCompleteFence.reset();
       VK_CHECK(
           vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
 
       submitCompleteFence.block();
-      VK_CHECK(swapchain.present(imageIndex, submitCompleteSemaphore));
+      VK_CHECK(swapchain.present(imageIndex, imageAvailableSemaphore));
     }
 
     vkDeviceWaitIdle(device);
