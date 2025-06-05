@@ -13,8 +13,15 @@ auto WINDOW_TITLE = "vko";
 
 namespace vko {
 
+struct not_copyable {
+  not_copyable() = default;
+  ~not_copyable() = default;
+  not_copyable(const not_copyable &) = delete;
+  not_copyable &operator=(const not_copyable &) = delete;
+};
+
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
-struct PhysicalDevice {
+struct PhysicalDevice : public not_copyable {
   VkPhysicalDevice _physicaldevice;
   VkPhysicalDeviceProperties _deviceProperties;
   VkPhysicalDeviceFeatures _deviceFeatures;
@@ -38,6 +45,31 @@ struct PhysicalDevice {
       }
     }
   }
+  PhysicalDevice(PhysicalDevice &&rhs) {
+    this->_physicaldevice = rhs._physicaldevice;
+    rhs._physicaldevice = {};
+    this->_deviceProperties = rhs._deviceProperties;
+    rhs._deviceProperties = {};
+    this->_deviceFeatures = rhs._deviceFeatures;
+    rhs._deviceFeatures = {};
+    this->_queueFamilies = rhs._queueFamilies;
+    rhs._queueFamilies = {};
+    this->_graphicsFamily = rhs._graphicsFamily;
+    rhs._graphicsFamily = UINT_MAX;
+  }
+  PhysicalDevice &operator=(PhysicalDevice &&rhs) {
+    this->_physicaldevice = std::move(rhs._physicaldevice);
+    rhs._physicaldevice = {};
+    this->_deviceProperties = rhs._deviceProperties;
+    rhs._deviceProperties = {};
+    this->_deviceFeatures = rhs._deviceFeatures;
+    rhs._deviceFeatures = {};
+    this->_queueFamilies = rhs._queueFamilies;
+    rhs._queueFamilies = {};
+    this->_graphicsFamily = rhs._graphicsFamily;
+    rhs._graphicsFamily = UINT_MAX;
+    return *this;
+  }
   std::optional<uint32_t> getPresentQueueFamily(VkSurfaceKHR surface) {
     for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
       VkBool32 presentSupport = false;
@@ -52,7 +84,7 @@ struct PhysicalDevice {
 };
 
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
-struct Instance {
+struct Instance : public not_copyable {
   VkInstance _instance = VK_NULL_HANDLE;
   operator VkInstance() { return _instance; }
   ~Instance() {
@@ -189,7 +221,7 @@ struct Instance {
         .graphicsFamily = UINT_MAX,
         .presentFamily = UINT_MAX,
     };
-    for (auto d : _devices) {
+    for (auto &d : _devices) {
       auto _presentFamily = d.getPresentQueueFamily(surface);
       if (d._deviceProperties.deviceType ==
               VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
@@ -213,7 +245,7 @@ struct Instance {
   }
 };
 
-struct Device {
+struct Device : public not_copyable {
   VkDevice _device = VK_NULL_HANDLE;
   operator VkDevice() { return _device; }
   ~Device() {
@@ -271,7 +303,7 @@ struct Device {
   }
 };
 
-struct Surface {
+struct Surface : public not_copyable {
   VkInstance _instance;
   VkSurfaceKHR _surface;
   VkPhysicalDevice _physicalDevice;
@@ -324,9 +356,11 @@ struct Surface {
   }
 };
 
-struct Swapchain {
+struct Swapchain : public not_copyable {
   VkDevice _device;
+  VkQueue _presentQueue = VK_NULL_HANDLE;
   VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+  std::vector<VkImage> _images;
   Swapchain(VkDevice device) : _device(device) {}
   ~Swapchain() {
     if (_swapchain != VK_NULL_HANDLE) {
@@ -338,19 +372,25 @@ struct Swapchain {
   VkSwapchainCreateInfoKHR _createInfo{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
       .imageArrayLayers = 1,
-      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .imageUsage =
+          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
       .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
       .clipped = VK_TRUE,
   };
 
-  VkResult create(VkSurfaceKHR surface, uint32_t imageCount,
+  VkResult create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
                   VkSurfaceFormatKHR surfaceFormat,
-                  VkPresentModeKHR presentMode,
-                  const VkSurfaceCapabilitiesKHR &capabilities,
-                  uint32_t graphicsFamily, uint32_t presentFamily,
+                  VkPresentModeKHR presentMode, uint32_t graphicsFamily,
+                  uint32_t presentFamily,
                   VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE) {
+    vkGetDeviceQueue(_device, presentFamily, 0, &_presentQueue);
+
+    // get here for latest currentExtent
+    VkSurfaceCapabilitiesKHR capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &capabilities);
+
     _createInfo.surface = surface;
-    _createInfo.minImageCount = imageCount;
+    _createInfo.minImageCount = capabilities.minImageCount + 1;
     _createInfo.imageFormat = surfaceFormat.format;
     _createInfo.imageColorSpace = surfaceFormat.colorSpace;
     _createInfo.imageExtent = capabilities.currentExtent;
@@ -368,11 +408,187 @@ struct Swapchain {
     _createInfo.preTransform = capabilities.currentTransform;
     _createInfo.presentMode = presentMode;
     _createInfo.oldSwapchain = oldSwapchain;
-    return vkCreateSwapchainKHR(_device, &_createInfo, nullptr, &_swapchain);
+    auto result =
+        vkCreateSwapchainKHR(_device, &_createInfo, nullptr, &_swapchain);
+    if (result != VK_SUCCESS) {
+      return result;
+    }
+
+    uint32_t imageCount;
+    vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, nullptr);
+    LOGI("swapchain images: %d\n", imageCount);
+    if (imageCount > 0) {
+      _images.resize(imageCount);
+      vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, _images.data());
+    }
+
+    return VK_SUCCESS;
+  }
+
+  std::tuple<VkResult, uint32_t, VkImage>
+  acquireNextImage(VkSemaphore imageAvailableSemaphore,
+                   VkFence imageAvailableFence) {
+    uint32_t imageIndex;
+    auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
+                                        imageAvailableSemaphore,
+                                        imageAvailableFence, &imageIndex);
+    return {result, imageIndex, _images[imageIndex]};
+  }
+
+  VkResult present(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+    VkPresentInfoKHR presentInfo = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = nullptr,
+        // swapchain
+        .swapchainCount = 1,
+        .pSwapchains = &_swapchain,
+        .pImageIndices = &imageIndex,
+    };
+    if (waitSemaphore != VK_NULL_HANDLE) {
+      presentInfo.pWaitSemaphores = &waitSemaphore;
+      presentInfo.waitSemaphoreCount = 1;
+    }
+    return vkQueuePresentKHR(_presentQueue, &presentInfo);
   }
 };
 
+struct Fence : public not_copyable {
+  VkDevice _device;
+  VkFence _fence = VK_NULL_HANDLE;
+  operator VkFence() { return _fence; }
+  Fence(VkDevice device, bool signaled) : _device(device) {
+    VkFenceCreateInfo fenceInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    if (signaled) {
+      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    }
+    VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
+  }
+  ~Fence() {
+    if (_fence != VK_NULL_HANDLE) {
+      vkDestroyFence(_device, _fence, nullptr);
+    }
+  }
+  void reset() { vkResetFences(_device, 1, &_fence); }
+};
+
+struct Semaphore : public not_copyable {
+  VkDevice _device;
+  VkSemaphore _semaphore = VK_NULL_HANDLE;
+  VkPipelineStageFlags _waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  operator VkSemaphore() { return _semaphore; }
+  Semaphore(VkDevice device) : _device(device) {
+    VkSemaphoreCreateInfo semaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+    };
+    VK_CHECK(
+        vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
+  }
+  ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
+};
+
 } // namespace vko
+
+class Renderer {
+  VkDevice _device;
+  VkCommandPool _commandPool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> _commandBuffers;
+
+public:
+  Renderer(VkDevice device, uint32_t queueFamilyIndex) : _device(device) {
+    VkCommandPoolCreateInfo CommandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = queueFamilyIndex,
+    };
+    VK_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
+                                 &_commandPool));
+
+    _commandBuffers.resize(1);
+    VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = nullptr,
+        .commandPool = _commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = static_cast<uint32_t>(_commandBuffers.size()),
+    };
+    VK_CHECK(vkAllocateCommandBuffers(_device, &CommandBufferAllocateInfo,
+                                      _commandBuffers.data()));
+  }
+  ~Renderer() { vkDestroyCommandPool(_device, _commandPool, nullptr); }
+
+  VkCommandBuffer getRecordedCommand(VkImage image,
+                                     uint32_t presentQueueFamily) {
+    auto commandBuffer = _commandBuffers[0];
+
+    VkCommandBufferBeginInfo CommandBufferBeginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        .pInheritanceInfo = nullptr,
+    };
+    VK_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
+
+    VkImageSubresourceRange subResourceRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+
+    VkImageMemoryBarrier presentToClearBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = presentQueueFamily,
+        .dstQueueFamilyIndex = presentQueueFamily,
+        .image = image,
+        .subresourceRange = subResourceRange,
+    };
+    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &presentToClearBarrier);
+
+    VkClearColorValue clearColorValue = {1.0, 0.0, 0.0, 0.0};
+    VkImageSubresourceRange imageSubresourceRange{
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+    vkCmdClearColorImage(commandBuffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColorValue,
+                         1, &imageSubresourceRange);
+
+    VkImageMemoryBarrier clearToPresentBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = presentQueueFamily,
+        .dstQueueFamilyIndex = presentQueueFamily,
+        .image = image,
+        .subresourceRange = subResourceRange,
+    };
+    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &clearToPresentBarrier);
+
+    VK_CHECK(vkEndCommandBuffer(commandBuffer));
+
+    return commandBuffer;
+  }
+};
 
 // https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
 int main(int argc, char **argv) {
@@ -422,17 +638,50 @@ int main(int argc, char **argv) {
                            picked.presentFamily));
 
     vko::Swapchain swapchain(device);
-    VK_CHECK(swapchain.create(
-        surface._surface, surface._capabilities.minImageCount + 1,
-        surface.chooseSwapSurfaceFormat(), surface.chooseSwapPresentMode(),
-        surface._capabilities, picked.graphicsFamily, picked.presentFamily));
+    VK_CHECK(swapchain.create(picked.physicalDevice, surface._surface,
+                              surface.chooseSwapSurfaceFormat(),
+                              surface.chooseSwapPresentMode(),
+                              picked.graphicsFamily, picked.presentFamily));
+
+    VkQueue graphicsQueue;
+    vkGetDeviceQueue(device, picked.graphicsFamily, 0, &graphicsQueue);
+
+    Renderer renderer(device, picked.graphicsFamily);
 
     //
     // main loop
     //
+    vko::Fence fence(device, false);
+    vko::Semaphore imageAvailable(device);
+
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
+
+      fence.reset();
+      auto [result, imageIndex, image] =
+          swapchain.acquireNextImage(imageAvailable, fence);
+      VK_CHECK(result);
+
+      auto commandBuffer =
+          renderer.getRecordedCommand(image, picked.presentFamily);
+
+      VK_CHECK(vkWaitForFences(device, 1, &fence._fence, VK_TRUE, UINT64_MAX));
+      VkSubmitInfo submitInfo = {
+          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+          .waitSemaphoreCount = 1,
+          .pWaitSemaphores = &imageAvailable._semaphore,
+          .pWaitDstStageMask = &imageAvailable._waitDstStageMask,
+          .commandBufferCount = 1,
+          .pCommandBuffers = &commandBuffer,
+      };
+      fence.reset();
+      VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence));
+
+      VK_CHECK(vkWaitForFences(device, 1, &fence._fence, VK_TRUE, UINT64_MAX));
+      VK_CHECK(swapchain.present(imageIndex, VK_NULL_HANDLE));
     }
+
+    vkDeviceWaitIdle(device);
   }
 
   glfwDestroyWindow(window);

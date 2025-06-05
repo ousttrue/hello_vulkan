@@ -1,3 +1,7 @@
+# vkCmdClearColorImage
+
+[Simple vkCmdClearColorImage example · GitHub](https://gist.github.com/TheServer201/26c280d0779423dc714da4a299636ff7)
+
 # Vulkan Tutorial
 
 - https://vulkan-tutorial.com/
