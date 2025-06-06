@@ -44,11 +44,21 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
       LOGE("failed: initializeInstance");
       return;
     }
-    if (!userData->impl->createSurfaceAndroid(pApp->window)) {
-      LOGE("failed: createSurfaceAndroid");
+
+    VkAndroidSurfaceCreateInfoKHR info = {
+        .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+        .flags = 0,
+        .window = pApp->window,
+    };
+    VkSurfaceKHR surface;
+    if (vkCreateAndroidSurfaceKHR(vulfwk->Instance, &info, nullptr, &surface) !=
+        VK_SUCCESS) {
+      LOGE("failed: vkCreateAndroidSurfaceKHR");
       return;
     }
-    if (!vulfwk->initializeDevice(validationLayers, deviceExtensions)) {
+
+    if (!vulfwk->initializeDevice(validationLayers, deviceExtensions,
+                                  surface)) {
       LOGE("failed: initializeDevice");
       return;
     }
@@ -131,11 +141,11 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  VkSurfaceKHR _surface;
+  VkSurfaceKHR surface;
   VK_CHECK(glfwCreateWindowSurface(vulfwk.Instance, glfw._window, nullptr,
-                                   &_surface));
+                                   &surface));
 
-  if (!vulfwk.initializeDevice(validationLayers, deviceExtensions, _surface)) {
+  if (!vulfwk.initializeDevice(validationLayers, deviceExtensions, surface)) {
     return 3;
   }
 

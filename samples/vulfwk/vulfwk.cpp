@@ -27,25 +27,6 @@ bool VulkanFramework::initializeInstance(
   return true;
 }
 
-#ifdef ANDROID
-#include <android_native_app_glue.h>
-bool VulkanFramework::createSurfaceAndroid(void *p) {
-  auto pNativeWindow = reinterpret_cast<ANativeWindow *>(p);
-
-  VkAndroidSurfaceCreateInfoKHR info = {
-      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
-      .flags = 0,
-      .window = pNativeWindow,
-  };
-  if (vkCreateAndroidSurfaceKHR(Instance, &info, nullptr, &Surface) !=
-      VK_SUCCESS) {
-    LOGE("failed: vkCreateAndroidSurfaceKHR");
-    return false;
-  }
-  return true;
-}
-#else
-#endif
 
 bool VulkanFramework::initializeDevice(
     const std::vector<const char *> &layerNames,

@@ -1,6 +1,9 @@
+#ifdef ANDROID
+#else
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#endif
 
 #include <vko.h>
 
@@ -83,6 +86,9 @@ VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
   //           << std::sin(sec.count()) << ": " << v << std::endl;
   return {v, 0.0, 0.0, 0.0};
 }
+
+#ifdef ANDROID
+#else
 
 // https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
 int main(int argc, char **argv) {
@@ -184,3 +190,4 @@ int main(int argc, char **argv) {
   glfwTerminate();
   return 0;
 }
+#endif

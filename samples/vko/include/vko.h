@@ -310,7 +310,9 @@ struct Device : public not_copyable {
   };
   float _queuePriority = 1.0f;
   std::vector<VkDeviceQueueCreateInfo> _queueCreateInfos;
-  VkPhysicalDeviceFeatures _deviceFeatures{};
+  VkPhysicalDeviceFeatures _deviceFeatures{
+      .samplerAnisotropy = VK_TRUE,
+  };
   VkDeviceCreateInfo _createInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 0,

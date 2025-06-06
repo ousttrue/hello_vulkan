@@ -36,10 +36,6 @@ public:
   initializeInstance(const std::vector<const char *> &layerNames,
                      const std::vector<const char *> &instanceExtensionNames);
 
-#ifdef ANDROID
-  bool createSurfaceAndroid(void *window);
-#else
-#endif
   bool initializeDevice(const std::vector<const char *> &layerNames,
                         const std::vector<const char *> &deviceExtensionNames,
                         VkSurfaceKHR surface);

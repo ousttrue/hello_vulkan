@@ -41,6 +41,7 @@ function(add_glsl TARGET SHADER)
   target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_glsl)
 
+subdirs(vko)
 if(ANDROID_NDK)
   set(TARGET_NAME android_native_app_glue)
   add_library(
@@ -106,4 +107,4 @@ else()
   FetchContent_MakeAvailable(zlib)
 endif()
 
-subdirs(vulfwk hello_xr/cpp vko)
+subdirs(vulfwk hello_xr/cpp)
