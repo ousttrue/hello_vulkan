@@ -1,14 +1,12 @@
 #include "swapchain_manager.hpp"
 #include "device_manager.hpp"
 #include <vko.h>
-#include "semaphore_manager.hpp"
 #include <vulkan/vulkan_core.h>
 
 SwapchainManager::SwapchainManager(VkDevice device, uint32_t presentaionFamily,
                                    VkSwapchainKHR swapchain)
     : _device(device), _swapchain(swapchain) {
   vkGetDeviceQueue(device, presentaionFamily, 0, &_presentationQueue);
-  _semaphoreManager = std::make_shared<SemaphoreManager>(_device);
 }
 
 SwapchainManager::~SwapchainManager() {
@@ -131,29 +129,16 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   return ptr;
 }
 
-std::tuple<VkResult, VkSemaphore, std::shared_ptr<Backbuffer>>
-SwapchainManager::AcquireNext() {
-  auto acquireSemaphore = _semaphoreManager->getClearedSemaphore();
+std::tuple<VkResult, std::shared_ptr<Backbuffer>>
+SwapchainManager::AcquireNext(VkSemaphore acquireSemaphore) {
   uint32_t index;
   VkResult res =
       vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX, acquireSemaphore,
                             VK_NULL_HANDLE, &index);
   if (res == VK_SUCCESS) {
     _swapchainIndex = index;
-    return {res, acquireSemaphore, _backbuffers[_swapchainIndex]};
+    return {res, _backbuffers[_swapchainIndex]};
   } else {
-    return {res, acquireSemaphore, {}};
-  }
-}
-
-void SwapchainManager::sync(VkSemaphore acquireSemaphore) {
-  vkQueueWaitIdle(_presentationQueue);
-  _semaphoreManager->addClearedSemaphore(acquireSemaphore);
-}
-
-void SwapchainManager::addClearedSemaphore(VkSemaphore semaphore) {
-  // Recycle the old semaphore back into the semaphore manager.
-  if (semaphore != VK_NULL_HANDLE) {
-    _semaphoreManager->addClearedSemaphore(semaphore);
+    return {res, {}};
   }
 }

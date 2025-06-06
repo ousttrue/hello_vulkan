@@ -75,9 +75,9 @@ struct not_copyable {
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
 struct PhysicalDevice {
   VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
-  VkPhysicalDeviceProperties _deviceProperties = {};
-  VkPhysicalDeviceFeatures _deviceFeatures = {};
-  std::vector<VkQueueFamilyProperties> _queueFamilies;
+  VkPhysicalDeviceProperties _properties = {};
+  VkPhysicalDeviceFeatures _features = {};
+  std::vector<VkQueueFamilyProperties> _queueFamilyProperties;
   uint32_t _graphicsFamily = UINT_MAX;
   uint32_t _presentFamily = UINT_MAX;
 
@@ -85,17 +85,17 @@ struct PhysicalDevice {
 
   PhysicalDevice(VkPhysicalDevice physicalDevice)
       : _physicalDevice(physicalDevice) {
-    vkGetPhysicalDeviceProperties(_physicalDevice, &_deviceProperties);
-    vkGetPhysicalDeviceFeatures(_physicalDevice, &_deviceFeatures);
+    vkGetPhysicalDeviceProperties(_physicalDevice, &_properties);
+    vkGetPhysicalDeviceFeatures(_physicalDevice, &_features);
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
                                              nullptr);
-    _queueFamilies.resize(queueFamilyCount);
+    _queueFamilyProperties.resize(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
-                                             _queueFamilies.data());
+                                             _queueFamilyProperties.data());
 
-    for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
-      if (_queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+    for (uint32_t i = 0; i < _queueFamilyProperties.size(); ++i) {
+      if (_queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         _graphicsFamily = i;
         break;
       }
@@ -103,7 +103,7 @@ struct PhysicalDevice {
   }
 
   std::optional<uint32_t> getPresentQueueFamily(VkSurfaceKHR surface) {
-    for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
+    for (uint32_t i = 0; i < _queueFamilyProperties.size(); ++i) {
       VkBool32 presentSupport = false;
       vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
                                            &presentSupport);
@@ -146,19 +146,20 @@ struct PhysicalDevice {
   }
 
   void debugPrint(VkSurfaceKHR surface) {
-    LOGI("[%s] %s", _deviceProperties.deviceName,
-         deviceTypeStr(_deviceProperties.deviceType));
+    LOGI("[%s] %s", _properties.deviceName,
+         deviceTypeStr(_properties.deviceType));
     LOGI("  queue info: "
          "present,graphics,compute,transfer,sparse,protected,video_de,video_en,"
          "optical"
 
     );
-    for (int i = 0; i < _queueFamilies.size(); ++i) {
+    for (int i = 0; i < _queueFamilyProperties.size(); ++i) {
       VkBool32 presentSupport = false;
       vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
                                            &presentSupport);
       LOGI("  [%02d] %s%s", i, (presentSupport ? "o" : "_"),
-           queueFlagBitsStr(_queueFamilies[i].queueFlags, "o", "_").c_str());
+           queueFlagBitsStr(_queueFamilyProperties[i].queueFlags, "o", "_")
+               .c_str());
     }
   }
 
@@ -190,7 +191,7 @@ struct Instance : public not_copyable {
     }
   }
 
-  std::vector<PhysicalDevice> _devices;
+  std::vector<PhysicalDevice> _physicalDevices;
 
   std::vector<const char *> _validationLayers;
   std::vector<const char *> _instanceExtensions;
@@ -293,7 +294,7 @@ struct Instance : public not_copyable {
       std::vector<VkPhysicalDevice> devices(deviceCount);
       vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
       for (auto d : devices) {
-        _devices.push_back(PhysicalDevice(d));
+        _physicalDevices.push_back(PhysicalDevice(d));
       }
     }
 
@@ -304,21 +305,21 @@ struct Instance : public not_copyable {
   }
 
   PhysicalDevice pickPhysicakDevice(VkSurfaceKHR surface) {
-    PhysicalDevice selected;
-    for (auto &d : _devices) {
-      d.debugPrint(surface);
-      if (auto presentFamily = d.isSuitable(surface)) {
-        if (selected._physicalDevice == VK_NULL_HANDLE) {
+    PhysicalDevice picked;
+    for (auto &physicalDevice : _physicalDevices) {
+      physicalDevice.debugPrint(surface);
+      if (auto presentFamily = physicalDevice.isSuitable(surface)) {
+        if (picked._physicalDevice == VK_NULL_HANDLE) {
           // use 1st
-          selected = d;
+          picked = physicalDevice;
         }
       }
     }
-    if (_devices.size() > 0) {
+    if (_physicalDevices.size() > 0) {
       // fall back. use 1st device
-      selected = _devices[0];
+      picked = _physicalDevices[0];
     }
-    return selected;
+    return picked;
   }
 };
 

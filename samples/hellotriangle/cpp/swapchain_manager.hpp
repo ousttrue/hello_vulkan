@@ -16,7 +16,6 @@ class SwapchainManager {
   std::vector<VkImage> _swapchainImages;
   std::vector<std::shared_ptr<class Backbuffer>> _backbuffers;
   unsigned _swapchainIndex = 0;
-  std::shared_ptr<class SemaphoreManager> _semaphoreManager;
 
   SwapchainManager(VkDevice device, uint32_t presentFamily,
                    VkSwapchainKHR swapchain);
@@ -28,8 +27,7 @@ public:
          uint32_t graphicsFamily, uint32_t presentaionFamily,
          VkRenderPass renderPass, VkSwapchainKHR oldSwapchain);
   VkSwapchainKHR handle() const { return _swapchain; }
-  std::tuple<VkResult, VkSemaphore, std::shared_ptr<Backbuffer>> AcquireNext();
-  void sync(VkSemaphore acquireSemaphore);
-  void addClearedSemaphore(VkSemaphore semaphore);
+  std::tuple<VkResult, std::shared_ptr<Backbuffer>>
+  AcquireNext(VkSemaphore acquireSemaphore);
   VkExtent2D size() const { return _size; }
 };

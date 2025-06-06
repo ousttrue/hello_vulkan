@@ -7,7 +7,6 @@ add_library(
   swapchain_manager.cpp
   backbuffer.cpp
   fence_manager.cpp
-  semaphore_manager.cpp
   command_buffer_manager.cpp
   pipeline.cpp
   #

@@ -5,6 +5,37 @@
 #include <assert.h>
 #include <vko.h>
 
+class SemaphoreManager {
+  VkDevice _device = VK_NULL_HANDLE;
+  std::vector<VkSemaphore> _recycledSemaphores;
+public:
+  SemaphoreManager(VkDevice device) : _device(device) {}
+  ~SemaphoreManager() {
+    for (auto &semaphore : _recycledSemaphores) {
+      vkDestroySemaphore(_device, semaphore, nullptr);
+    }
+  }
+  VkSemaphore getClearedSemaphore() {
+    if (_recycledSemaphores.empty()) {
+      VkSemaphoreCreateInfo info = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+      VkSemaphore semaphore;
+      if (vkCreateSemaphore(_device, &info, nullptr, &semaphore) !=
+          VK_SUCCESS) {
+        LOGE("vkCreateSemaphore");
+        abort();
+      }
+      return semaphore;
+    } else {
+      auto semaphore = _recycledSemaphores.back();
+      _recycledSemaphores.pop_back();
+      return semaphore;
+    }
+  }
+  void addClearedSemaphore(VkSemaphore semaphore) {
+    _recycledSemaphores.push_back(semaphore);
+  }
+};
+
 auto APP_NAME = "hellotriangle";
 
 static double getCurrentTime() {
@@ -58,6 +89,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
   unsigned _frameCount = 0;
   auto _startTime = getCurrentTime();
 
+  auto semaphoreManager = std::make_shared<SemaphoreManager>(_device);
+
   for (;;) {
     while (true) {
       if (!userdata->_active) {
@@ -88,18 +121,33 @@ static bool main_loop(android_app *state, UserData *userdata) {
       assert(_swapchain);
     }
 
-    auto [res, acquireSemaphore, backbuffer] = _swapchain->AcquireNext();
+    // void SwapchainManager::sync(VkSemaphore acquireSemaphore) {
+    //   vkQueueWaitIdle(_presentationQueue);
+    //   _semaphoreManager->addClearedSemaphore(acquireSemaphore);
+    // }
+
+    // void SwapchainManager::addClearedSemaphore(VkSemaphore semaphore) {
+    //   // Recycle the old semaphore back into the semaphore manager.
+    //   if (semaphore != VK_NULL_HANDLE) {
+    //     _semaphoreManager->addClearedSemaphore(semaphore);
+    //   }
+    // }
+
+    auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
+    auto [res, backbuffer] = _swapchain->AcquireNext(acquireSemaphore);
     if (res == VK_SUCCESS) {
       // through next
     } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
       LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-      _swapchain->sync(acquireSemaphore);
+      vkQueueWaitIdle(_device._presentQueue);
+      semaphoreManager->addClearedSemaphore(acquireSemaphore);
       _swapchain = {};
       // return true;
     } else {
       // error ?
       LOGE("Unrecoverable swapchain error.\n");
-      _swapchain->sync(acquireSemaphore);
+      vkQueueWaitIdle(_device._presentQueue);
+      semaphoreManager->addClearedSemaphore(acquireSemaphore);
       return true;
     }
 
@@ -110,7 +158,9 @@ static bool main_loop(android_app *state, UserData *userdata) {
     // for this semaphore first.
     // Also, delete the older semaphore.
     auto [oldSemaphore, cmd] = backbuffer->beginFrame(acquireSemaphore);
-    _swapchain->addClearedSemaphore(oldSemaphore);
+    if (oldSemaphore != VK_NULL_HANDLE) {
+      semaphoreManager->addClearedSemaphore(oldSemaphore);
+    }
     _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
     res = backbuffer->endFrame(_device._graphicsQueue, cmd,
                                _device._presentQueue, _swapchain->handle());
