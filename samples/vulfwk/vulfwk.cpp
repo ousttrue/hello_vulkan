@@ -27,21 +27,20 @@ bool VulkanFramework::initializeInstance(
   return true;
 }
 
-
 bool VulkanFramework::initializeDevice(
     const std::vector<const char *> &layerNames,
     const std::vector<const char *> &deviceExtensionNames,
     VkSurfaceKHR surface) {
 
   _picked = Instance.pickPhysicakDevice(surface);
-  Surface =
-      std::make_shared<vko::Surface>(Instance, surface, _picked.physicalDevice);
+  Surface = std::make_shared<vko::Surface>(Instance, surface,
+                                           _picked._physicalDevice);
 
   Device._validationLayers = Instance._validationLayers;
-  VK_CHECK(Device.create(_picked.physicalDevice, _picked.graphicsFamily,
-                         _picked.presentFamily));
+  VK_CHECK(Device.create(_picked._physicalDevice, _picked._graphicsFamily,
+                         _picked._presentFamily));
 
-  Pipeline = PipelineImpl::create(_picked.physicalDevice, surface, Device,
+  Pipeline = PipelineImpl::create(_picked._physicalDevice, surface, Device,
                                   Surface->chooseSwapSurfaceFormat().format,
                                   AssetManager);
   if (!Pipeline) {
@@ -49,7 +48,7 @@ bool VulkanFramework::initializeDevice(
   }
 
   SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
-  vkGetDeviceQueue(Device, _picked.graphicsFamily, 0, &_graphicsQueue);
+  vkGetDeviceQueue(Device, _picked._graphicsFamily, 0, &_graphicsQueue);
 
   return true;
 }
@@ -60,10 +59,10 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
     vkDeviceWaitIdle(Device);
 
     Swapchain = std::make_shared<vko::Swapchain>(Device);
-    Swapchain->create(_picked.physicalDevice, Surface->_surface,
+    Swapchain->create(_picked._physicalDevice, Surface->_surface,
                       Surface->chooseSwapSurfaceFormat(),
-                      Surface->chooseSwapPresentMode(), _picked.graphicsFamily,
-                      _picked.presentFamily);
+                      Surface->chooseSwapPresentMode(), _picked._graphicsFamily,
+                      _picked._presentFamily);
 
     _images.clear();
     _images.resize(Swapchain->_images.size());

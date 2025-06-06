@@ -1,5 +1,5 @@
 #include "device_manager.hpp"
-#include "logger.hpp"
+#include <vko.h>
 #include "extensions.hpp"
 
 ///

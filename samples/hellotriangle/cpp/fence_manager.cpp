@@ -1,5 +1,5 @@
 #include "fence_manager.hpp"
-#include "logger.hpp"
+#include <vko.h>
 
 FenceManager::FenceManager(VkDevice vkDevice) : _device(vkDevice), _count(0) {}
 

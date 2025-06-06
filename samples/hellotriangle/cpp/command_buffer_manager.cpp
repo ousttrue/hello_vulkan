@@ -1,5 +1,5 @@
 #include "command_buffer_manager.hpp"
-#include "logger.hpp"
+#include <vko.h>
 #include <vulkan/vulkan_core.h>
 
 CommandBufferManager::CommandBufferManager(VkDevice vkDevice,

@@ -1,8 +1,9 @@
 #include "dispatcher.h"
-#include "logger.hpp"
 #include "device_manager.hpp"
 #include "pipeline.hpp"
 #include "swapchain_manager.hpp"
+#include <assert.h>
+#include <vko.h>
 #include <vulkan/vulkan_core.h>
 
 static double getCurrentTime() {
@@ -20,40 +21,52 @@ void Dispatcher::onPause() { this->_active = false; }
 
 void Dispatcher::onInitWindow(ANativeWindow *window,
                               AAssetManager *assetManager) {
-  std::vector<const char *> layers;
+  _instance._appInfo.pApplicationName = "Mali SDK";
+  _instance._appInfo.pEngineName = "Mali SDK";
+  _instance._instanceExtensions = {"VK_KHR_surface", "VK_KHR_android_surface"};
 #ifdef NDEBUG
 #else
-  layers.push_back("VK_LAYER_KHRONOS_validation");
+  _instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+  _instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  _instance._instanceExtensions.push_back("VK_EXT_debug_report");
 #endif
+  VK_CHECK(_instance.create());
 
-  _device = DeviceManager::create("Mali SDK", "Mali SDK", layers);
-  if (!_device) {
-    return;
-  }
-  if (!_device->createSurfaceFromAndroid(window)) {
-    return;
-  }
-  auto gpu = _device->selectGpu();
-  if (!gpu) {
-    return;
-  }
-  if (!_device->createLogicalDevice(layers)) {
+  VkAndroidSurfaceCreateInfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+      .flags = 0,
+      .window = window,
+  };
+  VkSurfaceKHR surface;
+  if (vkCreateAndroidSurfaceKHR(_instance, &info, nullptr, &surface) !=
+      VK_SUCCESS) {
+    LOGE("failed: vkCreateAndroidSurfaceKHR");
     return;
   }
 
-  _pipeline =
-      Pipeline::create(_device->Device, _device->getSurfaceFormat().format,
-                       assetManager, _device->Selected.MemoryProperties);
+  _picked = _instance.pickPhysicakDevice(surface);
+  assert(_picked._physicalDevice);
+
+  _surface = std::make_shared<vko::Surface>(_instance, surface,
+                                            _picked._physicalDevice);
+
+  _device._validationLayers = _instance._validationLayers;
+  VK_CHECK(_device.create(_picked._physicalDevice, _picked._graphicsFamily,
+                          _picked._presentFamily));
+
+  _pipeline = Pipeline::create(_picked._physicalDevice, _device,
+                               _surface->chooseSwapSurfaceFormat().format,
+                               assetManager);
 
   _startTime = getCurrentTime();
 }
 
 void Dispatcher::onTermWindow() {
-  vkDeviceWaitIdle(this->_device->Device);
+  vkDeviceWaitIdle(this->_device);
 
   this->_swapchain = {};
   this->_pipeline = {};
-  this->_device = {};
+  // this->_device = {};
 }
 
 // exit mainloop if return false
@@ -68,8 +81,8 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
 
   if (!_swapchain) {
     _swapchain = SwapchainManager::create(
-        _device->Selected.Gpu, _device->Surface, _device->Device,
-        _device->Selected.SelectedQueueFamilyIndex, _device->Queue,
+        _picked._physicalDevice, _surface->_surface, _device,
+        _picked._graphicsFamily, _picked._presentFamily,
         _pipeline->renderPass(), nullptr);
     if (!_swapchain) {
       // error ?
@@ -83,13 +96,13 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
     // through next
   } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
     LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-    _swapchain->sync(_device->Queue, acquireSemaphore);
+    _swapchain->sync(acquireSemaphore);
     _swapchain = {};
     return true;
   } else {
     // error ?
     LOGE("Unrecoverable swapchain error.\n");
-    _swapchain->sync(_device->Queue, acquireSemaphore);
+    _swapchain->sync(acquireSemaphore);
     return false;
   }
 
@@ -102,7 +115,7 @@ bool Dispatcher::onFrame(AAssetManager *assetManager) {
   auto [oldSemaphore, cmd] = backbuffer->beginFrame(acquireSemaphore);
   _swapchain->addClearedSemaphore(oldSemaphore);
   _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
-  res = backbuffer->endFrame(_device->Queue, cmd, _device->Queue,
+  res = backbuffer->endFrame(_device._graphicsQueue, cmd, _device._presentQueue,
                              _swapchain->handle());
 
   _frameCount++;

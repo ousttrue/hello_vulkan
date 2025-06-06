@@ -1,5 +1,5 @@
 #include "semaphore_manager.hpp"
-#include "logger.hpp"
+#include <vko.h>
 #include <vulkan/vulkan_core.h>
 
 SemaphoreManager::SemaphoreManager(VkDevice vkDevice) : device(vkDevice) {}

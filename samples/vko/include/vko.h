@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <climits>
 #include <list>
 #include <memory>
 #include <optional>
@@ -72,16 +73,20 @@ struct not_copyable {
 };
 
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
-struct PhysicalDevice : public not_copyable {
-  VkPhysicalDevice _physicaldevice;
-  VkPhysicalDeviceProperties _deviceProperties;
-  VkPhysicalDeviceFeatures _deviceFeatures;
+struct PhysicalDevice {
+  VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
+  VkPhysicalDeviceProperties _deviceProperties = {};
+  VkPhysicalDeviceFeatures _deviceFeatures = {};
   std::vector<VkQueueFamilyProperties> _queueFamilies;
   uint32_t _graphicsFamily = UINT_MAX;
+  uint32_t _presentFamily = UINT_MAX;
+
+  PhysicalDevice() {}
+
   PhysicalDevice(VkPhysicalDevice physicalDevice)
-      : _physicaldevice(physicalDevice) {
-    vkGetPhysicalDeviceProperties(_physicaldevice, &_deviceProperties);
-    vkGetPhysicalDeviceFeatures(_physicaldevice, &_deviceFeatures);
+      : _physicalDevice(physicalDevice) {
+    vkGetPhysicalDeviceProperties(_physicalDevice, &_deviceProperties);
+    vkGetPhysicalDeviceFeatures(_physicalDevice, &_deviceFeatures);
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
                                              nullptr);
@@ -96,39 +101,77 @@ struct PhysicalDevice : public not_copyable {
       }
     }
   }
-  PhysicalDevice(PhysicalDevice &&rhs) {
-    this->_physicaldevice = rhs._physicaldevice;
-    rhs._physicaldevice = {};
-    this->_deviceProperties = rhs._deviceProperties;
-    rhs._deviceProperties = {};
-    this->_deviceFeatures = rhs._deviceFeatures;
-    rhs._deviceFeatures = {};
-    this->_queueFamilies = rhs._queueFamilies;
-    rhs._queueFamilies = {};
-    this->_graphicsFamily = rhs._graphicsFamily;
-    rhs._graphicsFamily = UINT_MAX;
-  }
-  PhysicalDevice &operator=(PhysicalDevice &&rhs) {
-    this->_physicaldevice = std::move(rhs._physicaldevice);
-    rhs._physicaldevice = {};
-    this->_deviceProperties = rhs._deviceProperties;
-    rhs._deviceProperties = {};
-    this->_deviceFeatures = rhs._deviceFeatures;
-    rhs._deviceFeatures = {};
-    this->_queueFamilies = rhs._queueFamilies;
-    rhs._queueFamilies = {};
-    this->_graphicsFamily = rhs._graphicsFamily;
-    rhs._graphicsFamily = UINT_MAX;
-    return *this;
-  }
+
   std::optional<uint32_t> getPresentQueueFamily(VkSurfaceKHR surface) {
     for (uint32_t i = 0; i < _queueFamilies.size(); ++i) {
       VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(_physicaldevice, i, surface,
+      vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
                                            &presentSupport);
       if (presentSupport) {
         return i;
       }
+    }
+    return {};
+  }
+
+  static const char *deviceTypeStr(VkPhysicalDeviceType t) {
+    switch (t) {
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+      return "OTHER";
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      return "INTEGRATED_GPU";
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      return "DISCRETE_GPU";
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+      return "VIRTUAL_GPU";
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+      return "CPU";
+    default:
+      return "unknown";
+    }
+  }
+
+  static std::string queueFlagBitsStr(VkQueueFlags f, const char *enable,
+                                      const char *disable) {
+    std::string str;
+    str += f & VK_QUEUE_GRAPHICS_BIT ? enable : disable;
+    str += f & VK_QUEUE_COMPUTE_BIT ? enable : disable;
+    str += f & VK_QUEUE_TRANSFER_BIT ? enable : disable;
+    str += f & VK_QUEUE_SPARSE_BINDING_BIT ? enable : disable;
+    str += f & VK_QUEUE_PROTECTED_BIT ? enable : disable;
+    str += f & VK_QUEUE_VIDEO_DECODE_BIT_KHR ? enable : disable;
+    str += f & VK_QUEUE_VIDEO_ENCODE_BIT_KHR ? enable : disable;
+    str += f & VK_QUEUE_OPTICAL_FLOW_BIT_NV ? enable : disable;
+    return str;
+  }
+
+  void debugPrint(VkSurfaceKHR surface) {
+    LOGI("[%s] %s", _deviceProperties.deviceName,
+         deviceTypeStr(_deviceProperties.deviceType));
+    LOGI("  queue info: "
+         "present,graphics,compute,transfer,sparse,protected,video_de,video_en,"
+         "optical"
+
+    );
+    for (int i = 0; i < _queueFamilies.size(); ++i) {
+      VkBool32 presentSupport = false;
+      vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
+                                           &presentSupport);
+      LOGI("  [%02d] %s%s", i, (presentSupport ? "o" : "_"),
+           queueFlagBitsStr(_queueFamilies[i].queueFlags, "o", "_").c_str());
+    }
+  }
+
+  std::optional<uint32_t> isSuitable(VkSurfaceKHR surface) {
+    auto presentFamily = getPresentQueueFamily(surface);
+    if (presentFamily) {
+      _presentFamily = *presentFamily;
+    }
+    if (/*_deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+           &&*/
+        /*_deviceFeatures.geometryShader &&*/ _graphicsFamily != UINT_MAX &&
+        _presentFamily != UINT_MAX) {
+      return presentFamily;
     }
     return {};
   }
@@ -260,44 +303,29 @@ struct Instance : public not_copyable {
     return result;
   }
 
-  struct SelectedPhysicalDevice {
-    VkPhysicalDevice physicalDevice;
-    uint32_t graphicsFamily;
-    uint32_t presentFamily;
-  };
-
-  SelectedPhysicalDevice pickPhysicakDevice(VkSurfaceKHR surface) {
-    SelectedPhysicalDevice ret{
-        .physicalDevice = VK_NULL_HANDLE,
-        .graphicsFamily = UINT_MAX,
-        .presentFamily = UINT_MAX,
-    };
+  PhysicalDevice pickPhysicakDevice(VkSurfaceKHR surface) {
+    PhysicalDevice selected;
     for (auto &d : _devices) {
-      auto _presentFamily = d.getPresentQueueFamily(surface);
-      if (d._deviceProperties.deviceType ==
-              VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-          d._deviceFeatures.geometryShader && d._graphicsFamily != UINT_MAX &&
-          _presentFamily) {
-        auto selected = ret.physicalDevice == VK_NULL_HANDLE;
-        if (selected) {
-          ret.physicalDevice = d._physicaldevice;
-          ret.graphicsFamily = d._graphicsFamily;
-          ret.presentFamily = _presentFamily.value();
+      d.debugPrint(surface);
+      if (auto presentFamily = d.isSuitable(surface)) {
+        if (selected._physicalDevice == VK_NULL_HANDLE) {
+          // use 1st
+          selected = d;
         }
-        LOGI("physical device: %s: graphics => %d, present => %d, %s\n",
-             d._deviceProperties.deviceName, d._graphicsFamily,
-             _presentFamily.value(), (selected ? "select" : ""));
-      } else {
-        LOGE("physical device: %s: not supported\n",
-             d._deviceProperties.deviceName);
       }
     }
-    return ret;
+    if (_devices.size() > 0) {
+      // fall back. use 1st device
+      selected = _devices[0];
+    }
+    return selected;
   }
 };
 
 struct Device : public not_copyable {
   VkDevice _device = VK_NULL_HANDLE;
+  VkQueue _graphicsQueue = VK_NULL_HANDLE;
+  VkQueue _presentQueue = VK_NULL_HANDLE;
   operator VkDevice() { return _device; }
   ~Device() {
     if (_device != VK_NULL_HANDLE) {
@@ -352,7 +380,16 @@ struct Device : public not_copyable {
         static_cast<uint32_t>(_queueCreateInfos.size());
     _createInfo.pQueueCreateInfos = _queueCreateInfos.data();
 
-    return vkCreateDevice(physicalDevice, &_createInfo, nullptr, &_device);
+    auto result =
+        vkCreateDevice(physicalDevice, &_createInfo, nullptr, &_device);
+    if (result != VK_SUCCESS) {
+      return result;
+    }
+
+    vkGetDeviceQueue(_device, graphics, 0, &_graphicsQueue);
+    vkGetDeviceQueue(_device, present, 0, &_presentQueue);
+
+    return VK_SUCCESS;
   }
 };
 

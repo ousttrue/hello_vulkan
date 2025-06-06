@@ -18,18 +18,18 @@ class SwapchainManager {
   unsigned _swapchainIndex = 0;
   std::shared_ptr<class SemaphoreManager> _semaphoreManager;
 
-  SwapchainManager(VkDevice device, VkQueue presentaionQueue,
+  SwapchainManager(VkDevice device, uint32_t presentFamily,
                    VkSwapchainKHR swapchain);
 
 public:
   ~SwapchainManager();
   static std::shared_ptr<SwapchainManager>
   create(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkDevice device,
-         uint32_t graphicsQueueIndex, VkQueue presentaionQueue,
+         uint32_t graphicsFamily, uint32_t presentaionFamily,
          VkRenderPass renderPass, VkSwapchainKHR oldSwapchain);
   VkSwapchainKHR handle() const { return _swapchain; }
   std::tuple<VkResult, VkSemaphore, std::shared_ptr<Backbuffer>> AcquireNext();
-  void sync(VkQueue queue, VkSemaphore acquireSemaphore);
+  void sync(VkSemaphore acquireSemaphore);
   void addClearedSemaphore(VkSemaphore semaphore);
   VkExtent2D size() const { return _size; }
 };

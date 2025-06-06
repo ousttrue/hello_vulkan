@@ -8,7 +8,7 @@ class PipelineImpl;
 class VulkanFramework {
 public:
   vko::Instance Instance;
-  vko::Instance::SelectedPhysicalDevice _picked;
+  vko::PhysicalDevice _picked;
   vko::Device Device;
   std::shared_ptr<vko::Surface> Surface;
   std::shared_ptr<vko::Swapchain> Swapchain;

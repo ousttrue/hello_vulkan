@@ -1,13 +1,17 @@
 #pragma once
 #include <android_native_app_glue.h>
-#include <vulkan/vulkan_core.h>
-
 #include <memory>
+#include <vko.h>
 
 struct Dispatcher {
   bool _active = false;
 
-  std::shared_ptr<class DeviceManager> _device;
+  vko::Instance _instance;
+  vko::PhysicalDevice _picked;
+  std::shared_ptr<vko::Surface> _surface;
+  vko::Device _device;
+  VkQueue _grahicsQueue;
+
   std::shared_ptr<class Pipeline> _pipeline;
   std::shared_ptr<class SwapchainManager> _swapchain;
 

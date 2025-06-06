@@ -1,13 +1,13 @@
 #include "swapchain_manager.hpp"
-#include "logger.hpp"
 #include "device_manager.hpp"
+#include <vko.h>
 #include "semaphore_manager.hpp"
 #include <vulkan/vulkan_core.h>
 
-SwapchainManager::SwapchainManager(VkDevice device, VkQueue presentaionQueue,
+SwapchainManager::SwapchainManager(VkDevice device, uint32_t presentaionFamily,
                                    VkSwapchainKHR swapchain)
-    : _device(device), _presentationQueue(presentaionQueue),
-      _swapchain(swapchain) {
+    : _device(device), _swapchain(swapchain) {
+  vkGetDeviceQueue(device, presentaionFamily, 0, &_presentationQueue);
   _semaphoreManager = std::make_shared<SemaphoreManager>(_device);
 }
 
@@ -17,8 +17,8 @@ SwapchainManager::~SwapchainManager() {
 
 std::shared_ptr<SwapchainManager>
 SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
-                         VkDevice device, uint32_t graphicsQueueIndex,
-                         VkQueue presentaionQueue, VkRenderPass renderPass,
+                         VkDevice device, uint32_t graphicsFamily,
+                         uint32_t presentaionFamily, VkRenderPass renderPass,
                          VkSwapchainKHR oldSwapchain) {
   VkSurfaceFormatKHR format = DeviceManager::getSurfaceFormat(gpu, surface);
   if (format.format == VK_FORMAT_UNDEFINED) {
@@ -102,7 +102,7 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   }
 
   auto ptr = std::shared_ptr<SwapchainManager>(
-      new SwapchainManager(device, presentaionQueue, swapchain));
+      new SwapchainManager(device, presentaionFamily, swapchain));
   ptr->_size = swapchainSize;
   ptr->_format = format.format;
 
@@ -122,7 +122,7 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
   // For all backbuffers in the swapchain ...
   for (uint32_t i = 0; i < ptr->_swapchainImages.size(); ++i) {
     auto image = ptr->_swapchainImages[i];
-    auto p = new Backbuffer(i, device, graphicsQueueIndex, image, format.format,
+    auto p = new Backbuffer(i, device, graphicsFamily, image, format.format,
                             swapchainSize, renderPass);
     auto backbuffer = std::shared_ptr<Backbuffer>(p);
     ptr->_backbuffers.push_back(backbuffer);
@@ -146,8 +146,8 @@ SwapchainManager::AcquireNext() {
   }
 }
 
-void SwapchainManager::sync(VkQueue queue, VkSemaphore acquireSemaphore) {
-  vkQueueWaitIdle(queue);
+void SwapchainManager::sync(VkSemaphore acquireSemaphore) {
+  vkQueueWaitIdle(_presentationQueue);
   _semaphoreManager->addClearedSemaphore(acquireSemaphore);
 }
 

@@ -1,5 +1,5 @@
 #include "pipeline.hpp"
-#include "logger.hpp"
+#include <vko.h>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -179,9 +179,9 @@ Pipeline::~Pipeline() {
   vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
-std::shared_ptr<Pipeline>
-Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
-                 const VkPhysicalDeviceMemoryProperties &props) {
+std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
+                                           VkDevice device, VkFormat format,
+                                           AAssetManager *assetManager) {
   //
   // RenderPass
   //
@@ -421,6 +421,8 @@ Pipeline::create(VkDevice device, VkFormat format, AAssetManager *assetManager,
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline(
       device, renderPass, pipelineLayout, pipeline, pipelineCache));
 
+  VkPhysicalDeviceMemoryProperties props;
+  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &props);
   ptr->initVertexBuffer(props);
 
   return ptr;

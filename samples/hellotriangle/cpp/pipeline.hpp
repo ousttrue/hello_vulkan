@@ -20,9 +20,9 @@ class Pipeline {
 
 public:
   ~Pipeline();
-  static std::shared_ptr<Pipeline>
-  create(VkDevice device, VkFormat format, AAssetManager *assetManager,
-         const VkPhysicalDeviceMemoryProperties &props);
+  static std::shared_ptr<Pipeline> create(VkPhysicalDevice physicalDevice,
+                                          VkDevice device, VkFormat format,
+                                          AAssetManager *assetManager);
   VkRenderPass renderPass() const { return _renderPass; }
   void render(VkCommandBuffer cmd, VkFramebuffer framebuffer, VkExtent2D size);
 
