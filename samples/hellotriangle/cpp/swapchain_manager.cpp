@@ -117,28 +117,18 @@ SwapchainManager::create(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     abort();
   }
 
-  // For all backbuffers in the swapchain ...
-  for (uint32_t i = 0; i < ptr->_swapchainImages.size(); ++i) {
-    auto image = ptr->_swapchainImages[i];
-    auto p = new Backbuffer(i, device, graphicsFamily, image, format.format,
-                            swapchainSize, renderPass);
-    auto backbuffer = std::shared_ptr<Backbuffer>(p);
-    ptr->_backbuffers.push_back(backbuffer);
-  }
-
   return ptr;
 }
 
-std::tuple<VkResult, std::shared_ptr<Backbuffer>>
+std::tuple<VkResult, uint32_t, VkImage>
 SwapchainManager::AcquireNext(VkSemaphore acquireSemaphore) {
   uint32_t index;
   VkResult res =
       vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX, acquireSemaphore,
                             VK_NULL_HANDLE, &index);
   if (res == VK_SUCCESS) {
-    _swapchainIndex = index;
-    return {res, _backbuffers[_swapchainIndex]};
+    return {res, index, _swapchainImages[index]};
   } else {
-    return {res, {}};
+    return {res, {}, {}};
   }
 }

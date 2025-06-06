@@ -1,6 +1,4 @@
 #pragma once
-#include "backbuffer.hpp"
-
 #include <vulkan/vulkan.h>
 
 #include <vector>
@@ -14,8 +12,6 @@ class SwapchainManager {
   VkFormat _format;
 
   std::vector<VkImage> _swapchainImages;
-  std::vector<std::shared_ptr<class Backbuffer>> _backbuffers;
-  unsigned _swapchainIndex = 0;
 
   SwapchainManager(VkDevice device, uint32_t presentFamily,
                    VkSwapchainKHR swapchain);
@@ -27,7 +23,8 @@ public:
          uint32_t graphicsFamily, uint32_t presentaionFamily,
          VkRenderPass renderPass, VkSwapchainKHR oldSwapchain);
   VkSwapchainKHR handle() const { return _swapchain; }
-  std::tuple<VkResult, std::shared_ptr<Backbuffer>>
+  uint32_t imageCount() const { return _swapchainImages.size(); }
+  std::tuple<VkResult, uint32_t, VkImage>
   AcquireNext(VkSemaphore acquireSemaphore);
   VkExtent2D size() const { return _size; }
 };

@@ -1,13 +1,16 @@
 #include "userdata.h"
 
+#include "backbuffer.hpp"
 #include "pipeline.hpp"
 #include "swapchain_manager.hpp"
+#include <algorithm>
 #include <assert.h>
 #include <vko.h>
 
 class SemaphoreManager {
   VkDevice _device = VK_NULL_HANDLE;
   std::vector<VkSemaphore> _recycledSemaphores;
+
 public:
   SemaphoreManager(VkDevice device) : _device(device) {}
   ~SemaphoreManager() {
@@ -91,6 +94,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
 
   auto semaphoreManager = std::make_shared<SemaphoreManager>(_device);
 
+  std::vector<std::shared_ptr<Backbuffer>> backbuffers;
+
   for (;;) {
     while (true) {
       if (!userdata->_active) {
@@ -119,22 +124,12 @@ static bool main_loop(android_app *state, UserData *userdata) {
           _picked._graphicsFamily, _picked._presentFamily,
           _pipeline->renderPass(), nullptr);
       assert(_swapchain);
+      backbuffers.resize(_swapchain->imageCount());
+      std::fill(backbuffers.begin(), backbuffers.end(), nullptr);
     }
 
-    // void SwapchainManager::sync(VkSemaphore acquireSemaphore) {
-    //   vkQueueWaitIdle(_presentationQueue);
-    //   _semaphoreManager->addClearedSemaphore(acquireSemaphore);
-    // }
-
-    // void SwapchainManager::addClearedSemaphore(VkSemaphore semaphore) {
-    //   // Recycle the old semaphore back into the semaphore manager.
-    //   if (semaphore != VK_NULL_HANDLE) {
-    //     _semaphoreManager->addClearedSemaphore(semaphore);
-    //   }
-    // }
-
     auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
-    auto [res, backbuffer] = _swapchain->AcquireNext(acquireSemaphore);
+    auto [res, imageIndex, image] = _swapchain->AcquireNext(acquireSemaphore);
     if (res == VK_SUCCESS) {
       // through next
     } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -149,6 +144,15 @@ static bool main_loop(android_app *state, UserData *userdata) {
       vkQueueWaitIdle(_device._presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
       return true;
+    }
+
+    auto backbuffer = backbuffers[imageIndex];
+    if (!backbuffer) {
+      auto p = new Backbuffer(imageIndex, _device, _picked._graphicsFamily,
+                              image, _surface->chooseSwapSurfaceFormat().format,
+                              _swapchain->size(), _pipeline->renderPass());
+      backbuffer = std::shared_ptr<Backbuffer>(p);
+      backbuffers.push_back(backbuffer);
     }
 
     // Signal the underlying context that we're using this backbuffer now.
