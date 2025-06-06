@@ -3,7 +3,6 @@ add_library(
   ${TARGET} SHARED
   main.cpp
   extensions.cpp
-  dispatcher.cpp
   device_manager.cpp
   swapchain_manager.cpp
   backbuffer.cpp
