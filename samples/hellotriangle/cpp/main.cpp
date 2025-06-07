@@ -241,11 +241,11 @@ static bool main_loop(android_app *state, UserData *userdata) {
 
     auto backbuffer = backbuffers[imageIndex];
     if (!backbuffer) {
-      auto p = new Backbuffer(imageIndex, _device, image,
-                              _surface->chooseSwapSurfaceFormat().format,
-                              _swapchain->size(), _pipeline->renderPass());
-      backbuffer = std::shared_ptr<Backbuffer>(p);
-      backbuffers.push_back(backbuffer);
+      backbuffer = std::make_shared<Backbuffer>(
+          imageIndex, _device, image,
+          _surface->chooseSwapSurfaceFormat().format, _swapchain->size(),
+          _pipeline->renderPass());
+      backbuffers[imageIndex] = backbuffer;
     }
     auto flight = flights[imageIndex];
 
