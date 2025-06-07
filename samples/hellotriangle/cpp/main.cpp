@@ -137,47 +137,46 @@ static double getCurrentTime() {
 
 static bool main_loop(android_app *state, UserData *userdata) {
   LOGI("## main_loop");
-  vko::Instance _instance;
-  _instance._appInfo.pApplicationName = "Mali SDK";
-  _instance._appInfo.pEngineName = "Mali SDK";
-  _instance._instanceExtensions = {"VK_KHR_surface", "VK_KHR_android_surface"};
+  vko::Instance instance;
+  instance._appInfo.pApplicationName = "Mali SDK";
+  instance._appInfo.pEngineName = "Mali SDK";
+  instance._instanceExtensions = {"VK_KHR_surface", "VK_KHR_android_surface"};
 #ifdef NDEBUG
 #else
-  _instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-  _instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-  _instance._instanceExtensions.push_back("VK_EXT_debug_report");
+  instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+  instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  instance._instanceExtensions.push_back("VK_EXT_debug_report");
 #endif
-  VK_CHECK(_instance.create());
+  VK_CHECK(instance.create());
 
   VkAndroidSurfaceCreateInfoKHR info = {
       .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
       .flags = 0,
       .window = state->window,
   };
-  VkSurfaceKHR surface;
-  VK_CHECK(vkCreateAndroidSurfaceKHR(_instance, &info, nullptr, &surface));
+  VkSurfaceKHR _surface;
+  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
 
-  vko::PhysicalDevice _picked = _instance.pickPhysicakDevice(surface);
-  assert(_picked._physicalDevice);
+  vko::PhysicalDevice picked = instance.pickPhysicakDevice(_surface);
+  assert(picked._physicalDevice);
 
-  std::shared_ptr<vko::Surface> _surface = std::make_shared<vko::Surface>(
-      _instance, surface, _picked._physicalDevice);
+  std::shared_ptr<vko::Surface> surface = std::make_shared<vko::Surface>(
+      instance, _surface, picked._physicalDevice);
 
-  vko::Device _device;
-  _device._validationLayers = _instance._validationLayers;
-  VK_CHECK(_device.create(_picked._physicalDevice, _picked._graphicsFamily,
-                          _picked._presentFamily));
+  vko::Device device;
+  device._validationLayers = instance._validationLayers;
+  VK_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
+                         picked._presentFamily));
 
-  std::shared_ptr<class Pipeline> _pipeline =
-      Pipeline::create(_picked._physicalDevice, _device,
-                       _surface->chooseSwapSurfaceFormat().format,
-                       state->activity->assetManager);
+  std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
+      picked._physicalDevice, device, surface->chooseSwapSurfaceFormat().format,
+      state->activity->assetManager);
 
-  std::shared_ptr<class SwapchainManager> _swapchain;
-  unsigned _frameCount = 0;
-  auto _startTime = getCurrentTime();
+  std::shared_ptr<class SwapchainManager> swapchain;
+  unsigned frameCount = 0;
+  auto startTime = getCurrentTime();
 
-  auto semaphoreManager = std::make_shared<SemaphoreManager>(_device);
+  auto semaphoreManager = std::make_shared<SemaphoreManager>(device);
 
   std::vector<std::shared_ptr<Backbuffer>> backbuffers;
   std::vector<std::shared_ptr<FlightManager>> flights;
@@ -185,7 +184,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
   for (;;) {
     while (true) {
       if (!userdata->_active) {
-        vkDeviceWaitIdle(_device);
+        vkDeviceWaitIdle(device);
         return false;
       }
 
@@ -204,37 +203,37 @@ static bool main_loop(android_app *state, UserData *userdata) {
       }
     }
 
-    if (!_swapchain) {
-      _swapchain = SwapchainManager::create(
-          _picked._physicalDevice, _surface->_surface, _device,
-          _picked._graphicsFamily, _picked._presentFamily,
-          _pipeline->renderPass(), nullptr);
-      assert(_swapchain);
+    if (!swapchain) {
+      swapchain = SwapchainManager::create(
+          picked._physicalDevice, surface->_surface, device,
+          picked._graphicsFamily, picked._presentFamily,
+          pipeline->renderPass(), nullptr);
+      assert(swapchain);
 
-      auto imageCount = _swapchain->imageCount();
+      auto imageCount = swapchain->imageCount();
       backbuffers.resize(imageCount);
       flights.resize(imageCount);
       for (int i = 0; i < imageCount; ++i) {
         backbuffers[i] = nullptr;
         flights[i] = std::make_shared<FlightManager>(
-            _device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, _picked._graphicsFamily);
+            device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, picked._graphicsFamily);
       }
     }
 
     auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
-    auto [res, imageIndex, image] = _swapchain->AcquireNext(acquireSemaphore);
+    auto [res, imageIndex, image] = swapchain->AcquireNext(acquireSemaphore);
     if (res == VK_SUCCESS) {
       // through next
     } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
       LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-      vkQueueWaitIdle(_device._presentQueue);
+      vkQueueWaitIdle(device._presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
-      _swapchain = {};
+      swapchain = {};
       // return true;
     } else {
       // error ?
       LOGE("Unrecoverable swapchain error.\n");
-      vkQueueWaitIdle(_device._presentQueue);
+      vkQueueWaitIdle(device._presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
       return true;
     }
@@ -242,9 +241,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
     auto backbuffer = backbuffers[imageIndex];
     if (!backbuffer) {
       backbuffer = std::make_shared<Backbuffer>(
-          imageIndex, _device, image,
-          _surface->chooseSwapSurfaceFormat().format, _swapchain->size(),
-          _pipeline->renderPass());
+          imageIndex, device, image, surface->chooseSwapSurfaceFormat().format,
+          swapchain->size(), pipeline->renderPass());
       backbuffers[imageIndex] = backbuffer;
     }
     auto flight = flights[imageIndex];
@@ -271,7 +269,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
     if (oldSemaphore != VK_NULL_HANDLE) {
       semaphoreManager->addClearedSemaphore(oldSemaphore);
     }
-    _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
+    pipeline->render(cmd, backbuffer->framebuffer(), swapchain->size());
 
     const VkPipelineStageFlags waitStage =
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -286,29 +284,29 @@ static bool main_loop(android_app *state, UserData *userdata) {
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &semaphore,
     };
-    if (vkQueueSubmit(_device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
+    if (vkQueueSubmit(device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
       LOGE("vkQueueSubmit");
       abort();
     }
 
-    auto swapchain = _swapchain->handle();
+    auto _swapchain = swapchain->handle();
     VkPresentInfoKHR present = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &semaphore,
         .swapchainCount = 1,
-        .pSwapchains = &swapchain,
+        .pSwapchains = &_swapchain,
         .pImageIndices = &imageIndex,
         .pResults = nullptr,
     };
-    res = vkQueuePresentKHR(_device._presentQueue, &present);
+    res = vkQueuePresentKHR(device._presentQueue, &present);
 
-    _frameCount++;
-    if (_frameCount == 100) {
+    frameCount++;
+    if (frameCount == 100) {
       double endTime = getCurrentTime();
-      LOGI("FPS: %.3f\n", _frameCount / (endTime - _startTime));
-      _frameCount = 0;
-      _startTime = endTime;
+      LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
+      frameCount = 0;
+      startTime = endTime;
     }
   }
 }
