@@ -93,16 +93,14 @@ public:
     vkDestroyCommandPool(_device, _pool, nullptr);
   }
 
-  std::tuple<VkSemaphore, VkCommandBuffer, VkSemaphore, VkFence> newFrame(VkSemaphore acquireSemaphore) {
+  std::tuple<VkSemaphore, VkCommandBuffer, VkSemaphore, VkFence>
+  newFrame(VkSemaphore acquireSemaphore) {
     vkWaitForFences(_device, 1, &_submitFence, true, UINT64_MAX);
     vkResetFences(_device, 1, &_submitFence);
 
     _commandCount = 0;
     vkResetCommandPool(_device, _pool, 0);
 
-    // return ret;
-    // Request a fresh command buffer.
-    // return this->requestCommandBuffer();
     if (_commandCount >= _buffers.size()) {
       LOGI("** vkAllocateCommandBuffers(%d) **", _commandCount);
       VkCommandBufferAllocateInfo info = {
@@ -253,7 +251,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
 
     // All queue submissions get a fence that CPU will wait
     // on for synchronization purposes.
-    auto [oldSemaphore, cmd, semaphore, fence] = flight->newFrame(acquireSemaphore);
+    auto [oldSemaphore, cmd, semaphore, fence] =
+        flight->newFrame(acquireSemaphore);
 
     // We will only submit this once before it's recycled.
     VkCommandBufferBeginInfo beginInfo = {
@@ -274,8 +273,35 @@ static bool main_loop(android_app *state, UserData *userdata) {
     }
     _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
 
-    res = backbuffer->submit(_device._graphicsQueue, acquireSemaphore, cmd, semaphore, fence,
-                             _device._presentQueue, _swapchain->handle());
+    const VkPipelineStageFlags waitStage =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount =
+            static_cast<uint32_t>(acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
+        .pWaitSemaphores = &acquireSemaphore,
+        .pWaitDstStageMask = &waitStage,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &semaphore,
+    };
+    if (vkQueueSubmit(_device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
+      LOGE("vkQueueSubmit");
+      abort();
+    }
+
+    auto swapchain = _swapchain->handle();
+    VkPresentInfoKHR present = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &semaphore,
+        .swapchainCount = 1,
+        .pSwapchains = &swapchain,
+        .pImageIndices = &imageIndex,
+        .pResults = nullptr,
+    };
+    res = vkQueuePresentKHR(_device._presentQueue, &present);
 
     _frameCount++;
     if (_frameCount == 100) {

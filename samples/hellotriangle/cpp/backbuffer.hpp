@@ -14,7 +14,4 @@ public:
 
   VkFramebuffer framebuffer() const { return _framebuffer; }
   VkSemaphore beginFrame(VkCommandBuffer cmd, VkSemaphore acquireSemaphore);
-  VkResult submit(VkQueue graphicsQueue, VkSemaphore _swapchainAcquireSemaphore,
-                  VkCommandBuffer cmd, VkSemaphore semaphore, VkFence fence,
-                  VkQueue presentationQueue, VkSwapchainKHR swapchain);
 };
