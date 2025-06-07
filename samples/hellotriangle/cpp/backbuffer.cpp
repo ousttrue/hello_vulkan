@@ -46,31 +46,14 @@ Backbuffer::Backbuffer(uint32_t i, VkDevice device, VkImage image,
 }
 
 Backbuffer::~Backbuffer() {
-  if (_swapchainAcquireSemaphore != VK_NULL_HANDLE) {
-    vkDestroySemaphore(_device, _swapchainAcquireSemaphore, nullptr);
-  }
   vkDestroyFramebuffer(_device, _framebuffer, nullptr);
   vkDestroyImageView(_device, _view, nullptr);
 }
 
-VkSemaphore Backbuffer::beginFrame(VkCommandBuffer cmd,
-                                   VkSemaphore acquireSemaphore) {
-  VkSemaphore ret = _swapchainAcquireSemaphore;
-  _swapchainAcquireSemaphore = acquireSemaphore;
-
-  // We will only submit this once before it's recycled.
-  VkCommandBufferBeginInfo beginInfo = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(cmd, &beginInfo);
-
-  return ret;
-}
-
-VkResult Backbuffer::submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
-                            VkSemaphore semaphore, VkFence fence,
-                            VkQueue presentationQueue,
+VkResult Backbuffer::submit(VkQueue graphicsQueue,
+                            VkSemaphore _swapchainAcquireSemaphore,
+                            VkCommandBuffer cmd, VkSemaphore semaphore,
+                            VkFence fence, VkQueue presentationQueue,
                             VkSwapchainKHR swapchain) {
 
   VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};

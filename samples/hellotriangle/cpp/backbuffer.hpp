@@ -7,8 +7,6 @@ class Backbuffer {
   VkImageView _view;
   VkFramebuffer _framebuffer;
 
-  VkSemaphore _swapchainAcquireSemaphore = VK_NULL_HANDLE;
-
 public:
   Backbuffer(uint32_t i, VkDevice device, VkImage image, VkFormat format,
              VkExtent2D size, VkRenderPass renderPass);
@@ -16,7 +14,7 @@ public:
 
   VkFramebuffer framebuffer() const { return _framebuffer; }
   VkSemaphore beginFrame(VkCommandBuffer cmd, VkSemaphore acquireSemaphore);
-  VkResult submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
-                  VkSemaphore semaphore, VkFence fence,
+  VkResult submit(VkQueue graphicsQueue, VkSemaphore _swapchainAcquireSemaphore,
+                  VkCommandBuffer cmd, VkSemaphore semaphore, VkFence fence,
                   VkQueue presentationQueue, VkSwapchainKHR swapchain);
 };

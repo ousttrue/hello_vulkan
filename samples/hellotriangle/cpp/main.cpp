@@ -49,6 +49,8 @@ class FlightManager {
   VkCommandPool _pool = VK_NULL_HANDLE;
   std::vector<VkCommandBuffer> _buffers;
 
+  VkSemaphore _swapchainAcquireSemaphore = VK_NULL_HANDLE;
+
 public:
   FlightManager(VkDevice device, VkCommandBufferLevel bufferLevel,
                 uint32_t graphicsQueueIndex)
@@ -81,7 +83,7 @@ public:
     }
   }
   ~FlightManager() {
-    waitAndResetFences();
+    vkWaitForFences(_device, 1, &_submitFence, true, UINT64_MAX);
     vkDestroyFence(_device, _submitFence, nullptr);
     vkDestroySemaphore(_device, _submitSemaphore, nullptr);
 
@@ -90,18 +92,17 @@ public:
     }
     vkDestroyCommandPool(_device, _pool, nullptr);
   }
-  void waitAndResetFences() {
+
+  std::tuple<VkSemaphore, VkCommandBuffer, VkSemaphore, VkFence> newFrame(VkSemaphore acquireSemaphore) {
     vkWaitForFences(_device, 1, &_submitFence, true, UINT64_MAX);
     vkResetFences(_device, 1, &_submitFence);
-  }
-  void resetCommandPool() {
+
     _commandCount = 0;
     vkResetCommandPool(_device, _pool, 0);
-  }
-  std::tuple<VkSemaphore, VkFence> requestClearedFence() {
-    return {_submitSemaphore, _submitFence};
-  }
-  VkCommandBuffer requestCommandBuffer() {
+
+    // return ret;
+    // Request a fresh command buffer.
+    // return this->requestCommandBuffer();
     if (_commandCount >= _buffers.size()) {
       LOGI("** vkAllocateCommandBuffers(%d) **", _commandCount);
       VkCommandBufferAllocateInfo info = {
@@ -117,7 +118,11 @@ public:
       }
       _buffers.push_back(ret);
     }
-    return _buffers[_commandCount++];
+
+    VkSemaphore ret = _swapchainAcquireSemaphore;
+    _swapchainAcquireSemaphore = acquireSemaphore;
+
+    return {ret, _buffers[_commandCount++], _submitSemaphore, _submitFence};
   }
 };
 
@@ -246,17 +251,16 @@ static bool main_loop(android_app *state, UserData *userdata) {
     }
     auto flight = flights[imageIndex];
 
-    flight->waitAndResetFences();
-    flight->resetCommandPool();
-
-    // return ret;
-    // Request a fresh command buffer.
-    flight->requestCommandBuffer();
-    auto cmd = flight->requestCommandBuffer();
-
     // All queue submissions get a fence that CPU will wait
     // on for synchronization purposes.
-    auto [semaphore, fence] = flight->requestClearedFence();
+    auto [oldSemaphore, cmd, semaphore, fence] = flight->newFrame(acquireSemaphore);
+
+    // We will only submit this once before it's recycled.
+    VkCommandBufferBeginInfo beginInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(cmd, &beginInfo);
 
     // Signal the underlying context that we're using this backbuffer now.
     // This will also wait for all fences associated with this swapchain image
@@ -264,13 +268,13 @@ static bool main_loop(android_app *state, UserData *userdata) {
     // When submitting command buffer that writes to swapchain, we need to wait
     // for this semaphore first.
     // Also, delete the older semaphore.
-    auto oldSemaphore = backbuffer->beginFrame(cmd, acquireSemaphore);
+    // auto oldSemaphore = backbuffer->beginFrame(cmd, acquireSemaphore);
     if (oldSemaphore != VK_NULL_HANDLE) {
       semaphoreManager->addClearedSemaphore(oldSemaphore);
     }
     _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
 
-    res = backbuffer->submit(_device._graphicsQueue, cmd, semaphore, fence,
+    res = backbuffer->submit(_device._graphicsQueue, acquireSemaphore, cmd, semaphore, fence,
                              _device._presentQueue, _swapchain->handle());
 
     _frameCount++;
