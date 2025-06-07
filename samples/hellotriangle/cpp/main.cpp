@@ -3,7 +3,6 @@
 #include "backbuffer.hpp"
 #include "pipeline.hpp"
 #include "swapchain_manager.hpp"
-#include <algorithm>
 #include <assert.h>
 #include <vko.h>
 
@@ -36,6 +35,92 @@ public:
   }
   void addClearedSemaphore(VkSemaphore semaphore) {
     _recycledSemaphores.push_back(semaphore);
+  }
+};
+
+class FlightManager {
+  VkDevice _device = VK_NULL_HANDLE;
+  std::vector<VkFence> _fences;
+  unsigned _fenceCount = 0;
+
+  VkCommandBufferLevel _commandBufferLevel;
+  unsigned _commandCount = 0;
+
+  VkCommandPool _pool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> _buffers;
+
+public:
+  FlightManager(VkDevice device, VkCommandBufferLevel bufferLevel,
+                uint32_t graphicsQueueIndex)
+      : _device(device), _commandBufferLevel(bufferLevel) {
+    VkCommandPoolCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = graphicsQueueIndex,
+    };
+    if (vkCreateCommandPool(_device, &info, nullptr, &_pool) != VK_SUCCESS) {
+      LOGE("vkCreateCommandPool");
+      abort();
+    }
+  }
+  ~FlightManager() {
+    waitAndResetFences();
+    for (auto &fence : _fences) {
+      vkDestroyFence(_device, fence, nullptr);
+    }
+
+    if (!_buffers.empty()) {
+      vkFreeCommandBuffers(_device, _pool, _buffers.size(), _buffers.data());
+    }
+    vkDestroyCommandPool(_device, _pool, nullptr);
+  }
+  void waitAndResetFences() {
+    if (_fenceCount == 0) {
+      return;
+    }
+    // If we have outstanding fences for this swapchain image, wait for them to
+    // complete first.
+    // Normally, this doesn't really block at all,
+    // since we're waiting for old frames to have been completed, but just in
+    // case.
+    vkWaitForFences(_device, _fenceCount, _fences.data(), true, UINT64_MAX);
+    vkResetFences(_device, _fenceCount, _fences.data());
+    _fenceCount = 0;
+  }
+  void resetCommandPool() {
+    _commandCount = 0;
+    vkResetCommandPool(_device, _pool, 0);
+  }
+  VkFence requestClearedFence() {
+    if (_fenceCount >= _fences.size()) {
+      VkFence fence;
+      VkFenceCreateInfo info = {
+          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      };
+      if (vkCreateFence(_device, &info, nullptr, &fence) != VK_SUCCESS) {
+        LOGE("vkCreateFence");
+        abort();
+      };
+      _fences.push_back(fence);
+    }
+    return _fences[_fenceCount++];
+  }
+  VkCommandBuffer requestCommandBuffer() {
+    if (_commandCount >= _buffers.size()) {
+      VkCommandBufferAllocateInfo info = {
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+          .commandPool = _pool,
+          .level = _commandBufferLevel,
+          .commandBufferCount = 1,
+      };
+      VkCommandBuffer ret = VK_NULL_HANDLE;
+      if (vkAllocateCommandBuffers(_device, &info, &ret) != VK_SUCCESS) {
+        LOGE("vkAllocateCommandBuffers");
+        abort();
+      }
+      _buffers.push_back(ret);
+    }
+    return _buffers[_commandCount++];
   }
 };
 
@@ -95,6 +180,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
   auto semaphoreManager = std::make_shared<SemaphoreManager>(_device);
 
   std::vector<std::shared_ptr<Backbuffer>> backbuffers;
+  std::vector<std::shared_ptr<FlightManager>> flights;
 
   for (;;) {
     while (true) {
@@ -124,8 +210,15 @@ static bool main_loop(android_app *state, UserData *userdata) {
           _picked._graphicsFamily, _picked._presentFamily,
           _pipeline->renderPass(), nullptr);
       assert(_swapchain);
-      backbuffers.resize(_swapchain->imageCount());
-      std::fill(backbuffers.begin(), backbuffers.end(), nullptr);
+
+      auto imageCount = _swapchain->imageCount();
+      backbuffers.resize(imageCount);
+      flights.resize(imageCount);
+      for (int i = 0; i < imageCount; ++i) {
+        backbuffers[i] = nullptr;
+        flights[i] = std::make_shared<FlightManager>(
+            _device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, _picked._graphicsFamily);
+      }
     }
 
     auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
@@ -148,12 +241,20 @@ static bool main_loop(android_app *state, UserData *userdata) {
 
     auto backbuffer = backbuffers[imageIndex];
     if (!backbuffer) {
-      auto p = new Backbuffer(imageIndex, _device, _picked._graphicsFamily,
-                              image, _surface->chooseSwapSurfaceFormat().format,
+      auto p = new Backbuffer(imageIndex, _device, image,
+                              _surface->chooseSwapSurfaceFormat().format,
                               _swapchain->size(), _pipeline->renderPass());
       backbuffer = std::shared_ptr<Backbuffer>(p);
       backbuffers.push_back(backbuffer);
     }
+    auto flight = flights[imageIndex];
+
+    flight->waitAndResetFences();
+
+    // return ret;
+    // Request a fresh command buffer.
+    flight->requestCommandBuffer();
+    auto cmd = flight->requestCommandBuffer();
 
     // Signal the underlying context that we're using this backbuffer now.
     // This will also wait for all fences associated with this swapchain image
@@ -161,13 +262,18 @@ static bool main_loop(android_app *state, UserData *userdata) {
     // When submitting command buffer that writes to swapchain, we need to wait
     // for this semaphore first.
     // Also, delete the older semaphore.
-    auto [oldSemaphore, cmd] = backbuffer->beginFrame(acquireSemaphore);
+    auto oldSemaphore = backbuffer->beginFrame(cmd, acquireSemaphore);
     if (oldSemaphore != VK_NULL_HANDLE) {
       semaphoreManager->addClearedSemaphore(oldSemaphore);
     }
     _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
-    res = backbuffer->endFrame(_device._graphicsQueue, cmd,
-                               _device._presentQueue, _swapchain->handle());
+
+    // All queue submissions get a fence that CPU will wait
+    // on for synchronization purposes.
+    VkFence fence = flight->requestClearedFence();
+
+    res = backbuffer->submit(_device._graphicsQueue, cmd, fence,
+                             _device._presentQueue, _swapchain->handle());
 
     _frameCount++;
     if (_frameCount == 100) {

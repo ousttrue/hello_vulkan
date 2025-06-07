@@ -2,12 +2,10 @@
 #include <vko.h>
 #include <vulkan/vulkan_core.h>
 
-Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
-                       VkImage image, VkFormat format, VkExtent2D size,
+Backbuffer::Backbuffer(uint32_t i, VkDevice device, VkImage image,
+                       VkFormat format, VkExtent2D size,
                        VkRenderPass renderPass)
-    : _index(i), _device(device), _fenceManager(device),
-      _commandManager(device, VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                      graphicsQueueIndex) {
+    : _index(i), _device(device) {
 
   // Create an image view which we can render into.
   VkImageViewCreateInfo view = {
@@ -25,7 +23,6 @@ Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
                            .baseArrayLayer = 0,
                            .layerCount = 1},
   };
-
   if (vkCreateImageView(_device, &view, nullptr, &_view) != VK_SUCCESS) {
     LOGE("vkCreateImageView");
     abort();
@@ -41,7 +38,6 @@ Backbuffer::Backbuffer(uint32_t i, VkDevice device, uint32_t graphicsQueueIndex,
       .height = size.height,
       .layers = 1,
   };
-
   if (vkCreateFramebuffer(_device, &fbInfo, nullptr, &_framebuffer) !=
       VK_SUCCESS) {
     LOGE("vkCreateFramebuffer");
@@ -60,15 +56,10 @@ Backbuffer::~Backbuffer() {
   vkDestroyImageView(_device, _view, nullptr);
 }
 
-std::tuple<VkSemaphore, VkCommandBuffer>
-Backbuffer::beginFrame(VkSemaphore acquireSemaphore) {
+VkSemaphore Backbuffer::beginFrame(VkCommandBuffer cmd,
+                                   VkSemaphore acquireSemaphore) {
   VkSemaphore ret = _swapchainAcquireSemaphore;
-  _fenceManager.beginFrame();
-  _commandManager.beginFrame();
   _swapchainAcquireSemaphore = acquireSemaphore;
-  // return ret;
-  // Request a fresh command buffer.
-  auto cmd = _commandManager.requestCommandBuffer();
 
   // We will only submit this once before it's recycled.
   VkCommandBufferBeginInfo beginInfo = {
@@ -77,13 +68,12 @@ Backbuffer::beginFrame(VkSemaphore acquireSemaphore) {
   };
   vkBeginCommandBuffer(cmd, &beginInfo);
 
-  // return cmd;
-  return {ret, cmd};
+  return ret;
 }
 
-VkResult Backbuffer::endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
-                              VkQueue presentationQueue,
-                              VkSwapchainKHR swapchain) {
+VkResult Backbuffer::submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
+                            VkFence fence, VkQueue presentationQueue,
+                            VkSwapchainKHR swapchain) {
   // For the first frames, we will create a release semaphore.
   // This can be reused every frame. Semaphores are reset when they have been
   // successfully been waited on.
@@ -99,18 +89,11 @@ VkResult Backbuffer::endFrame(VkQueue graphicsQueue, VkCommandBuffer cmd,
       LOGE("vkCreateSemaphore");
       abort();
     }
-    // setSwapchainReleaseSemaphore(releaseSemaphore);
     if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
       vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
     }
     _swapchainReleaseSemaphore = releaseSemaphore;
   }
-
-  // All queue submissions get a fence that CPU will wait
-  // on for synchronization purposes.
-  VkFence fence =
-      // _backbuffers[_swapchainIndex]->
-      _fenceManager.requestClearedFence();
 
   VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
   info.commandBufferCount = 1;

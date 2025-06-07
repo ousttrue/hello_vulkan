@@ -6,8 +6,6 @@ add_library(
   device_manager.cpp
   swapchain_manager.cpp
   backbuffer.cpp
-  fence_manager.cpp
-  command_buffer_manager.cpp
   pipeline.cpp
   #
   ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)
