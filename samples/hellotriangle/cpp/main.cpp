@@ -1,10 +1,10 @@
 #include "userdata.h"
 
-#include "backbuffer.hpp"
 #include "pipeline.hpp"
-#include "swapchain_manager.hpp"
 #include <assert.h>
 #include <vko.h>
+
+auto APP_NAME = "hellotriangle";
 
 class SemaphoreManager {
   VkDevice _device = VK_NULL_HANDLE;
@@ -124,8 +124,6 @@ public:
   }
 };
 
-auto APP_NAME = "hellotriangle";
-
 static double getCurrentTime() {
   timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
@@ -157,11 +155,10 @@ static bool main_loop(android_app *state, UserData *userdata) {
   VkSurfaceKHR _surface;
   VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
 
-  vko::PhysicalDevice picked = instance.pickPhysicakDevice(_surface);
+  vko::PhysicalDevice picked = instance.pickPhysicalDevice(_surface);
   assert(picked._physicalDevice);
 
-  std::shared_ptr<vko::Surface> surface = std::make_shared<vko::Surface>(
-      instance, _surface, picked._physicalDevice);
+  vko::Surface surface(instance, _surface, picked._physicalDevice);
 
   vko::Device device;
   device._validationLayers = instance._validationLayers;
@@ -169,17 +166,31 @@ static bool main_loop(android_app *state, UserData *userdata) {
                          picked._presentFamily));
 
   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
-      picked._physicalDevice, device, surface->chooseSwapSurfaceFormat().format,
+      picked._physicalDevice, device, surface.chooseSwapSurfaceFormat().format,
       state->activity->assetManager);
 
-  std::shared_ptr<class SwapchainManager> swapchain;
+  vko::Swapchain swapchain(device);
+  VK_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
+                            surface.chooseSwapSurfaceFormat(),
+                            surface.chooseSwapPresentMode(),
+                            picked._graphicsFamily, picked._presentFamily));
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers;
+  std::vector<std::shared_ptr<FlightManager>> flights;
+  {
+    auto imageCount = swapchain._images.size();
+    backbuffers.resize(imageCount);
+    flights.resize(imageCount);
+    for (int i = 0; i < imageCount; ++i) {
+      backbuffers[i] = nullptr;
+      flights[i] = std::make_shared<FlightManager>(
+          device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, picked._graphicsFamily);
+    }
+  }
+
   unsigned frameCount = 0;
   auto startTime = getCurrentTime();
 
   auto semaphoreManager = std::make_shared<SemaphoreManager>(device);
-
-  std::vector<std::shared_ptr<Backbuffer>> backbuffers;
-  std::vector<std::shared_ptr<FlightManager>> flights;
 
   for (;;) {
     while (true) {
@@ -203,33 +214,88 @@ static bool main_loop(android_app *state, UserData *userdata) {
       }
     }
 
-    if (!swapchain) {
-      swapchain = SwapchainManager::create(
-          picked._physicalDevice, surface->_surface, device,
-          picked._graphicsFamily, picked._presentFamily,
-          pipeline->renderPass(), nullptr);
-      assert(swapchain);
-
-      auto imageCount = swapchain->imageCount();
-      backbuffers.resize(imageCount);
-      flights.resize(imageCount);
-      for (int i = 0; i < imageCount; ++i) {
-        backbuffers[i] = nullptr;
-        flights[i] = std::make_shared<FlightManager>(
-            device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, picked._graphicsFamily);
-      }
-    }
+    // if (!swapchain) {
+    //   swapchain = SwapchainManager::create(
+    //       picked._physicalDevice, surface->_surface, device,
+    //       picked._graphicsFamily, picked._presentFamily,
+    //       pipeline->renderPass(), nullptr);
+    //   assert(swapchain);
+    // }
 
     auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
-    auto [res, imageIndex, image] = swapchain->AcquireNext(acquireSemaphore);
-    if (res == VK_SUCCESS) {
-      // through next
-    } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
+    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
+    if (acquired.result == VK_SUCCESS) {
+      auto backbuffer = backbuffers[acquired.imageIndex];
+      if (!backbuffer) {
+        backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
+            device, acquired.image, swapchain._createInfo.imageExtent,
+            surface.chooseSwapSurfaceFormat().format, pipeline->renderPass());
+        backbuffers[acquired.imageIndex] = backbuffer;
+      }
+      auto flight = flights[acquired.imageIndex];
+
+      // All queue submissions get a fence that CPU will wait
+      // on for synchronization purposes.
+      auto [oldSemaphore, cmd, semaphore, fence] =
+          flight->newFrame(acquireSemaphore);
+
+      // We will only submit this once before it's recycled.
+      VkCommandBufferBeginInfo beginInfo = {
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+          .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      };
+      vkBeginCommandBuffer(cmd, &beginInfo);
+
+      // Signal the underlying context that we're using this backbuffer now.
+      // This will also wait for all fences associated with this swapchain image
+      // to complete first.
+      // When submitting command buffer that writes to swapchain, we need to
+      // wait for this semaphore first. Also, delete the older semaphore. auto
+      // oldSemaphore = backbuffer->beginFrame(cmd, acquireSemaphore);
+      if (oldSemaphore != VK_NULL_HANDLE) {
+        semaphoreManager->addClearedSemaphore(oldSemaphore);
+      }
+      pipeline->render(cmd, backbuffer->_framebuffer,
+                       swapchain._createInfo.imageExtent);
+
+      const VkPipelineStageFlags waitStage =
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      VkSubmitInfo info = {
+          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+          .waitSemaphoreCount =
+              static_cast<uint32_t>(acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
+          .pWaitSemaphores = &acquireSemaphore,
+          .pWaitDstStageMask = &waitStage,
+          .commandBufferCount = 1,
+          .pCommandBuffers = &cmd,
+          .signalSemaphoreCount = 1,
+          .pSignalSemaphores = &semaphore,
+      };
+      if (vkQueueSubmit(device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
+        LOGE("vkQueueSubmit");
+        abort();
+      }
+
+      VkPresentInfoKHR present = {
+          .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+          .waitSemaphoreCount = 1,
+          .pWaitSemaphores = &semaphore,
+          .swapchainCount = 1,
+          .pSwapchains = &swapchain._swapchain,
+          .pImageIndices = &acquired.imageIndex,
+          .pResults = nullptr,
+      };
+      VK_CHECK(vkQueuePresentKHR(device._presentQueue, &present));
+
+    } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
+               acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
       LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
       vkQueueWaitIdle(device._presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
-      swapchain = {};
+      // TODO:
+      // swapchain = {};
       // return true;
+
     } else {
       // error ?
       LOGE("Unrecoverable swapchain error.\n");
@@ -237,69 +303,6 @@ static bool main_loop(android_app *state, UserData *userdata) {
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
       return true;
     }
-
-    auto backbuffer = backbuffers[imageIndex];
-    if (!backbuffer) {
-      backbuffer = std::make_shared<Backbuffer>(
-          imageIndex, device, image, surface->chooseSwapSurfaceFormat().format,
-          swapchain->size(), pipeline->renderPass());
-      backbuffers[imageIndex] = backbuffer;
-    }
-    auto flight = flights[imageIndex];
-
-    // All queue submissions get a fence that CPU will wait
-    // on for synchronization purposes.
-    auto [oldSemaphore, cmd, semaphore, fence] =
-        flight->newFrame(acquireSemaphore);
-
-    // We will only submit this once before it's recycled.
-    VkCommandBufferBeginInfo beginInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-    };
-    vkBeginCommandBuffer(cmd, &beginInfo);
-
-    // Signal the underlying context that we're using this backbuffer now.
-    // This will also wait for all fences associated with this swapchain image
-    // to complete first.
-    // When submitting command buffer that writes to swapchain, we need to wait
-    // for this semaphore first.
-    // Also, delete the older semaphore.
-    // auto oldSemaphore = backbuffer->beginFrame(cmd, acquireSemaphore);
-    if (oldSemaphore != VK_NULL_HANDLE) {
-      semaphoreManager->addClearedSemaphore(oldSemaphore);
-    }
-    pipeline->render(cmd, backbuffer->framebuffer(), swapchain->size());
-
-    const VkPipelineStageFlags waitStage =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo info = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount =
-            static_cast<uint32_t>(acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
-        .pWaitSemaphores = &acquireSemaphore,
-        .pWaitDstStageMask = &waitStage,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &semaphore,
-    };
-    if (vkQueueSubmit(device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
-      LOGE("vkQueueSubmit");
-      abort();
-    }
-
-    auto _swapchain = swapchain->handle();
-    VkPresentInfoKHR present = {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &semaphore,
-        .swapchainCount = 1,
-        .pSwapchains = &_swapchain,
-        .pImageIndices = &imageIndex,
-        .pResults = nullptr,
-    };
-    res = vkQueuePresentKHR(device._presentQueue, &present);
 
     frameCount++;
     if (frameCount == 100) {

@@ -2,10 +2,6 @@ set(TARGET native)
 add_library(
   ${TARGET} SHARED
   main.cpp
-  extensions.cpp
-  device_manager.cpp
-  swapchain_manager.cpp
-  backbuffer.cpp
   pipeline.cpp
   #
   ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)

@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <cmath>
-#include <vector>
 
 auto WINDOW_TITLE = "vko";
 

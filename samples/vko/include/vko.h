@@ -1,7 +1,6 @@
 #pragma once
 #include <chrono>
 #include <climits>
-#include <list>
 #include <memory>
 #include <optional>
 #include <set>
@@ -186,6 +185,12 @@ struct Instance : public not_copyable {
     if (_debugUtilsMessenger != VK_NULL_HANDLE) {
       DestroyDebugUtilsMessengerEXT(_instance, _debugUtilsMessenger, nullptr);
     }
+    // auto supported =
+    //     instanceExtensions.pushExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    // if (!supported) {
+    //   instanceExtensions.pushExtension("VK_EXT_debug_report");
+    // }
+
     if (_instance != VK_NULL_HANDLE) {
       vkDestroyInstance(_instance, nullptr);
     }
@@ -252,6 +257,7 @@ struct Instance : public not_copyable {
       .pEngineName = "No Engine",
       .engineVersion = VK_MAKE_VERSION(1, 0, 0),
       .apiVersion = VK_API_VERSION_1_0,
+      // .apiVersion = VK_MAKE_VERSION(1, 0, 24),
   };
 
   VkInstanceCreateInfo _createInfo{
@@ -283,6 +289,25 @@ struct Instance : public not_copyable {
 
     auto result = vkCreateInstance(&_createInfo, nullptr, &_instance);
     if (result != VK_SUCCESS) {
+      // Try to fall back to compatible Vulkan versions if the driver is using
+      // older, but compatible API versions.
+      // if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
+      //   app.apiVersion = VK_MAKE_VERSION(1, 0, 1);
+      //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+      //   if (res == VK_SUCCESS) {
+      //     LOGI("Created Vulkan instance with API version 1.0.1.\n");
+      //   }
+      // }
+      // if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
+      //   app.apiVersion = VK_MAKE_VERSION(1, 0, 2);
+      //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
+      //   if (res == VK_SUCCESS)
+      //     LOGI("Created Vulkan instance with API version 1.0.2.\n");
+      // }
+      // if (res != VK_SUCCESS) {
+      //   LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
+      //   return {};
+      // }
       return result;
     }
 
@@ -304,7 +329,7 @@ struct Instance : public not_copyable {
     return result;
   }
 
-  PhysicalDevice pickPhysicakDevice(VkSurfaceKHR surface) {
+  PhysicalDevice pickPhysicalDevice(VkSurfaceKHR surface) {
     PhysicalDevice picked;
     for (auto &physicalDevice : _physicalDevices) {
       physicalDevice.debugPrint(surface);
@@ -337,7 +362,7 @@ struct Device : public not_copyable {
   std::vector<const char *> _deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   };
-  float _queuePriority = 1.0f;
+  std::vector<float> _queuePriorities = {1.0f};
   std::vector<VkDeviceQueueCreateInfo> _queueCreateInfos;
   VkPhysicalDeviceFeatures _deviceFeatures{
       .samplerAnisotropy = VK_TRUE,
@@ -371,9 +396,11 @@ struct Device : public not_copyable {
     for (uint32_t queueFamily : uniqueQueueFamilies) {
       VkDeviceQueueCreateInfo queueCreateInfo{
           .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+          .pNext = 0,
+          .flags = 0,
           .queueFamilyIndex = queueFamily,
-          .queueCount = 1,
-          .pQueuePriorities = &_queuePriority,
+          .queueCount = static_cast<uint32_t>(_queuePriorities.size()),
+          .pQueuePriorities = _queuePriorities.data(),
       };
       _queueCreateInfos.push_back(queueCreateInfo);
     }
@@ -469,21 +496,37 @@ struct Surface : public not_copyable {
   ~Surface() { vkDestroySurfaceKHR(_instance, _surface, nullptr); }
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat() const {
+    if (_formats.empty()) {
+      return {
+          .format = VK_FORMAT_UNDEFINED,
+      };
+    }
     for (const auto &availableFormat : _formats) {
       if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
           availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
         return availableFormat;
       }
+      // switch (availableFormat.format) {
+      // // Favor UNORM formats as the samples are not written for sRGB
+      // currently. case VK_FORMAT_R8G8B8A8_UNORM: case
+      // VK_FORMAT_B8G8R8A8_UNORM: case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
+      //   return availableFormat;
+      // default:
+      //   break;
+      // }
     }
     return _formats[0];
   }
-
   VkPresentModeKHR chooseSwapPresentMode() const {
+#ifdef ANDROID
+#else
     for (const auto &availablePresentMode : _presentModes) {
       if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
         return availablePresentMode;
       }
     }
+#endif
+    // VSYNC ?
     return VK_PRESENT_MODE_FIFO_KHR;
   }
 };
@@ -499,7 +542,6 @@ struct Swapchain : public not_copyable {
 
   Swapchain(VkDevice device) : _device(device) {}
 
-  std::list<std::shared_ptr<Semaphore>> _imageAvailableSemaphorePool;
   std::vector<std::shared_ptr<Semaphore>> _submitCompleteSemaphores;
 
   ~Swapchain() {
@@ -517,6 +559,22 @@ struct Swapchain : public not_copyable {
       .imageArrayLayers = 1,
       .imageUsage =
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+      .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      // Find a supported compositeAlpha type.
+      // VkCompositeAlphaFlagBitsKHR compositeAlpha =
+      // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; if
+      // (surfaceProperties.supportedCompositeAlpha &
+      //     VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+      //   compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+      // else if (surfaceProperties.supportedCompositeAlpha &
+      //          VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+      //   compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+      // else if (surfaceProperties.supportedCompositeAlpha &
+      //          VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+      //   compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+      // else if (surfaceProperties.supportedCompositeAlpha &
+      //          VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+      //   compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
       .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
       .clipped = VK_TRUE,
   };
@@ -533,6 +591,16 @@ struct Swapchain : public not_copyable {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &capabilities);
 
     _createInfo.surface = surface;
+    // Determine the number of VkImage's to use in the swapchain.
+    // Ideally, we desire to own 1 image at a time, the rest of the images can
+    // either be rendered to and/or
+    // being queued up for display.
+    // uint32_t desiredSwapchainImages = surfaceProperties.minImageCount + 1;
+    // if ((surfaceProperties.maxImageCount > 0) &&
+    //     (desiredSwapchainImages > surfaceProperties.maxImageCount)) {
+    //   // Application must settle for fewer images than desired.
+    //   desiredSwapchainImages = surfaceProperties.maxImageCount;
+    // }
     _createInfo.minImageCount = capabilities.minImageCount + 1;
     _createInfo.imageFormat = surfaceFormat.format;
     _createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -548,6 +616,13 @@ struct Swapchain : public not_copyable {
       _queueFamilyIndices[1] = presentFamily;
       _createInfo.pQueueFamilyIndices = _queueFamilyIndices;
     }
+    // Figure out a suitable surface transform.
+    // VkSurfaceTransformFlagBitsKHR preTransform;
+    // if (surfaceProperties.supportedTransforms &
+    //     VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+    //   preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    // else
+    //   preTransform = surfaceProperties.currentTransform;
     _createInfo.preTransform = capabilities.currentTransform;
     _createInfo.presentMode = presentMode;
     _createInfo.oldSwapchain = oldSwapchain;
@@ -593,35 +668,20 @@ struct Swapchain : public not_copyable {
     return VK_SUCCESS;
   }
 
-  std::shared_ptr<Semaphore> getOrCreateImageAvailableSemaphore() {
-    if (!_imageAvailableSemaphorePool.empty()) {
-      auto s = _imageAvailableSemaphorePool.front();
-      _imageAvailableSemaphorePool.pop_front();
-      return s;
-    }
-
-    LOGI("new semaphore\n");
-    auto s = std::make_shared<Semaphore>(_device);
-    return s;
-  }
-
   struct AcquiredImage {
     VkResult result;
     int64_t presentTimeNano;
     uint32_t imageIndex;
     VkImage image;
-    std::shared_ptr<Semaphore> imageAvailableSemaphore;
     VkCommandBuffer commandBuffer;
     std::shared_ptr<Semaphore> submitCompleteSemaphore;
   };
 
-  AcquiredImage acquireNextImage() {
-    auto imageAvailableSemaphore = getOrCreateImageAvailableSemaphore();
-
+  AcquiredImage acquireNextImage(VkSemaphore imageAvailableSemaphore) {
     uint32_t imageIndex;
     auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
-                                        *imageAvailableSemaphore,
-                                        VK_NULL_HANDLE, &imageIndex);
+                                        imageAvailableSemaphore, VK_NULL_HANDLE,
+                                        &imageIndex);
     if (result != VK_SUCCESS) {
       return {result};
     }
@@ -636,15 +696,11 @@ struct Swapchain : public not_copyable {
             epoch_time_nano,
             imageIndex,
             _images[imageIndex],
-            imageAvailableSemaphore,
             _commandBuffers[imageIndex],
             _submitCompleteSemaphores[imageIndex]};
   }
 
-  VkResult present(uint32_t imageIndex,
-                   const std::shared_ptr<Semaphore> &imageAvailableSemaphore) {
-    _imageAvailableSemaphorePool.push_back(imageAvailableSemaphore);
-
+  VkResult present(uint32_t imageIndex) {
     VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,

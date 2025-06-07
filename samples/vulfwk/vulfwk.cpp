@@ -32,7 +32,7 @@ bool VulkanFramework::initializeDevice(
     const std::vector<const char *> &deviceExtensionNames,
     VkSurfaceKHR surface) {
 
-  _picked = Instance.pickPhysicakDevice(surface);
+  _picked = Instance.pickPhysicalDevice(surface);
   Surface = std::make_shared<vko::Surface>(Instance, surface,
                                            _picked._physicalDevice);
 
@@ -68,7 +68,8 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
     _images.resize(Swapchain->_images.size());
   }
 
-  auto acquired = Swapchain->acquireNextImage();
+  VkSemaphore semaphore;
+  auto acquired = Swapchain->acquireNextImage(semaphore);
 
   auto image = _images[acquired.imageIndex];
   if (!image) {
@@ -85,7 +86,7 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
   VkSubmitInfo submitInfo = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &acquired.imageAvailableSemaphore->_semaphore,
+      .pWaitSemaphores = &semaphore,
       .pWaitDstStageMask = &waitDstStageMask,
       .commandBufferCount = 1,
       .pCommandBuffers = &acquired.commandBuffer,
@@ -97,8 +98,7 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
   VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, *SubmitCompleteFence));
 
   SubmitCompleteFence->block();
-  VK_CHECK(Swapchain->present(acquired.imageIndex,
-                              acquired.imageAvailableSemaphore));
+  VK_CHECK(Swapchain->present(acquired.imageIndex));
 
   return true;
 }
