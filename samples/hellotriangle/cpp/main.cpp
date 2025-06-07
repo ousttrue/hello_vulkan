@@ -93,6 +93,7 @@ public:
   }
   VkFence requestClearedFence() {
     if (_fenceCount >= _fences.size()) {
+      LOGI("** vkCreateFence(%d) **", _fenceCount);
       VkFence fence;
       VkFenceCreateInfo info = {
           .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -107,6 +108,7 @@ public:
   }
   VkCommandBuffer requestCommandBuffer() {
     if (_commandCount >= _buffers.size()) {
+      LOGI("** vkAllocateCommandBuffers(%d) **", _commandCount);
       VkCommandBufferAllocateInfo info = {
           .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
           .commandPool = _pool,
@@ -250,6 +252,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
     auto flight = flights[imageIndex];
 
     flight->waitAndResetFences();
+    flight->resetCommandPool();
 
     // return ret;
     // Request a fresh command buffer.
