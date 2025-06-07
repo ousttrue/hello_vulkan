@@ -49,9 +49,6 @@ Backbuffer::~Backbuffer() {
   if (_swapchainAcquireSemaphore != VK_NULL_HANDLE) {
     vkDestroySemaphore(_device, _swapchainAcquireSemaphore, nullptr);
   }
-  if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
-    vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
-  }
   vkDestroyFramebuffer(_device, _framebuffer, nullptr);
   vkDestroyImageView(_device, _view, nullptr);
 }
@@ -72,28 +69,9 @@ VkSemaphore Backbuffer::beginFrame(VkCommandBuffer cmd,
 }
 
 VkResult Backbuffer::submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
-                            VkFence fence, VkQueue presentationQueue,
+                            VkSemaphore semaphore, VkFence fence,
+                            VkQueue presentationQueue,
                             VkSwapchainKHR swapchain) {
-  // For the first frames, we will create a release semaphore.
-  // This can be reused every frame. Semaphores are reset when they have been
-  // successfully been waited on.
-  // If we aren't using acquire semaphores, we aren't using release semaphores
-  // either.
-  if (_swapchainReleaseSemaphore == VK_NULL_HANDLE &&
-      _swapchainAcquireSemaphore != VK_NULL_HANDLE) {
-    VkSemaphore releaseSemaphore;
-    VkSemaphoreCreateInfo semaphoreInfo = {
-        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr,
-                          &releaseSemaphore) != VK_SUCCESS) {
-      LOGE("vkCreateSemaphore");
-      abort();
-    }
-    if (_swapchainReleaseSemaphore != VK_NULL_HANDLE) {
-      vkDestroySemaphore(_device, _swapchainReleaseSemaphore, nullptr);
-    }
-    _swapchainReleaseSemaphore = releaseSemaphore;
-  }
 
   VkSubmitInfo info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
   info.commandBufferCount = 1;
@@ -105,9 +83,8 @@ VkResult Backbuffer::submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
       _swapchainAcquireSemaphore != VK_NULL_HANDLE ? 1 : 0;
   info.pWaitSemaphores = &_swapchainAcquireSemaphore;
   info.pWaitDstStageMask = &waitStage;
-  info.signalSemaphoreCount =
-      _swapchainReleaseSemaphore != VK_NULL_HANDLE ? 1 : 0;
-  info.pSignalSemaphores = &_swapchainReleaseSemaphore;
+  info.signalSemaphoreCount = 1;
+  info.pSignalSemaphores = &semaphore;
 
   if (vkQueueSubmit(graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
     LOGE("vkQueueSubmit");
@@ -117,7 +94,7 @@ VkResult Backbuffer::submit(VkQueue graphicsQueue, VkCommandBuffer cmd,
   VkPresentInfoKHR present = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &_swapchainReleaseSemaphore,
+      .pWaitSemaphores = &semaphore,
       .swapchainCount = 1,
       .pSwapchains = &swapchain,
       .pImageIndices = &_index,

@@ -40,8 +40,8 @@ public:
 
 class FlightManager {
   VkDevice _device = VK_NULL_HANDLE;
-  std::vector<VkFence> _fences;
-  unsigned _fenceCount = 0;
+  VkFence _submitFence = VK_NULL_HANDLE;
+  VkSemaphore _submitSemaphore = VK_NULL_HANDLE;
 
   VkCommandBufferLevel _commandBufferLevel;
   unsigned _commandCount = 0;
@@ -62,12 +62,28 @@ public:
       LOGE("vkCreateCommandPool");
       abort();
     }
+
+    VkFenceCreateInfo fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    if (vkCreateFence(_device, &fenceInfo, nullptr, &_submitFence) !=
+        VK_SUCCESS) {
+      LOGE("vkCreateFence");
+      abort();
+    };
+
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr,
+                          &_submitSemaphore) != VK_SUCCESS) {
+      LOGE("vkCreateSemaphore");
+      abort();
+    }
   }
   ~FlightManager() {
     waitAndResetFences();
-    for (auto &fence : _fences) {
-      vkDestroyFence(_device, fence, nullptr);
-    }
+    vkDestroyFence(_device, _submitFence, nullptr);
+    vkDestroySemaphore(_device, _submitSemaphore, nullptr);
 
     if (!_buffers.empty()) {
       vkFreeCommandBuffers(_device, _pool, _buffers.size(), _buffers.data());
@@ -75,36 +91,15 @@ public:
     vkDestroyCommandPool(_device, _pool, nullptr);
   }
   void waitAndResetFences() {
-    if (_fenceCount == 0) {
-      return;
-    }
-    // If we have outstanding fences for this swapchain image, wait for them to
-    // complete first.
-    // Normally, this doesn't really block at all,
-    // since we're waiting for old frames to have been completed, but just in
-    // case.
-    vkWaitForFences(_device, _fenceCount, _fences.data(), true, UINT64_MAX);
-    vkResetFences(_device, _fenceCount, _fences.data());
-    _fenceCount = 0;
+    vkWaitForFences(_device, 1, &_submitFence, true, UINT64_MAX);
+    vkResetFences(_device, 1, &_submitFence);
   }
   void resetCommandPool() {
     _commandCount = 0;
     vkResetCommandPool(_device, _pool, 0);
   }
-  VkFence requestClearedFence() {
-    if (_fenceCount >= _fences.size()) {
-      LOGI("** vkCreateFence(%d) **", _fenceCount);
-      VkFence fence;
-      VkFenceCreateInfo info = {
-          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      };
-      if (vkCreateFence(_device, &info, nullptr, &fence) != VK_SUCCESS) {
-        LOGE("vkCreateFence");
-        abort();
-      };
-      _fences.push_back(fence);
-    }
-    return _fences[_fenceCount++];
+  std::tuple<VkSemaphore, VkFence> requestClearedFence() {
+    return {_submitSemaphore, _submitFence};
   }
   VkCommandBuffer requestCommandBuffer() {
     if (_commandCount >= _buffers.size()) {
@@ -259,6 +254,10 @@ static bool main_loop(android_app *state, UserData *userdata) {
     flight->requestCommandBuffer();
     auto cmd = flight->requestCommandBuffer();
 
+    // All queue submissions get a fence that CPU will wait
+    // on for synchronization purposes.
+    auto [semaphore, fence] = flight->requestClearedFence();
+
     // Signal the underlying context that we're using this backbuffer now.
     // This will also wait for all fences associated with this swapchain image
     // to complete first.
@@ -271,11 +270,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
     }
     _pipeline->render(cmd, backbuffer->framebuffer(), _swapchain->size());
 
-    // All queue submissions get a fence that CPU will wait
-    // on for synchronization purposes.
-    VkFence fence = flight->requestClearedFence();
-
-    res = backbuffer->submit(_device._graphicsQueue, cmd, fence,
+    res = backbuffer->submit(_device._graphicsQueue, cmd, semaphore, fence,
                              _device._presentQueue, _swapchain->handle());
 
     _frameCount++;
