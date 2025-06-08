@@ -628,7 +628,8 @@ struct Swapchain : public not_copyable {
       // else if (surfaceProperties.supportedCompositeAlpha &
       //          VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
       //   compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
-      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+      // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
       .clipped = VK_TRUE,
   };
 
@@ -815,6 +816,117 @@ struct SwapchainFramebuffer {
   ~SwapchainFramebuffer() {
     vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
     vkDestroyImageView(this->device, this->imageView, nullptr);
+  }
+};
+
+struct Flight {
+  VkFence submitFence;
+  VkSemaphore submitSemaphore;
+  // keep next frame
+  VkSemaphore acquireSemaphore;
+};
+
+struct FlightManager {
+  VkDevice device = VK_NULL_HANDLE;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> commandBuffers;
+  std::vector<Flight> flights;
+
+  std::list<VkSemaphore> acquireSemaphoresOwn;
+  std::list<VkSemaphore> acquireSemaphoresReuse;
+
+public:
+  FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
+                uint32_t imageCount)
+      : device(_device), commandBuffers(imageCount), flights(imageCount) {
+    VkCommandPoolCreateInfo commandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = graphicsQueueIndex,
+    };
+    VKO_CHECK(vkCreateCommandPool(this->device, &commandPoolCreateInfo, nullptr,
+                                  &this->pool));
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = this->pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = imageCount,
+    };
+    VKO_CHECK(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
+                                       this->commandBuffers.data()));
+
+    for (auto &flight : this->flights) {
+      VkFenceCreateInfo fenceInfo = {
+          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      };
+      VKO_CHECK(vkCreateFence(this->device, &fenceInfo, nullptr,
+                              &flight.submitFence));
+
+      VkSemaphoreCreateInfo semaphoreInfo = {
+          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      };
+      VKO_CHECK(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
+                                  &flight.submitSemaphore));
+    }
+  }
+
+  ~FlightManager() {
+    for (auto semaphore : this->acquireSemaphoresOwn) {
+      vkDestroySemaphore(this->device, semaphore, nullptr);
+    }
+
+    for (auto flight : this->flights) {
+      vkDestroyFence(this->device, flight.submitFence, nullptr);
+      vkDestroySemaphore(this->device, flight.submitSemaphore, nullptr);
+    }
+
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+    }
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+
+  VkSemaphore getOrCreateSemaphore() {
+    if (!this->acquireSemaphoresReuse.empty()) {
+      auto semaphroe = this->acquireSemaphoresReuse.front();
+      this->acquireSemaphoresReuse.pop_front();
+      return semaphroe;
+    }
+
+    vko::Logger::Info("* create acquireSemaphore *");
+    VkSemaphore semaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    VKO_CHECK(
+        vkCreateSemaphore(this->device, &semaphoreInfo, nullptr, &semaphore));
+    this->acquireSemaphoresOwn.push_back(semaphore);
+    return semaphore;
+  }
+
+  std::tuple<VkCommandBuffer, Flight, VkSemaphore>
+  blockAndReset(uint32_t imageIndex, VkSemaphore acquireSemaphore) {
+    // keep acquireSemaphore
+    auto &flight = this->flights[imageIndex];
+    auto oldSemaphore = flight.acquireSemaphore;
+    flight.acquireSemaphore = acquireSemaphore;
+
+    // block. ensure oldSemaphore be signaled.
+    vkWaitForFences(this->device, 1, &flight.submitFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &flight.submitFence);
+
+    auto cmd = this->commandBuffers[imageIndex];
+    vkResetCommandBuffer(cmd, 0);
+
+    return {cmd, flight, oldSemaphore};
+  }
+
+  void reuseSemaphore(VkSemaphore semaphore) {
+    this->acquireSemaphoresReuse.push_back(semaphore);
   }
 };
 

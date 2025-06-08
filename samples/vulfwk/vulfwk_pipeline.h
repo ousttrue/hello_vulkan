@@ -18,9 +18,10 @@ public:
 
   VkRenderPass renderPass() const { return RenderPass; }
 
-  static std::shared_ptr<PipelineImpl>
-  create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkDevice device,
-         VkFormat swapchainImageFormat, void *AssetManager);
+  static std::shared_ptr<PipelineImpl> create(VkPhysicalDevice physicalDevice,
+                                              VkDevice device,
+                                              VkFormat swapchainImageFormat,
+                                              void *AssetManager);
 
   static VkRenderPass createRenderPass(VkDevice device,
                                        VkFormat swapchainImageFormat);

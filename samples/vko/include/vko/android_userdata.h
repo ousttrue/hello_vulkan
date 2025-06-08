@@ -2,6 +2,8 @@
 #include <android/log.h>
 #include <android_native_app_glue.h>
 
+namespace vko {
+
 struct UserData {
   android_app *pApp = nullptr;
   bool _active = false;
@@ -101,3 +103,5 @@ inline bool wait_window(android_app *state, UserData *userdata) {
     }
   }
 }
+
+} // namespace vko

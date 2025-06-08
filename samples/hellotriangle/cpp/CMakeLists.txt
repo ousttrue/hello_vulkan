@@ -3,6 +3,7 @@ add_library(
   ${TARGET} SHARED
   main.cpp
   pipeline.cpp
+  main_loop.cpp
   #
   ${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c)
 target_compile_definitions(${TARGET} PRIVATE VK_USE_PLATFORM_ANDROID_KHR=1)

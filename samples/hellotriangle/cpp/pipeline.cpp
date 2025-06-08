@@ -1,6 +1,6 @@
 #include "pipeline.hpp"
 #include <vector>
-#include <vko.h>
+#include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
 
 struct Vertex {

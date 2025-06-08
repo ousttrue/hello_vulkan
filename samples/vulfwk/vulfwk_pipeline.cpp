@@ -1,5 +1,5 @@
 #include "vulfwk_pipeline.h"
-#include <vko.h>
+#include <vko/vko.h>
 
 #if ANDROID
 #include <android_native_app_glue.h>
@@ -75,7 +75,8 @@ PipelineImpl::~PipelineImpl() {
 }
 
 std::shared_ptr<PipelineImpl>
-PipelineImpl::create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
+
+PipelineImpl::create(VkPhysicalDevice physicalDevice, 
                      VkDevice device, VkFormat swapchainImageFormat,
                      void *AssetManager) {
   auto renderPass = createRenderPass(device, swapchainImageFormat);
