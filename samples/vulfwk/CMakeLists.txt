@@ -20,6 +20,3 @@ else()
             Vulkan::shaderc_combined)
   target_compile_options(${TARGET_NAME} PRIVATE /EHsc)
 endif()
-
-add_glsl(${TARGET_NAME} shader.vert)
-add_glsl(${TARGET_NAME} shader.frag)
