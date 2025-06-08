@@ -588,19 +588,10 @@ struct Swapchain : public not_copyable {
   VkDevice device;
   VkQueue presentQueue = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
-
-  VkCommandPool commandPool = VK_NULL_HANDLE;
   std::vector<VkImage> images;
-  std::vector<VkCommandBuffer> commandBuffers;
-
-  std::vector<std::shared_ptr<Semaphore>> submitCompleteSemaphores;
 
   Swapchain(VkDevice _device) : device(_device) {}
-
   ~Swapchain() {
-    if (this->commandPool != VK_NULL_HANDLE) {
-      vkDestroyCommandPool(this->device, this->commandPool, nullptr);
-    }
     if (this->swapchain != VK_NULL_HANDLE) {
       vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
     }
@@ -613,23 +604,26 @@ struct Swapchain : public not_copyable {
       .imageUsage =
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      // Find a supported compositeAlpha type.
-      // VkCompositeAlphaFlagBitsKHR compositeAlpha =
-      // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; if
-      // (surfaceProperties.supportedCompositeAlpha &
-      //     VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
-      //   compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-      // else if (surfaceProperties.supportedCompositeAlpha &
-      //          VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
-      //   compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
-      // else if (surfaceProperties.supportedCompositeAlpha &
-      //          VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
-      //   compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
-      // else if (surfaceProperties.supportedCompositeAlpha &
-      //          VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
-      //   compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+  // Find a supported compositeAlpha type.
+  // VkCompositeAlphaFlagBitsKHR compositeAlpha =
+  // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; if
+  // (surfaceProperties.supportedCompositeAlpha &
+  //     VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+  //   compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  // else if (surfaceProperties.supportedCompositeAlpha &
+  //          VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+  //   compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+  // else if (surfaceProperties.supportedCompositeAlpha &
+  //          VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
+  //   compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+  // else if (surfaceProperties.supportedCompositeAlpha &
+  //          VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
+  //   compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+#ifdef ANDROID
       .compositeAlpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-      // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+#else
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+#endif
       .clipped = VK_TRUE,
   };
 
@@ -696,33 +690,6 @@ struct Swapchain : public not_copyable {
                               this->images.data());
     }
 
-    this->submitCompleteSemaphores.resize(imageCount);
-    for (uint32_t i = 0; i < imageCount; ++i) {
-      this->submitCompleteSemaphores[i] =
-          std::make_shared<Semaphore>(this->device);
-    }
-
-    VkCommandPoolCreateInfo CommandPoolCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = graphicsFamily,
-    };
-    VKO_CHECK(vkCreateCommandPool(this->device, &CommandPoolCreateInfo, nullptr,
-                                  &this->commandPool));
-
-    this->commandBuffers.resize(imageCount);
-    VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .commandPool = this->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount =
-            static_cast<uint32_t>(this->commandBuffers.size()),
-    };
-    VKO_CHECK(vkAllocateCommandBuffers(this->device, &CommandBufferAllocateInfo,
-                                       this->commandBuffers.data()));
-
     return VK_SUCCESS;
   }
 
@@ -731,8 +698,6 @@ struct Swapchain : public not_copyable {
     int64_t presentTimeNano;
     uint32_t imageIndex;
     VkImage image;
-    VkCommandBuffer commandBuffer;
-    std::shared_ptr<Semaphore> submitCompleteSemaphore;
   };
 
   AcquiredImage acquireNextImage(VkSemaphore imageAvailableSemaphore) {
@@ -750,20 +715,19 @@ struct Swapchain : public not_copyable {
         std::chrono::duration_cast<std::chrono::nanoseconds>(epoch_time)
             .count();
 
-    return {result,
-            epoch_time_nano,
-            imageIndex,
-            this->images[imageIndex],
-            this->commandBuffers[imageIndex],
-            this->submitCompleteSemaphores[imageIndex]};
+    return {
+        result,
+        epoch_time_nano,
+        imageIndex,
+        this->images[imageIndex],
+    };
   }
 
-  VkResult present(uint32_t imageIndex) {
+  VkResult present(uint32_t imageIndex, VkSemaphore submitSemaphore) {
     VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores =
-            &this->submitCompleteSemaphores[imageIndex]->semaphore,
+        .pWaitSemaphores = &submitSemaphore,
         // swapchain
         .swapchainCount = 1,
         .pSwapchains = &this->swapchain,
@@ -831,14 +795,16 @@ struct FlightManager {
   VkCommandPool pool = VK_NULL_HANDLE;
   std::vector<VkCommandBuffer> commandBuffers;
   std::vector<Flight> flights;
+  uint32_t frameCount = 0;
 
   std::list<VkSemaphore> acquireSemaphoresOwn;
   std::list<VkSemaphore> acquireSemaphoresReuse;
 
 public:
   FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
-                uint32_t imageCount)
-      : device(_device), commandBuffers(imageCount), flights(imageCount) {
+                uint32_t flightCount)
+      : device(_device), commandBuffers(flightCount), flights(flightCount) {
+    Logger::Info("frames in flight: %d\n", flightCount);
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
@@ -852,7 +818,7 @@ public:
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = this->pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = imageCount,
+        .commandBufferCount = flightCount,
     };
     VKO_CHECK(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
                                        this->commandBuffers.data()));
@@ -860,6 +826,7 @@ public:
     for (auto &flight : this->flights) {
       VkFenceCreateInfo fenceInfo = {
           .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
       };
       VKO_CHECK(vkCreateFence(this->device, &fenceInfo, nullptr,
                               &flight.submitFence));
@@ -909,9 +876,10 @@ public:
   }
 
   std::tuple<VkCommandBuffer, Flight, VkSemaphore>
-  blockAndReset(uint32_t imageIndex, VkSemaphore acquireSemaphore) {
+  blockAndReset(VkSemaphore acquireSemaphore) {
+    auto index = (this->frameCount++) % this->flights.size();
     // keep acquireSemaphore
-    auto &flight = this->flights[imageIndex];
+    auto &flight = this->flights[index];
     auto oldSemaphore = flight.acquireSemaphore;
     flight.acquireSemaphore = acquireSemaphore;
 
@@ -919,7 +887,7 @@ public:
     vkWaitForFences(this->device, 1, &flight.submitFence, true, UINT64_MAX);
     vkResetFences(this->device, 1, &flight.submitFence);
 
-    auto cmd = this->commandBuffers[imageIndex];
+    auto cmd = this->commandBuffers[index];
     vkResetCommandBuffer(cmd, 0);
 
     return {cmd, flight, oldSemaphore};

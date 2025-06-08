@@ -42,7 +42,14 @@ INFO:   [03] ___oo_o__
 INFO:   [04] ___oo__o_
 INFO:   [05] ___oo___o
 
+# Pixel3a
 I vko     : [Adreno (TM) 615] INTEGRATED_GPU
 I vko     :   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
 I vko     :   [00] ooo__o___
+
+# Quest3
+I vko     : [Adreno (TM) 740] INTEGRATED_GPU
+I vko     :   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+I vko     :   [00] oooooo__o
+I vko     :   [01] o___o____
 ```

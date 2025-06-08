@@ -70,7 +70,12 @@ int main(int argc, char **argv) {
   auto picked = instance.pickPhysicalDevice(_surface);
   vko::Surface surface(instance, _surface, picked.physicalDevice);
 
-  main_loop([&glfw]() { return glfw.nextFrame(); }, instance, surface, picked);
+  vko::Device device;
+  device.validationLayers = instance.validationLayers;
+  VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
+                          picked.presentFamilyIndex));
+
+  main_loop([&glfw]() { return glfw.nextFrame(); }, surface, picked, device);
 
   return 0;
 }

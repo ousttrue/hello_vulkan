@@ -145,25 +145,32 @@ int main(int argc, char **argv) {
     VkQueue graphicsQueue;
     vkGetDeviceQueue(device, picked.graphicsFamilyIndex, 0, &graphicsQueue);
 
-    vko::SemaphorePool semaphorePool(device);
+    std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
+        swapchain.images.size());
+    vko::FlightManager flightManager(device, picked.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
     //
     // main loop
     //
-    vko::Fence submitCompleteFence(device, true);
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
-      auto acquireSemaphore = semaphorePool.getOrCreateSemaphore();
+      auto acquireSemaphore = flightManager.getOrCreateSemaphore();
 
       auto acquired = swapchain.acquireNextImage(acquireSemaphore);
       VKO_CHECK(acquired.result);
 
+      auto [cmd, flight, oldSemaphore] =
+          flightManager.blockAndReset(acquireSemaphore);
+      if (oldSemaphore != VK_NULL_HANDLE) {
+        flightManager.reuseSemaphore(oldSemaphore);
+      }
+
       auto color =
           getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
 
-      clearImage(acquired.commandBuffer, color, acquired.image,
-                 picked.graphicsFamilyIndex);
+      clearImage(cmd, color, acquired.image, picked.graphicsFamilyIndex);
 
       VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
       VkSubmitInfo submitInfo = {
@@ -172,17 +179,15 @@ int main(int argc, char **argv) {
           .pWaitSemaphores = &acquireSemaphore,
           .pWaitDstStageMask = &waitDstStageMask,
           .commandBufferCount = 1,
-          .pCommandBuffers = &acquired.commandBuffer,
+          .pCommandBuffers = &cmd,
           .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &acquired.submitCompleteSemaphore->semaphore,
+          .pSignalSemaphores = &flight.submitSemaphore,
       };
 
-      submitCompleteFence.reset();
       VKO_CHECK(
-          vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
+          vkQueueSubmit(graphicsQueue, 1, &submitInfo, flight.submitFence));
 
-      submitCompleteFence.block();
-      VKO_CHECK(swapchain.present(acquired.imageIndex));
+      VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
     }
 
     vkDeviceWaitIdle(device);

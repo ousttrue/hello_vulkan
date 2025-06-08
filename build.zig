@@ -92,10 +92,10 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
-    const shaders_wf = b.addWriteFiles();
-    shaders_wf.step.dependOn(so.step);
-    _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
-    _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
+    // const shaders_wf = b.addWriteFiles();
+    // shaders_wf.step.dependOn(so.step);
+    // _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
+    // _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
 
     build_apk(
         b,
@@ -106,7 +106,7 @@ pub fn build(b: *std.Build) void {
             .apk_name = "vulfwk",
             .contents = .{
                 .android_manifest = b.path("samples/vulfwk/android/AndroidManifest.xml"),
-                .assets_directory = shaders_wf.getDirectory(),
+                // .assets_directory = shaders_wf.getDirectory(),
                 .appends = &.{
                     .{ .path = .{
                         .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),

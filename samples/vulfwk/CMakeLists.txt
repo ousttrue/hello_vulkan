@@ -4,11 +4,11 @@ set(TARGET_NAME vulfwk)
 
 if(ANDROID_NDK)
   add_library(${TARGET_NAME} SHARED android_main.cpp vulfwk_pipeline.cpp
-                                    main_loop.cpp)
+                                    main_loop.cpp glsl_to_spv.cpp)
   target_compile_definitions(${TARGET_NAME}
                              PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
   target_link_libraries(${TARGET_NAME} PRIVATE android_native_app_glue android
-                                               log vko)
+                                               log vko shaderc)
 else()
   add_executable(${TARGET_NAME} main.cpp vulfwk_pipeline.cpp main_loop.cpp
                                 glsl_to_spv.cpp)

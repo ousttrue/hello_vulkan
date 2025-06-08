@@ -48,7 +48,7 @@ void main_loop(const std::function<bool()> &runLoop,
       // All queue submissions get a fence that CPU will wait
       // on for synchronization purposes.
       auto [cmd, flight, oldSemaphore] =
-          flightManager.blockAndReset(acquired.imageIndex, acquireSemaphore);
+          flightManager.blockAndReset(acquireSemaphore);
       if (oldSemaphore != VK_NULL_HANDLE) {
         flightManager.reuseSemaphore(oldSemaphore);
       }

@@ -13,7 +13,14 @@ add_library(
 
 target_include_directories(vkr PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 
-target_link_libraries(
-  vkr
-  PRIVATE Vulkan::shaderc_combined common
-  PUBLIC Vulkan::Vulkan)
+if(ANDROID)
+  target_link_libraries(
+    vkr
+    PRIVATE shaderc common
+    PUBLIC Vulkan::Vulkan)
+else()
+  target_link_libraries(
+    vkr
+    PRIVATE Vulkan::shaderc_combined common
+    PUBLIC Vulkan::Vulkan)
+endif()

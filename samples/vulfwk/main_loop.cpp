@@ -3,74 +3,67 @@
 #include <assert.h>
 
 void main_loop(const std::function<bool()> &runLoop,
-               const vko::Instance &instance, const vko::Surface &surface,
-               vko::PhysicalDevice picked) {
-  vko::Device Device;
-  Device.validationLayers = instance.validationLayers;
-  VKO_CHECK(Device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
-                          picked.presentFamilyIndex));
+               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
+               const vko::Device &device) {
 
   auto Pipeline =
-      PipelineImpl::create(picked.physicalDevice, Device,
+      PipelineImpl::create(physicalDevice.physicalDevice, device,
                            surface.chooseSwapSurfaceFormat().format, nullptr);
   assert(Pipeline);
 
-  auto semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
+  vko::Swapchain swapchain(device);
+  swapchain.create(
+      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
+      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
+      physicalDevice.presentFamilyIndex);
 
-  auto SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> images(
+      swapchain.images.size());
 
-  auto _semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
-  std::shared_ptr<vko::Swapchain> Swapchain;
-  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> images;
+  // auto semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
+
+  // auto SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
+  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
+                                   swapchain.images.size());
+
+  // auto _semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
   while (runLoop()) {
-    if (!Swapchain) {
-      vkDeviceWaitIdle(Device);
-
-      Swapchain = std::make_shared<vko::Swapchain>(Device);
-      Swapchain->create(picked.physicalDevice, surface,
-                        surface.chooseSwapSurfaceFormat(),
-                        surface.chooseSwapPresentMode(),
-                        picked.graphicsFamilyIndex, picked.presentFamilyIndex);
-
-      images.clear();
-      images.resize(Swapchain->images.size());
-    }
-
-    auto semaphore = semaphorePool->getOrCreateSemaphore();
-    auto acquired = Swapchain->acquireNextImage(semaphore);
+    auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
 
     auto image = images[acquired.imageIndex];
     if (!image) {
       image = std::make_shared<vko::SwapchainFramebuffer>(
-          Device, acquired.image, Swapchain->createInfo.imageExtent,
-          Swapchain->createInfo.imageFormat, Pipeline->renderPass());
+          device, acquired.image, swapchain.createInfo.imageExtent,
+          swapchain.createInfo.imageFormat, Pipeline->renderPass());
       images[acquired.imageIndex] = image;
     }
 
-    Pipeline->draw(acquired.commandBuffer, acquired.imageIndex,
-                   image->framebuffer, Swapchain->createInfo.imageExtent);
+    auto [cmd, flight, oldSemaphore] =
+        flightManager.blockAndReset(acquireSemaphore);
+    if (oldSemaphore != VK_NULL_HANDLE) {
+      flightManager.reuseSemaphore(oldSemaphore);
+    }
+
+    Pipeline->draw(cmd, acquired.imageIndex, image->framebuffer,
+                   swapchain.createInfo.imageExtent);
 
     VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &semaphore,
+        .pWaitSemaphores = &acquireSemaphore,
         .pWaitDstStageMask = &waitDstStageMask,
         .commandBufferCount = 1,
-        .pCommandBuffers = &acquired.commandBuffer,
+        .pCommandBuffers = &cmd,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &acquired.submitCompleteSemaphore->semaphore,
+        .pSignalSemaphores = &flight.submitSemaphore,
     };
+    VKO_CHECK(vkQueueSubmit(device.graphicsQueue, 1, &submitInfo,
+                            flight.submitFence));
 
-    SubmitCompleteFence->reset();
-    VKO_CHECK(vkQueueSubmit(Device.graphicsQueue, 1, &submitInfo,
-                            *SubmitCompleteFence));
-
-    SubmitCompleteFence->block();
-    semaphorePool->returnSemaphore(semaphore);
-
-    VKO_CHECK(Swapchain->present(acquired.imageIndex));
+    VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 
-  vkDeviceWaitIdle(Device);
+  vkDeviceWaitIdle(device);
 }

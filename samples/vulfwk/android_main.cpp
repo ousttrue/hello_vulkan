@@ -33,27 +33,34 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
 
   vko::Surface surface(instance, _surface, picked.physicalDevice);
 
-  main_loop([userdata, state]() {
-    while (true) {
-      if (!userdata->_active) {
-        return false;
-      }
+  vko::Device device;
+  device.validationLayers = instance.validationLayers;
+  VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
+                          picked.presentFamilyIndex));
 
-      struct android_poll_source *source;
-      int events;
-      if (ALooper_pollOnce(
-              // timeout 0 for vulkan animation
-              0, nullptr, &events, (void **)&source) < 0) {
-        return true;
-      }
-      if (source) {
-        source->process(state, source);
-      }
-      if (state->destroyRequested) {
-        return false;
-      }
-    }
-  }, instance, surface, picked);
+  main_loop(
+      [userdata, state]() {
+        while (true) {
+          if (!userdata->_active) {
+            return false;
+          }
+
+          struct android_poll_source *source;
+          int events;
+          if (ALooper_pollOnce(
+                  // timeout 0 for vulkan animation
+                  0, nullptr, &events, (void **)&source) < 0) {
+            return true;
+          }
+          if (source) {
+            source->process(state, source);
+          }
+          if (state->destroyRequested) {
+            return false;
+          }
+        }
+      },
+      surface, picked, device);
 
   return true;
 
