@@ -486,7 +486,6 @@ class SemaphorePool {
 public:
   SemaphorePool(VkDevice _device) : device(_device) {}
   ~SemaphorePool() {
-    vkDeviceWaitIdle(this->device);
     for (auto &semaphore : this->owned) {
       vkDestroySemaphore(this->device, semaphore, nullptr);
     }
