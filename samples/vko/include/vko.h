@@ -1,6 +1,7 @@
 #pragma once
 #include <chrono>
 #include <climits>
+#include <list>
 #include <memory>
 #include <optional>
 #include <set>
@@ -460,6 +461,34 @@ struct Semaphore : public not_copyable {
         vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
   }
   ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
+};
+
+class SemaphorePool {
+  VkDevice _device = VK_NULL_HANDLE;
+  std::list<VkSemaphore> _owned;
+  std::list<VkSemaphore> _semaphores;
+
+public:
+  SemaphorePool(VkDevice device) : _device(device) {}
+  ~SemaphorePool() {
+    for (auto &semaphore : _semaphores) {
+      vkDestroySemaphore(_device, semaphore, nullptr);
+    }
+  }
+  VkSemaphore getOrCreateSemaphore() {
+    if (!_semaphores.empty()) {
+      auto semaphore = _semaphores.front();
+      _semaphores.pop_front();
+      return semaphore;
+    }
+    VkSemaphoreCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    VkSemaphore semaphore;
+    VK_CHECK(vkCreateSemaphore(_device, &info, nullptr, &semaphore));
+    return semaphore;
+  }
+  void addSemaphore(VkSemaphore semaphore) { _semaphores.push_back(semaphore); }
 };
 
 struct Surface : public not_copyable {

@@ -128,22 +128,24 @@ int main(int argc, char **argv) {
     //
     VkSurfaceKHR _surface;
     VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &_surface));
-    auto picked = instance.pickPhysicakDevice(_surface);
-    vko::Surface surface(instance, _surface, picked.physicalDevice);
+    auto picked = instance.pickPhysicalDevice(_surface);
+    vko::Surface surface(instance, _surface, picked._physicalDevice);
 
     vko::Device device;
     device._validationLayers = instance._validationLayers;
-    VK_CHECK(device.create(picked.physicalDevice, picked.graphicsFamily,
-                           picked.presentFamily));
+    VK_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
+                           picked._presentFamily));
 
     vko::Swapchain swapchain(device);
-    VK_CHECK(swapchain.create(picked.physicalDevice, surface._surface,
+    VK_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
                               surface.chooseSwapSurfaceFormat(),
                               surface.chooseSwapPresentMode(),
-                              picked.graphicsFamily, picked.presentFamily));
+                              picked._graphicsFamily, picked._presentFamily));
 
     VkQueue graphicsQueue;
-    vkGetDeviceQueue(device, picked.graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, picked._graphicsFamily, 0, &graphicsQueue);
+
+    vko::SemaphorePool semaphorePool(device);
 
     //
     // main loop
@@ -152,20 +154,22 @@ int main(int argc, char **argv) {
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
 
-      auto acquired = swapchain.acquireNextImage();
+      auto acquireSemaphore = semaphorePool.getOrCreateSemaphore();
+
+      auto acquired = swapchain.acquireNextImage(acquireSemaphore);
       VK_CHECK(acquired.result);
 
       auto color =
           getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
 
       clearImage(acquired.commandBuffer, color, acquired.image,
-                 picked.graphicsFamily);
+                 picked._graphicsFamily);
 
       VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
       VkSubmitInfo submitInfo = {
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &acquired.imageAvailableSemaphore->_semaphore,
+          .pWaitSemaphores = &acquireSemaphore,
           .pWaitDstStageMask = &waitDstStageMask,
           .commandBufferCount = 1,
           .pCommandBuffers = &acquired.commandBuffer,
@@ -178,8 +182,7 @@ int main(int argc, char **argv) {
           vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
 
       submitCompleteFence.block();
-      VK_CHECK(swapchain.present(acquired.imageIndex,
-                                 acquired.imageAvailableSemaphore));
+      VK_CHECK(swapchain.present(acquired.imageIndex));
     }
 
     vkDeviceWaitIdle(device);

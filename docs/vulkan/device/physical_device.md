@@ -31,3 +31,14 @@
     return false;
   }
 ```
+
+```sh
+INFO: [NVIDIA GeForce RTX 3060 Ti] DISCRETE_GPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] ooooo____
+INFO:   [01] ___oo____
+INFO:   [02] o_ooo____
+INFO:   [03] ___oo_o__
+INFO:   [04] ___oo__o_
+INFO:   [05] ___oo___o
+```
