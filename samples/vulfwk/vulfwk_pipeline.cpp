@@ -1,4 +1,6 @@
 #include "vulfwk_pipeline.h"
+#include "glsl_to_spv.h"
+#include <shaderc/shaderc.h>
 #include <vko/vko.h>
 
 #if ANDROID
@@ -76,19 +78,27 @@ PipelineImpl::~PipelineImpl() {
 
 std::shared_ptr<PipelineImpl>
 
-PipelineImpl::create(VkPhysicalDevice physicalDevice, 
-                     VkDevice device, VkFormat swapchainImageFormat,
-                     void *AssetManager) {
+PipelineImpl::create(VkPhysicalDevice physicalDevice, VkDevice device,
+                     VkFormat swapchainImageFormat, void *AssetManager) {
   auto renderPass = createRenderPass(device, swapchainImageFormat);
   if (renderPass == VK_NULL_HANDLE) {
     return {};
   }
 
-  auto vertShaderCode = readFile("shader.vert.spv", AssetManager);
+  auto vertShaderSrc = readFile("shader.vert", AssetManager);
+  if (vertShaderSrc.empty()) {
+    return {};
+  }
+  auto vertShaderCode = glsl_vs_to_spv(vertShaderSrc.data(), vertShaderSrc.size());
   if (vertShaderCode.empty()) {
     return {};
   }
-  auto fragShaderCode = readFile("shader.frag.spv", AssetManager);
+
+  auto fragShaderSrc = readFile("shader.frag", AssetManager);
+  if (fragShaderSrc.empty()) {
+    return {};
+  }
+  auto fragShaderCode = glsl_fs_to_spv(fragShaderSrc.data(), fragShaderSrc.size());
   if (fragShaderCode.empty()) {
     return {};
   }

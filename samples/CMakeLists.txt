@@ -3,6 +3,15 @@ set(BUILD_SHARED_LIBS OFF)
 set(GLFW_BUILD_EXAMPLES OFF)
 set(GLFW_BUILD_TESTS OFF)
 set(GLFW_BUILD_DOCS OFF)
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.3.8)
+FetchContent_MakeAvailable(glfw)
+
+# FetchContent_Declare( jsoncpp URL
+# https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.zip )
+# FetchContent_MakeAvailable(jsoncpp)
 
 FetchContent_Populate(
   glm URL https://github.com/g-truc/glm/archive/refs/tags/1.0.1.zip
@@ -28,7 +37,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(openxr)
 
 function(add_glsl TARGET SHADER)
-  find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Include/Bin)
+  find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})
   set(current-output-path ${CMAKE_CURRENT_BINARY_DIR}/${SHADER}.spv)
   add_custom_command(
@@ -81,30 +90,12 @@ if(ANDROID_NDK)
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
   subdirs(hellotriangle/cpp ovr_openxr_mobile_sdk)
 else()
-  set(TARGET_NAME vulkan)
-  add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
-  set_target_properties(
-    ${TARGET_NAME}
-    PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
-               IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/vulkan-1.lib)
-  subdirs(vulkan_tutorial)
-
-  set(TARGET_NAME shaderc)
-  add_library(${TARGET_NAME} STATIC IMPORTED GLOBAL)
-  set_target_properties(
-    ${TARGET_NAME}
-    PROPERTIES INTERFACE_INCLUDE_DIRECTORIES $ENV{VULKAN_SDK}/Include
-               IMPORTED_LOCATION $ENV{VULKAN_SDK}/Lib/shadercd.lib)
-  set_property(
-    TARGET ${TARGET_NAME}
-    PROPERTY INTERFACE_LINK_LIBRARIES
-             $ENV{VULKAN_SDK}/Lib/shaderc_utild.lib
-             $ENV{VULKAN_SDK}/Lib/SPIRV-Toolsd.lib
-             $ENV{VULKAN_SDK}/Lib/SPIRV-Tools-optd.lib
-             $ENV{VULKAN_SDK}/Lib/glslangd.lib)
+  find_package(Vulkan REQUIRED COMPONENTS glslang glslangValidator SPIRV-Tools
+                                          shaderc_combined)
 
   FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
   FetchContent_MakeAvailable(zlib)
 endif()
 
-subdirs(vulfwk hello_xr/cpp)
+subdirs(#
+        vulfwk hello_xr/cpp)

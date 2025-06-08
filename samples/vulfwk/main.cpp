@@ -1,4 +1,4 @@
-#include <vko.h>
+#include <vko/vko.h>
 
 #include "main_loop.h"
 

@@ -5,7 +5,7 @@
 #include <GLFW/glfw3.h>
 #endif
 
-#include <vko.h>
+#include <vko/vko.h>
 
 #include <chrono>
 #include <cmath>

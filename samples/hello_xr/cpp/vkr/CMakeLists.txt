@@ -15,5 +15,5 @@ target_include_directories(vkr PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
 
 target_link_libraries(
   vkr
-  PRIVATE shaderc common
-  PUBLIC vulkan)
+  PRIVATE Vulkan::shaderc_combined common
+  PUBLIC Vulkan::Vulkan)
