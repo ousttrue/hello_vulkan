@@ -7,7 +7,7 @@ static std::vector<char> readFile(const char *filePath, void *p) {
   auto manager = reinterpret_cast<AAssetManager *>(p);
   AAsset *asset = AAssetManager_open(manager, filePath, AASSET_MODE_BUFFER);
   if (!asset) {
-    LOGE("failed to AAssetManager_open: %s", filePath);
+    vko::Logger::Error("failed to AAssetManager_open: %s", filePath);
     return {};
   }
 
@@ -24,7 +24,7 @@ static std::vector<char> readFile(const char *filePath, void *p) {
 static std::vector<char> readFile(const char *filename, void *) {
   std::ifstream file(filename, std::ios::ate | std::ios::binary);
   if (!file.is_open()) {
-    LOGE("failed to open: %s", filename);
+    vko::Logger::Error("failed to open: %s", filename);
     return {};
   }
 
@@ -49,7 +49,7 @@ static VkShaderModule createShaderModule(VkDevice device,
   VkShaderModule shaderModule;
   if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
       VK_SUCCESS) {
-    LOGE("failed to create shader module!");
+    vko::Logger::Error("failed to create shader module!");
     return VK_NULL_HANDLE;
   }
 
@@ -184,7 +184,7 @@ PipelineImpl::create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
   VkPipelineLayout pipelineLayout;
   if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
                              &pipelineLayout) != VK_SUCCESS) {
-    LOGE("failed to create pipeline layout!");
+    vko::Logger::Error("failed to create pipeline layout!");
     return {};
   }
 
@@ -207,7 +207,7 @@ PipelineImpl::create(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
   VkPipeline graphicsPipeline;
   if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
                                 nullptr, &graphicsPipeline) != VK_SUCCESS) {
-    LOGE("failed to create graphics pipeline!");
+    vko::Logger::Error("failed to create graphics pipeline!");
     return {};
   }
 
@@ -261,7 +261,7 @@ VkRenderPass PipelineImpl::createRenderPass(VkDevice device,
   VkRenderPass renderPass;
   if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
       VK_SUCCESS) {
-    LOGE("failed to create render pass!");
+    vko::Logger::Error("failed to create render pass!");
     return {};
   }
 
@@ -283,7 +283,7 @@ bool PipelineImpl::recordCommandBuffer(VkCommandBuffer commandBuffer,
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
   if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-    LOGE("failed to begin recording command buffer!");
+    vko::Logger::Error("failed to begin recording command buffer!");
     return false;
   }
 
@@ -322,7 +322,7 @@ bool PipelineImpl::recordCommandBuffer(VkCommandBuffer commandBuffer,
   vkCmdEndRenderPass(commandBuffer);
 
   if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-    LOGE("failed to record command buffer!");
+    vko::Logger::Error("failed to record command buffer!");
     return false;
   }
 

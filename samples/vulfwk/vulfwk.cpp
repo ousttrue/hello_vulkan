@@ -5,11 +5,11 @@
 VulkanFramework::VulkanFramework(const char *appName, const char *engineName) {
   _appName = appName;
   _engineName = engineName;
-  LOGI("*** VulkanFramewor::VulkanFramework ***");
+  vko::Logger::Info("*** VulkanFramewor::VulkanFramework ***");
 }
 
 VulkanFramework::~VulkanFramework() {
-  LOGI("*** VulkanFramewor::~VulkanFramework ***");
+  vko::Logger::Info("*** VulkanFramewor::~VulkanFramework ***");
   vkDeviceWaitIdle(Device);
 }
 
@@ -21,7 +21,7 @@ bool VulkanFramework::initializeInstance(
   Instance._appInfo.pApplicationName = _appName.c_str();
   Instance._appInfo.pEngineName = _engineName.c_str();
   if (Instance.create() != VK_SUCCESS) {
-    LOGE("failed to create instance!");
+    vko::Logger::Error("failed to create instance!");
     return false;
   }
   return true;
@@ -37,7 +37,7 @@ bool VulkanFramework::initializeDevice(
                                            _picked._physicalDevice);
 
   Device._validationLayers = Instance._validationLayers;
-  VK_CHECK(Device.create(_picked._physicalDevice, _picked._graphicsFamily,
+  VKO_CHECK(Device.create(_picked._physicalDevice, _picked._graphicsFamily,
                          _picked._presentFamily));
 
   Pipeline = PipelineImpl::create(_picked._physicalDevice, surface, Device,
@@ -46,6 +46,8 @@ bool VulkanFramework::initializeDevice(
   if (!Pipeline) {
     return false;
   }
+
+  _semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
 
   SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
   vkGetDeviceQueue(Device, _picked._graphicsFamily, 0, &_graphicsQueue);
@@ -68,7 +70,7 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
     _images.resize(Swapchain->_images.size());
   }
 
-  VkSemaphore semaphore;
+  auto semaphore = _semaphorePool->getOrCreateSemaphore();
   auto acquired = Swapchain->acquireNextImage(semaphore);
 
   auto image = _images[acquired.imageIndex];
@@ -95,10 +97,12 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
   };
 
   SubmitCompleteFence->reset();
-  VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, *SubmitCompleteFence));
+  VKO_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, *SubmitCompleteFence));
 
   SubmitCompleteFence->block();
-  VK_CHECK(Swapchain->present(acquired.imageIndex));
+  _semaphorePool->returnSemaphore(semaphore);
+
+  VKO_CHECK(Swapchain->present(acquired.imageIndex));
 
   return true;
 }

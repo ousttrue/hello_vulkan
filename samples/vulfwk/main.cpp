@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 #ifndef NDEBUG
-  LOGI("[debug build]");
+  vko::Logger::Info("[debug build]");
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");
   instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
   }
 
   VkSurfaceKHR surface;
-  VK_CHECK(glfwCreateWindowSurface(vulfwk.Instance, glfw._window, nullptr,
+  VKO_CHECK(glfwCreateWindowSurface(vulfwk.Instance, glfw._window, nullptr,
                                    &surface));
 
   if (!vulfwk.initializeDevice(validationLayers, deviceExtensions, surface)) {

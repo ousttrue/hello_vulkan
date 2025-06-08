@@ -10,60 +10,66 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-#ifdef ANDROID
-#include <android/log.h>
-inline void LOGI(const char *fmt, ...) {
-  va_list arg;
-  va_start(arg, fmt);
-  __android_log_vprint(ANDROID_LOG_INFO, "vko", fmt, arg);
-  va_end(arg);
-}
-inline void LOGE(const char *fmt, ...) {
-  va_list arg;
-  va_start(arg, fmt);
-  __android_log_vprint(ANDROID_LOG_ERROR, "vko", fmt, arg);
-  va_end(arg);
-}
-#else
-#include <stdarg.h>
-inline void LOGE(const char *_fmt, ...) {
-  va_list arg;
-  va_start(arg, _fmt);
-  auto fmt = (std::string("ERROR: ") + _fmt);
-  if (!fmt.ends_with('\n')) {
-    fmt += '\n';
-  }
-  vfprintf(stderr, fmt.c_str(), arg);
-  va_end(arg);
-}
-inline void LOGI(const char *_fmt, ...) {
-  va_list arg;
-  va_start(arg, _fmt);
-  auto fmt = (std::string("INFO: ") + _fmt);
-  if (!fmt.ends_with('\n')) {
-    fmt += '\n';
-  }
-  vfprintf(stderr, fmt.c_str(), arg);
-  va_end(arg);
-}
-#endif
-
 /// @brief Helper macro to test the result of Vulkan calls which can return an
 /// error.
-#ifndef VK_CHECK
-#define VK_CHECK(x)                                                            \
+#ifndef VKO_CHECK
+#define VKO_CHECK(x)                                                           \
   do {                                                                         \
     VkResult err = x;                                                          \
     if (err) {                                                                 \
-      LOGE("Detected Vulkan error %d at %s:%d.\n", int(err), __FILE__,         \
-           __LINE__);                                                          \
+      vko::Logger::Error("Detected Vulkan error %d at %s:%d.\n", int(err),     \
+                         __FILE__, __LINE__);                                  \
       abort();                                                                 \
     }                                                                          \
   } while (0)
 #endif
 
+#ifdef ANDROID
+#include <android/log.h>
+#else
+#include <stdarg.h>
+#endif
+
 // vk object sunawati vko
 namespace vko {
+
+struct Logger {
+#ifdef ANDROID
+  static void Info(const char *fmt, ...) {
+    va_list arg;
+    va_start(arg, fmt);
+    __android_log_vprint(ANDROID_LOG_INFO, "vko", fmt, arg);
+    va_end(arg);
+  }
+  static void Error(const char *fmt, ...) {
+    va_list arg;
+    va_start(arg, fmt);
+    __android_log_vprint(ANDROID_LOG_ERROR, "vko", fmt, arg);
+    va_end(arg);
+  }
+#else
+  static void Info(const char *_fmt, ...) {
+    va_list arg;
+    va_start(arg, _fmt);
+    auto fmt = (std::string("INFO: ") + _fmt);
+    if (!fmt.ends_with('\n')) {
+      fmt += '\n';
+    }
+    vfprintf(stderr, fmt.c_str(), arg);
+    va_end(arg);
+  }
+  static void Error(const char *_fmt, ...) {
+    va_list arg;
+    va_start(arg, _fmt);
+    auto fmt = (std::string("ERROR: ") + _fmt);
+    if (!fmt.ends_with('\n')) {
+      fmt += '\n';
+    }
+    vfprintf(stderr, fmt.c_str(), arg);
+    va_end(arg);
+  }
+#endif
+};
 
 struct not_copyable {
   not_copyable() = default;
@@ -146,20 +152,22 @@ struct PhysicalDevice {
   }
 
   void debugPrint(VkSurfaceKHR surface) {
-    LOGI("[%s] %s", _properties.deviceName,
-         deviceTypeStr(_properties.deviceType));
-    LOGI("  queue info: "
-         "present,graphics,compute,transfer,sparse,protected,video_de,video_en,"
-         "optical"
+    Logger::Info("[%s] %s", _properties.deviceName,
+                 deviceTypeStr(_properties.deviceType));
+    Logger::Info(
+        "  queue info: "
+        "present,graphics,compute,transfer,sparse,protected,video_de,video_en,"
+        "optical"
 
     );
     for (int i = 0; i < _queueFamilyProperties.size(); ++i) {
       VkBool32 presentSupport = false;
       vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
                                            &presentSupport);
-      LOGI("  [%02d] %s%s", i, (presentSupport ? "o" : "_"),
-           queueFlagBitsStr(_queueFamilyProperties[i].queueFlags, "o", "_")
-               .c_str());
+      Logger::Info(
+          "  [%02d] %s%s", i, (presentSupport ? "o" : "_"),
+          queueFlagBitsStr(_queueFamilyProperties[i].queueFlags, "o", "_")
+              .c_str());
     }
   }
 
@@ -219,8 +227,8 @@ struct Instance : public not_copyable {
              void *user_data) {
             if (message_severity >=
                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-              LOGE("%s %s\n", callback_data->pMessageIdName,
-                   callback_data->pMessage);
+              Logger::Error("%s %s\n", callback_data->pMessageIdName,
+                            callback_data->pMessage);
             }
             return VK_FALSE;
           },
@@ -272,14 +280,14 @@ struct Instance : public not_copyable {
   VkResult create() {
     if (_validationLayers.size() > 0) {
       for (auto name : _validationLayers) {
-        LOGI("instance layer: %s\n", name);
+        Logger::Info("instance layer: %s\n", name);
       }
       _createInfo.enabledLayerCount = _validationLayers.size();
       _createInfo.ppEnabledLayerNames = _validationLayers.data();
     }
     if (_instanceExtensions.size() > 0) {
       for (auto name : _instanceExtensions) {
-        LOGI("instance extension: %s\n", name);
+        Logger::Info("instance extension: %s\n", name);
         if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
           _createInfo.pNext = &_debug_messenger_create_info;
         }
@@ -296,18 +304,18 @@ struct Instance : public not_copyable {
       //   app.apiVersion = VK_MAKE_VERSION(1, 0, 1);
       //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
       //   if (res == VK_SUCCESS) {
-      //     LOGI("Created Vulkan instance with API version 1.0.1.\n");
+      //     Logger::Info("Created Vulkan instance with API version 1.0.1.\n");
       //   }
       // }
       // if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
       //   app.apiVersion = VK_MAKE_VERSION(1, 0, 2);
       //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
       //   if (res == VK_SUCCESS)
-      //     LOGI("Created Vulkan instance with API version 1.0.2.\n");
+      //     Logger::Info("Created Vulkan instance with API version 1.0.2.\n");
       // }
       // if (res != VK_SUCCESS) {
-      //   LOGE("Failed to create Vulkan instance (error: %d).\n", int(res));
-      //   return {};
+      //   Logger::Error("Failed to create Vulkan instance (error: %d).\n",
+      //   int(res)); return {};
       // }
       return result;
     }
@@ -315,7 +323,7 @@ struct Instance : public not_copyable {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
     if (deviceCount == 0) {
-      LOGE("no physical device\n");
+      Logger::Error("no physical device\n");
     } else {
       std::vector<VkPhysicalDevice> devices(deviceCount);
       vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
@@ -380,14 +388,14 @@ struct Device : public not_copyable {
                   uint32_t present) {
     if (_validationLayers.size() > 0) {
       for (auto name : _validationLayers) {
-        LOGI("device layer: %s\n", name);
+        Logger::Info("device layer: %s\n", name);
       }
       _createInfo.enabledLayerCount = _validationLayers.size();
       _createInfo.ppEnabledLayerNames = _validationLayers.data();
     }
     if (_deviceExtensions.size() > 0) {
       for (auto name : _deviceExtensions) {
-        LOGI("device extension: %s\n", name);
+        Logger::Info("device extension: %s\n", name);
       }
       _createInfo.enabledExtensionCount = _deviceExtensions.size();
       _createInfo.ppEnabledExtensionNames = _deviceExtensions.data();
@@ -433,7 +441,7 @@ struct Fence : public not_copyable {
     if (signaled) {
       fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     }
-    VK_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
+    VKO_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
   }
   ~Fence() {
     if (_fence != VK_NULL_HANDLE) {
@@ -443,7 +451,7 @@ struct Fence : public not_copyable {
   void reset() { vkResetFences(_device, 1, &_fence); }
 
   void block() {
-    VK_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
+    VKO_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
   }
 };
 
@@ -457,7 +465,7 @@ struct Semaphore : public not_copyable {
         .pNext = nullptr,
         .flags = 0,
     };
-    VK_CHECK(
+    VKO_CHECK(
         vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
   }
   ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
@@ -471,7 +479,8 @@ class SemaphorePool {
 public:
   SemaphorePool(VkDevice device) : _device(device) {}
   ~SemaphorePool() {
-    for (auto &semaphore : _semaphores) {
+    vkDeviceWaitIdle(_device);
+    for (auto &semaphore : _owned) {
       vkDestroySemaphore(_device, semaphore, nullptr);
     }
   }
@@ -485,10 +494,13 @@ public:
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
     VkSemaphore semaphore;
-    VK_CHECK(vkCreateSemaphore(_device, &info, nullptr, &semaphore));
+    VKO_CHECK(vkCreateSemaphore(_device, &info, nullptr, &semaphore));
+    _owned.push_back(semaphore);
     return semaphore;
   }
-  void addSemaphore(VkSemaphore semaphore) { _semaphores.push_back(semaphore); }
+  void returnSemaphore(VkSemaphore semaphore) {
+    _semaphores.push_back(semaphore);
+  }
 };
 
 struct Surface : public not_copyable {
@@ -663,7 +675,7 @@ struct Swapchain : public not_copyable {
 
     uint32_t imageCount;
     vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, nullptr);
-    LOGI("swapchain images: %d\n", imageCount);
+    Logger::Info("swapchain images: %d\n", imageCount);
     if (imageCount > 0) {
       _images.resize(imageCount);
       vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, _images.data());
@@ -680,8 +692,8 @@ struct Swapchain : public not_copyable {
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = graphicsFamily,
     };
-    VK_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
-                                 &_commandPool));
+    VKO_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
+                                  &_commandPool));
 
     _commandBuffers.resize(imageCount);
     VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
@@ -691,8 +703,8 @@ struct Swapchain : public not_copyable {
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = static_cast<uint32_t>(_commandBuffers.size()),
     };
-    VK_CHECK(vkAllocateCommandBuffers(_device, &CommandBufferAllocateInfo,
-                                      _commandBuffers.data()));
+    VKO_CHECK(vkAllocateCommandBuffers(_device, &CommandBufferAllocateInfo,
+                                       _commandBuffers.data()));
 
     return VK_SUCCESS;
   }
@@ -771,14 +783,14 @@ struct SwapchainFramebuffer {
       : _device(device) {
     _createInfo.image = image;
     _createInfo.format = format;
-    VK_CHECK(vkCreateImageView(device, &_createInfo, nullptr, &_imageView));
+    VKO_CHECK(vkCreateImageView(device, &_createInfo, nullptr, &_imageView));
 
     _framebufferInfo.pAttachments = &_imageView;
     _framebufferInfo.attachmentCount = 1;
     _framebufferInfo.renderPass = renderPass;
     _framebufferInfo.width = extent.width;
     _framebufferInfo.height = extent.height;
-    VK_CHECK(
+    VKO_CHECK(
         vkCreateFramebuffer(device, &_framebufferInfo, nullptr, &_framebuffer));
   }
 

@@ -12,6 +12,7 @@ public:
   vko::Device Device;
   std::shared_ptr<vko::Surface> Surface;
   std::shared_ptr<vko::Swapchain> Swapchain;
+  std::shared_ptr<vko::SemaphorePool> _semaphorePool;
   VkQueue _graphicsQueue = VK_NULL_HANDLE;
   std::shared_ptr<vko::Fence> SubmitCompleteFence;
 

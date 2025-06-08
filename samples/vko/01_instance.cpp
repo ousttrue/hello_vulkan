@@ -22,7 +22,7 @@ static void clearImage(VkCommandBuffer commandBuffer,
       .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
       .pInheritanceInfo = nullptr,
   };
-  VK_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
+  VKO_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
 
   VkImageSubresourceRange subResourceRange = {
       .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -73,7 +73,7 @@ static void clearImage(VkCommandBuffer commandBuffer,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &clearToPresentBarrier);
 
-  VK_CHECK(vkEndCommandBuffer(commandBuffer));
+  VKO_CHECK(vkEndCommandBuffer(commandBuffer));
 }
 
 VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
@@ -92,7 +92,7 @@ VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
 // https://github.com/ocornut/imgui/blob/master/examples/example_glfw_vulkan/main.cpp
 int main(int argc, char **argv) {
   glfwSetErrorCallback([](int error, const char *description) {
-    LOGE("GLFW Error %d: %s\n", error, description);
+    vko::Logger::Error("GLFW Error %d: %s\n", error, description);
   });
   if (!glfwInit()) {
     return 1;
@@ -121,23 +121,23 @@ int main(int argc, char **argv) {
     instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
     instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
-    VK_CHECK(instance.create());
+    VKO_CHECK(instance.create());
 
     //
     // vulkan device with glfw surface
     //
     VkSurfaceKHR _surface;
-    VK_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &_surface));
+    VKO_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &_surface));
     auto picked = instance.pickPhysicalDevice(_surface);
     vko::Surface surface(instance, _surface, picked._physicalDevice);
 
     vko::Device device;
     device._validationLayers = instance._validationLayers;
-    VK_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
+    VKO_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
                            picked._presentFamily));
 
     vko::Swapchain swapchain(device);
-    VK_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
+    VKO_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
                               surface.chooseSwapSurfaceFormat(),
                               surface.chooseSwapPresentMode(),
                               picked._graphicsFamily, picked._presentFamily));
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
       auto acquireSemaphore = semaphorePool.getOrCreateSemaphore();
 
       auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-      VK_CHECK(acquired.result);
+      VKO_CHECK(acquired.result);
 
       auto color =
           getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
@@ -178,11 +178,11 @@ int main(int argc, char **argv) {
       };
 
       submitCompleteFence.reset();
-      VK_CHECK(
+      VKO_CHECK(
           vkQueueSubmit(graphicsQueue, 1, &submitInfo, submitCompleteFence));
 
       submitCompleteFence.block();
-      VK_CHECK(swapchain.present(acquired.imageIndex));
+      VKO_CHECK(swapchain.present(acquired.imageIndex));
     }
 
     vkDeviceWaitIdle(device);
