@@ -23,7 +23,7 @@ public:
       VkSemaphore semaphore;
       if (vkCreateSemaphore(_device, &info, nullptr, &semaphore) !=
           VK_SUCCESS) {
-        LOGE("vkCreateSemaphore");
+        vko::Logger::Error("vkCreateSemaphore");
         abort();
       }
       return semaphore;
@@ -61,7 +61,7 @@ public:
         .queueFamilyIndex = graphicsQueueIndex,
     };
     if (vkCreateCommandPool(_device, &info, nullptr, &_pool) != VK_SUCCESS) {
-      LOGE("vkCreateCommandPool");
+      vko::Logger::Error("vkCreateCommandPool");
       abort();
     }
 
@@ -70,7 +70,7 @@ public:
     };
     if (vkCreateFence(_device, &fenceInfo, nullptr, &_submitFence) !=
         VK_SUCCESS) {
-      LOGE("vkCreateFence");
+      vko::Logger::Error("vkCreateFence");
       abort();
     };
 
@@ -78,7 +78,7 @@ public:
         VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     if (vkCreateSemaphore(_device, &semaphoreInfo, nullptr,
                           &_submitSemaphore) != VK_SUCCESS) {
-      LOGE("vkCreateSemaphore");
+      vko::Logger::Error("vkCreateSemaphore");
       abort();
     }
   }
@@ -102,7 +102,7 @@ public:
     vkResetCommandPool(_device, _pool, 0);
 
     if (_commandCount >= _buffers.size()) {
-      LOGI("** vkAllocateCommandBuffers(%d) **", _commandCount);
+      vko::Logger::Info("** vkAllocateCommandBuffers(%d) **", _commandCount);
       VkCommandBufferAllocateInfo info = {
           .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
           .commandPool = _pool,
@@ -111,7 +111,7 @@ public:
       };
       VkCommandBuffer ret = VK_NULL_HANDLE;
       if (vkAllocateCommandBuffers(_device, &info, &ret) != VK_SUCCESS) {
-        LOGE("vkAllocateCommandBuffers");
+        vko::Logger::Error("vkAllocateCommandBuffers");
         abort();
       }
       _buffers.push_back(ret);
@@ -127,25 +127,25 @@ public:
 static double getCurrentTime() {
   timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
-    LOGE("clock_gettime() failed.\n");
+    vko::Logger::Error("clock_gettime() failed.\n");
     return 0.0;
   }
   return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
 static bool main_loop(android_app *state, UserData *userdata) {
-  LOGI("## main_loop");
+  vko::Logger::Info("## main_loop");
   vko::Instance instance;
-  instance._appInfo.pApplicationName = "Mali SDK";
-  instance._appInfo.pEngineName = "Mali SDK";
-  instance._instanceExtensions = {"VK_KHR_surface", "VK_KHR_android_surface"};
+  instance.appInfo.pApplicationName = "Mali SDK";
+  instance.appInfo.pEngineName = "Mali SDK";
+  instance.instanceExtensions = {"VK_KHR_surface", "VK_KHR_android_surface"};
 #ifdef NDEBUG
 #else
-  instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-  instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-  instance._instanceExtensions.push_back("VK_EXT_debug_report");
+  instance.validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+  instance.instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  instance.instanceExtensions.push_back("VK_EXT_debug_report");
 #endif
-  VK_CHECK(instance.create());
+  VKO_CHECK(instance.create());
 
   VkAndroidSurfaceCreateInfoKHR info = {
       .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
@@ -153,37 +153,37 @@ static bool main_loop(android_app *state, UserData *userdata) {
       .window = state->window,
   };
   VkSurfaceKHR _surface;
-  VK_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
+  VKO_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
 
   vko::PhysicalDevice picked = instance.pickPhysicalDevice(_surface);
-  assert(picked._physicalDevice);
+  assert(picked.physicalDevice);
 
-  vko::Surface surface(instance, _surface, picked._physicalDevice);
+  vko::Surface surface(instance, _surface, picked.physicalDevice);
 
   vko::Device device;
-  device._validationLayers = instance._validationLayers;
-  VK_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
-                         picked._presentFamily));
+  device.validationLayers = instance.validationLayers;
+  VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
+                          picked.presentFamilyIndex));
 
   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
-      picked._physicalDevice, device, surface.chooseSwapSurfaceFormat().format,
+      picked.physicalDevice, device, surface.chooseSwapSurfaceFormat().format,
       state->activity->assetManager);
 
   vko::Swapchain swapchain(device);
-  VK_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
-                            surface.chooseSwapSurfaceFormat(),
-                            surface.chooseSwapPresentMode(),
-                            picked._graphicsFamily, picked._presentFamily));
+  VKO_CHECK(swapchain.create(
+      picked.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
+      surface.chooseSwapPresentMode(), picked.graphicsFamilyIndex,
+      picked.presentFamilyIndex));
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers;
   std::vector<std::shared_ptr<FlightManager>> flights;
   {
-    auto imageCount = swapchain._images.size();
+    auto imageCount = swapchain.images.size();
     backbuffers.resize(imageCount);
     flights.resize(imageCount);
     for (int i = 0; i < imageCount; ++i) {
       backbuffers[i] = nullptr;
       flights[i] = std::make_shared<FlightManager>(
-          device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, picked._graphicsFamily);
+          device, VK_COMMAND_BUFFER_LEVEL_PRIMARY, picked.graphicsFamilyIndex);
     }
   }
 
@@ -214,21 +214,13 @@ static bool main_loop(android_app *state, UserData *userdata) {
       }
     }
 
-    // if (!swapchain) {
-    //   swapchain = SwapchainManager::create(
-    //       picked._physicalDevice, surface->_surface, device,
-    //       picked._graphicsFamily, picked._presentFamily,
-    //       pipeline->renderPass(), nullptr);
-    //   assert(swapchain);
-    // }
-
     auto acquireSemaphore = semaphoreManager->getClearedSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
     if (acquired.result == VK_SUCCESS) {
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
         backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
-            device, acquired.image, swapchain._createInfo.imageExtent,
+            device, acquired.image, swapchain.createInfo.imageExtent,
             surface.chooseSwapSurfaceFormat().format, pipeline->renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
       }
@@ -255,8 +247,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
       if (oldSemaphore != VK_NULL_HANDLE) {
         semaphoreManager->addClearedSemaphore(oldSemaphore);
       }
-      pipeline->render(cmd, backbuffer->_framebuffer,
-                       swapchain._createInfo.imageExtent);
+      pipeline->render(cmd, backbuffer->framebuffer,
+                       swapchain.createInfo.imageExtent);
 
       const VkPipelineStageFlags waitStage =
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -271,8 +263,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
           .signalSemaphoreCount = 1,
           .pSignalSemaphores = &semaphore,
       };
-      if (vkQueueSubmit(device._graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
-        LOGE("vkQueueSubmit");
+      if (vkQueueSubmit(device.graphicsQueue, 1, &info, fence) != VK_SUCCESS) {
+        vko::Logger::Error("vkQueueSubmit");
         abort();
       }
 
@@ -281,16 +273,16 @@ static bool main_loop(android_app *state, UserData *userdata) {
           .waitSemaphoreCount = 1,
           .pWaitSemaphores = &semaphore,
           .swapchainCount = 1,
-          .pSwapchains = &swapchain._swapchain,
+          .pSwapchains = &swapchain.swapchain,
           .pImageIndices = &acquired.imageIndex,
           .pResults = nullptr,
       };
-      VK_CHECK(vkQueuePresentKHR(device._presentQueue, &present));
+      VKO_CHECK(vkQueuePresentKHR(device.presentQueue, &present));
 
     } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
                acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
-      LOGE("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-      vkQueueWaitIdle(device._presentQueue);
+      vko::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+      vkQueueWaitIdle(device.presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
       // TODO:
       // swapchain = {};
@@ -298,8 +290,8 @@ static bool main_loop(android_app *state, UserData *userdata) {
 
     } else {
       // error ?
-      LOGE("Unrecoverable swapchain error.\n");
-      vkQueueWaitIdle(device._presentQueue);
+      vko::Logger::Error("Unrecoverable swapchain error.\n");
+      vkQueueWaitIdle(device.presentQueue);
       semaphoreManager->addClearedSemaphore(acquireSemaphore);
       return true;
     }
@@ -307,7 +299,7 @@ static bool main_loop(android_app *state, UserData *userdata) {
     frameCount++;
     if (frameCount == 100) {
       double endTime = getCurrentTime();
-      LOGI("FPS: %.3f\n", frameCount / (endTime - startTime));
+      vko::Logger::Info("FPS: %.3f\n", frameCount / (endTime - startTime));
       frameCount = 0;
       startTime = endTime;
     }

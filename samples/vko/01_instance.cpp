@@ -115,11 +115,11 @@ int main(int argc, char **argv) {
     uint32_t extensions_count = 0;
     auto glfw_extensions = glfwGetRequiredInstanceExtensions(&extensions_count);
     for (uint32_t i = 0; i < extensions_count; i++) {
-      instance._instanceExtensions.push_back(glfw_extensions[i]);
+      instance.instanceExtensions.push_back(glfw_extensions[i]);
     }
 #ifndef NDEBUG
-    instance._validationLayers.push_back("VK_LAYER_KHRONOS_validation");
-    instance._instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    instance.validationLayers.push_back("VK_LAYER_KHRONOS_validation");
+    instance.instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
     VKO_CHECK(instance.create());
 
@@ -129,21 +129,21 @@ int main(int argc, char **argv) {
     VkSurfaceKHR _surface;
     VKO_CHECK(glfwCreateWindowSurface(instance, window, nullptr, &_surface));
     auto picked = instance.pickPhysicalDevice(_surface);
-    vko::Surface surface(instance, _surface, picked._physicalDevice);
+    vko::Surface surface(instance, _surface, picked.physicalDevice);
 
     vko::Device device;
-    device._validationLayers = instance._validationLayers;
-    VKO_CHECK(device.create(picked._physicalDevice, picked._graphicsFamily,
-                           picked._presentFamily));
+    device.validationLayers = instance.validationLayers;
+    VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
+                            picked.presentFamilyIndex));
 
     vko::Swapchain swapchain(device);
-    VKO_CHECK(swapchain.create(picked._physicalDevice, surface._surface,
-                              surface.chooseSwapSurfaceFormat(),
-                              surface.chooseSwapPresentMode(),
-                              picked._graphicsFamily, picked._presentFamily));
+    VKO_CHECK(swapchain.create(
+        picked.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
+        surface.chooseSwapPresentMode(), picked.graphicsFamilyIndex,
+        picked.presentFamilyIndex));
 
     VkQueue graphicsQueue;
-    vkGetDeviceQueue(device, picked._graphicsFamily, 0, &graphicsQueue);
+    vkGetDeviceQueue(device, picked.graphicsFamilyIndex, 0, &graphicsQueue);
 
     vko::SemaphorePool semaphorePool(device);
 
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
           getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
 
       clearImage(acquired.commandBuffer, color, acquired.image,
-                 picked._graphicsFamily);
+                 picked.graphicsFamilyIndex);
 
       VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
       VkSubmitInfo submitInfo = {
@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
           .commandBufferCount = 1,
           .pCommandBuffers = &acquired.commandBuffer,
           .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &acquired.submitCompleteSemaphore->_semaphore,
+          .pSignalSemaphores = &acquired.submitCompleteSemaphore->semaphore,
       };
 
       submitCompleteFence.reset();

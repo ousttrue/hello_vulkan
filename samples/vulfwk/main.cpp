@@ -15,19 +15,19 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
 
   switch (cmd) {
   case APP_CMD_RESUME: {
-    LOGI("Resuming swapchain!\n");
+    vko::Logger::Info("Resuming swapchain!\n");
     userData->active = true;
     break;
   }
 
   case APP_CMD_PAUSE: {
-    LOGI("Pausing swapchain!\n");
+    vko::Logger::Info("Pausing swapchain!\n");
     userData->active = false;
     break;
   }
 
   case APP_CMD_INIT_WINDOW: {
-    LOGI("Initializing platform!\n");
+    vko::Logger::Info("Initializing platform!\n");
     auto vulfwk = userData->impl;
 
     std::vector<const char *> validationLayers;
@@ -41,7 +41,7 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
     instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
     if (!vulfwk->initializeInstance(validationLayers, instanceExtensions)) {
-      LOGE("failed: initializeInstance");
+      vko::Logger::Error("failed: initializeInstance");
       return;
     }
 
@@ -53,16 +53,16 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
     VkSurfaceKHR surface;
     if (vkCreateAndroidSurfaceKHR(vulfwk->Instance, &info, nullptr, &surface) !=
         VK_SUCCESS) {
-      LOGE("failed: vkCreateAndroidSurfaceKHR");
+      vko::Logger::Error("failed: vkCreateAndroidSurfaceKHR");
       return;
     }
 
     if (!vulfwk->initializeDevice(validationLayers, deviceExtensions,
                                   surface)) {
-      LOGE("failed: initializeDevice");
+      vko::Logger::Error("failed: initializeDevice");
       return;
     }
-    LOGI("vulkan initilized");
+    vko::Logger::Info("vulkan initilized");
     auto width = ANativeWindow_getWidth(pApp->window);
     auto height = ANativeWindow_getHeight(pApp->window);
     vulfwk->drawFrame(width, height);
@@ -71,7 +71,7 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
   }
 
   case APP_CMD_TERM_WINDOW:
-    LOGI("Terminating application!\n");
+    vko::Logger::Info("Terminating application!\n");
     // userData->impl->onTerminateWindow();
     break;
   }
@@ -79,9 +79,9 @@ static void engineHandleCmd(android_app *pApp, int32_t cmd) {
 
 void android_main(android_app *state) {
 #ifdef NDEBUG
-  LOGI("[release]Entering android_main()!\n");
+  vko::Logger::Info("[release]Entering android_main()!\n");
 #else
-  LOGI("[debug]Entering android_main()!\n");
+  vko::Logger::Info("[debug]Entering android_main()!\n");
 #endif
 
   VulkanFramework vulfwk("vulfwk", "No Engine");

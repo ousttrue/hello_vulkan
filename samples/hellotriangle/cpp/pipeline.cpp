@@ -1,6 +1,6 @@
 #include "pipeline.hpp"
-#include <vko.h>
 #include <vector>
+#include <vko.h>
 #include <vulkan/vulkan_core.h>
 
 struct Vertex {
@@ -11,19 +11,19 @@ struct Vertex {
 static std::vector<uint8_t> readRawFile(AAssetManager *assetManager,
                                         const char *pPath) {
   if (!assetManager) {
-    LOGE("Asset manager does not exist.");
+    vko::Logger::Error("Asset manager does not exist.");
     return {};
   }
 
   AAsset *asset = AAssetManager_open(assetManager, pPath, AASSET_MODE_BUFFER);
   if (!asset) {
-    LOGE("AAssetManager_open() failed to load file: %s.", pPath);
+    vko::Logger::Error("AAssetManager_open() failed to load file: %s.", pPath);
     return {};
   }
 
   auto buffer = AAsset_getBuffer(asset);
   if (!buffer) {
-    LOGE("Failed to obtain buffer for asset: %s.", pPath);
+    vko::Logger::Error("Failed to obtain buffer for asset: %s.", pPath);
     AAsset_close(asset);
     return {};
   }
@@ -53,7 +53,7 @@ inline std::vector<T> readBinaryFile(AAssetManager *assetManager,
 static VkShaderModule loadShaderModule(VkDevice device,
                                        const std::vector<uint32_t> &buffer) {
   if (buffer.empty()) {
-    LOGE("no data");
+    vko::Logger::Error("no data");
     return VK_NULL_HANDLE;
   }
 
@@ -65,7 +65,7 @@ static VkShaderModule loadShaderModule(VkDevice device,
   VkShaderModule shaderModule;
   if (vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule) !=
       VK_SUCCESS) {
-    LOGE("vkCreateShaderModule");
+    vko::Logger::Error("vkCreateShaderModule");
     return VK_NULL_HANDLE;
   }
   return shaderModule;
@@ -87,7 +87,7 @@ public:
     };
 
     if (vkCreateBuffer(device, &info, nullptr, &_buffer) != VK_SUCCESS) {
-      LOGE("vkCreateBuffer");
+      vko::Logger::Error("vkCreateBuffer");
       abort();
     }
 
@@ -107,7 +107,7 @@ public:
 
     // Allocate memory.
     if (vkAllocateMemory(device, &alloc, nullptr, &_memory) != VK_SUCCESS) {
-      LOGE("vkAllocateMemory");
+      vko::Logger::Error("vkAllocateMemory");
       abort();
     }
 
@@ -119,7 +119,7 @@ public:
     if (pInitialData) {
       void *pData;
       if (vkMapMemory(device, _memory, 0, size, 0, &pData) != VK_SUCCESS) {
-        LOGE("vkMapMemory");
+        vko::Logger::Error("vkMapMemory");
         abort();
       }
       memcpy(pData, pInitialData, size);
@@ -156,7 +156,7 @@ private:
       }
     }
 
-    LOGE("Failed to obtain suitable memory type.\n");
+    vko::Logger::Error("Failed to obtain suitable memory type.\n");
     abort();
   }
 };
@@ -241,7 +241,7 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
   };
   VkRenderPass renderPass;
   if (vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass) != VK_SUCCESS) {
-    LOGE("vkCreateRenderPass");
+    vko::Logger::Error("vkCreateRenderPass");
     abort();
   }
 
@@ -254,7 +254,7 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
   };
   if (vkCreatePipelineCache(device, &pipelineCacheInfo, nullptr,
                             &pipelineCache) != VK_SUCCESS) {
-    LOGE("vkCreatePipelineCache");
+    vko::Logger::Error("vkCreatePipelineCache");
     abort();
   }
 
@@ -380,7 +380,7 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
   };
   if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) !=
       VK_SUCCESS) {
-    LOGE("vkCreatePipelineLayout");
+    vko::Logger::Error("vkCreatePipelineLayout");
     abort();
   }
 
@@ -410,7 +410,7 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
 
   if (vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipe, nullptr,
                                 &pipeline) != VK_SUCCESS) {
-    LOGE("vkCreateGraphicsPipelines");
+    vko::Logger::Error("vkCreateGraphicsPipelines");
     return {};
   }
 
@@ -489,7 +489,7 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
 
   // Complete the command buffer.
   if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
-    LOGE("vkEndCommandBuffer");
+    vko::Logger::Error("vkEndCommandBuffer");
     abort();
   }
 }

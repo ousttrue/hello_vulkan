@@ -1,3 +1,9 @@
+/// vk object sunawati vko
+///
+/// Type name: UpperCamel
+/// Field name: lowerCamel
+/// Method name: lowerCamel
+///
 #pragma once
 #include <chrono>
 #include <climits>
@@ -30,7 +36,6 @@
 #include <stdarg.h>
 #endif
 
-// vk object sunawati vko
 namespace vko {
 
 struct Logger {
@@ -80,38 +85,39 @@ struct not_copyable {
 
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
 struct PhysicalDevice {
-  VkPhysicalDevice _physicalDevice = VK_NULL_HANDLE;
-  VkPhysicalDeviceProperties _properties = {};
-  VkPhysicalDeviceFeatures _features = {};
-  std::vector<VkQueueFamilyProperties> _queueFamilyProperties;
-  uint32_t _graphicsFamily = UINT_MAX;
-  uint32_t _presentFamily = UINT_MAX;
+  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  VkPhysicalDeviceProperties properties = {};
+  VkPhysicalDeviceFeatures features = {};
+  std::vector<VkQueueFamilyProperties> queueFamilyProperties;
+  uint32_t graphicsFamilyIndex = UINT_MAX;
+  uint32_t presentFamilyIndex = UINT_MAX;
 
   PhysicalDevice() {}
 
-  PhysicalDevice(VkPhysicalDevice physicalDevice)
-      : _physicalDevice(physicalDevice) {
-    vkGetPhysicalDeviceProperties(_physicalDevice, &_properties);
-    vkGetPhysicalDeviceFeatures(_physicalDevice, &_features);
+  PhysicalDevice(VkPhysicalDevice _physicalDevice)
+      : physicalDevice(_physicalDevice) {
+    vkGetPhysicalDeviceProperties(this->physicalDevice, &this->properties);
+    vkGetPhysicalDeviceFeatures(this->physicalDevice, &this->features);
     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
-                                             nullptr);
-    _queueFamilyProperties.resize(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount,
-                                             _queueFamilyProperties.data());
+    vkGetPhysicalDeviceQueueFamilyProperties(this->physicalDevice,
+                                             &queueFamilyCount, nullptr);
+    this->queueFamilyProperties.resize(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        this->physicalDevice, &queueFamilyCount,
+        this->queueFamilyProperties.data());
 
-    for (uint32_t i = 0; i < _queueFamilyProperties.size(); ++i) {
-      if (_queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        _graphicsFamily = i;
+    for (uint32_t i = 0; i < this->queueFamilyProperties.size(); ++i) {
+      if (this->queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        this->graphicsFamilyIndex = i;
         break;
       }
     }
   }
 
   std::optional<uint32_t> getPresentQueueFamily(VkSurfaceKHR surface) {
-    for (uint32_t i = 0; i < _queueFamilyProperties.size(); ++i) {
+    for (uint32_t i = 0; i < this->queueFamilyProperties.size(); ++i) {
       VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
+      vkGetPhysicalDeviceSurfaceSupportKHR(this->physicalDevice, i, surface,
                                            &presentSupport);
       if (presentSupport) {
         return i;
@@ -152,21 +158,21 @@ struct PhysicalDevice {
   }
 
   void debugPrint(VkSurfaceKHR surface) {
-    Logger::Info("[%s] %s", _properties.deviceName,
-                 deviceTypeStr(_properties.deviceType));
+    Logger::Info("[%s] %s", this->properties.deviceName,
+                 deviceTypeStr(this->properties.deviceType));
     Logger::Info(
         "  queue info: "
         "present,graphics,compute,transfer,sparse,protected,video_de,video_en,"
         "optical"
 
     );
-    for (int i = 0; i < _queueFamilyProperties.size(); ++i) {
+    for (int i = 0; i < this->queueFamilyProperties.size(); ++i) {
       VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(_physicalDevice, i, surface,
+      vkGetPhysicalDeviceSurfaceSupportKHR(this->physicalDevice, i, surface,
                                            &presentSupport);
       Logger::Info(
           "  [%02d] %s%s", i, (presentSupport ? "o" : "_"),
-          queueFlagBitsStr(_queueFamilyProperties[i].queueFlags, "o", "_")
+          queueFlagBitsStr(this->queueFamilyProperties[i].queueFlags, "o", "_")
               .c_str());
     }
   }
@@ -174,12 +180,10 @@ struct PhysicalDevice {
   std::optional<uint32_t> isSuitable(VkSurfaceKHR surface) {
     auto presentFamily = getPresentQueueFamily(surface);
     if (presentFamily) {
-      _presentFamily = *presentFamily;
+      this->presentFamilyIndex = *presentFamily;
     }
-    if (/*_deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
-           &&*/
-        /*_deviceFeatures.geometryShader &&*/ _graphicsFamily != UINT_MAX &&
-        _presentFamily != UINT_MAX) {
+    if (this->graphicsFamilyIndex != UINT_MAX &&
+        this->presentFamilyIndex != UINT_MAX) {
       return presentFamily;
     }
     return {};
@@ -188,11 +192,12 @@ struct PhysicalDevice {
 
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 struct Instance : public not_copyable {
-  VkInstance _instance = VK_NULL_HANDLE;
-  operator VkInstance() { return _instance; }
+  VkInstance instance = VK_NULL_HANDLE;
+  operator VkInstance() const { return this->instance; }
   ~Instance() {
-    if (_debugUtilsMessenger != VK_NULL_HANDLE) {
-      DestroyDebugUtilsMessengerEXT(_instance, _debugUtilsMessenger, nullptr);
+    if (this->debugUtilsMessenger != VK_NULL_HANDLE) {
+      DestroyDebugUtilsMessengerEXT(this->instance, this->debugUtilsMessenger,
+                                    nullptr);
     }
     // auto supported =
     //     instanceExtensions.pushExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -200,19 +205,19 @@ struct Instance : public not_copyable {
     //   instanceExtensions.pushExtension("VK_EXT_debug_report");
     // }
 
-    if (_instance != VK_NULL_HANDLE) {
-      vkDestroyInstance(_instance, nullptr);
+    if (this->instance != VK_NULL_HANDLE) {
+      vkDestroyInstance(this->instance, nullptr);
     }
   }
 
-  std::vector<PhysicalDevice> _physicalDevices;
+  std::vector<PhysicalDevice> physicalDevices;
 
-  std::vector<const char *> _validationLayers;
-  std::vector<const char *> _instanceExtensions;
+  std::vector<const char *> validationLayers;
+  std::vector<const char *> instanceExtensions;
 
   // VK_EXT_DEBUG_UTILS_EXTENSION_NAME
-  VkDebugUtilsMessengerEXT _debugUtilsMessenger = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerCreateInfoEXT _debug_messenger_create_info = {
+  VkDebugUtilsMessengerEXT debugUtilsMessenger = VK_NULL_HANDLE;
+  VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = {
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
       .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
@@ -259,7 +264,7 @@ struct Instance : public not_copyable {
     }
   }
 
-  VkApplicationInfo _appInfo{
+  VkApplicationInfo appInfo{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "VKO",
       .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
@@ -269,34 +274,35 @@ struct Instance : public not_copyable {
       // .apiVersion = VK_MAKE_VERSION(1, 0, 24),
   };
 
-  VkInstanceCreateInfo _createInfo{
+  VkInstanceCreateInfo createInfo{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pNext = nullptr,
-      .pApplicationInfo = &_appInfo,
+      .pApplicationInfo = &this->appInfo,
       .enabledLayerCount = 0,
       .enabledExtensionCount = 0,
   };
 
   VkResult create() {
-    if (_validationLayers.size() > 0) {
-      for (auto name : _validationLayers) {
+    if (this->validationLayers.size() > 0) {
+      for (auto name : this->validationLayers) {
         Logger::Info("instance layer: %s\n", name);
       }
-      _createInfo.enabledLayerCount = _validationLayers.size();
-      _createInfo.ppEnabledLayerNames = _validationLayers.data();
+      this->createInfo.enabledLayerCount = this->validationLayers.size();
+      this->createInfo.ppEnabledLayerNames = this->validationLayers.data();
     }
-    if (_instanceExtensions.size() > 0) {
-      for (auto name : _instanceExtensions) {
+    if (this->instanceExtensions.size() > 0) {
+      for (auto name : this->instanceExtensions) {
         Logger::Info("instance extension: %s\n", name);
         if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
-          _createInfo.pNext = &_debug_messenger_create_info;
+          this->createInfo.pNext = &this->debug_messenger_create_info;
         }
       }
-      _createInfo.enabledExtensionCount = _instanceExtensions.size();
-      _createInfo.ppEnabledExtensionNames = _instanceExtensions.data();
+      this->createInfo.enabledExtensionCount = this->instanceExtensions.size();
+      this->createInfo.ppEnabledExtensionNames =
+          this->instanceExtensions.data();
     }
 
-    auto result = vkCreateInstance(&_createInfo, nullptr, &_instance);
+    auto result = vkCreateInstance(&this->createInfo, nullptr, &this->instance);
     if (result != VK_SUCCESS) {
       // Try to fall back to compatible Vulkan versions if the driver is using
       // older, but compatible API versions.
@@ -321,84 +327,84 @@ struct Instance : public not_copyable {
     }
 
     uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(_instance, &deviceCount, nullptr);
+    vkEnumeratePhysicalDevices(this->instance, &deviceCount, nullptr);
     if (deviceCount == 0) {
       Logger::Error("no physical device\n");
     } else {
       std::vector<VkPhysicalDevice> devices(deviceCount);
-      vkEnumeratePhysicalDevices(_instance, &deviceCount, devices.data());
+      vkEnumeratePhysicalDevices(this->instance, &deviceCount, devices.data());
       for (auto d : devices) {
-        _physicalDevices.push_back(PhysicalDevice(d));
+        this->physicalDevices.push_back(PhysicalDevice(d));
       }
     }
 
-    result =
-        CreateDebugUtilsMessengerEXT(_instance, &_debug_messenger_create_info,
-                                     nullptr, &_debugUtilsMessenger);
+    result = CreateDebugUtilsMessengerEXT(this->instance,
+                                          &this->debug_messenger_create_info,
+                                          nullptr, &this->debugUtilsMessenger);
     return result;
   }
 
   PhysicalDevice pickPhysicalDevice(VkSurfaceKHR surface) {
     PhysicalDevice picked;
-    for (auto &physicalDevice : _physicalDevices) {
+    for (auto &physicalDevice : this->physicalDevices) {
       physicalDevice.debugPrint(surface);
       if (auto presentFamily = physicalDevice.isSuitable(surface)) {
-        if (picked._physicalDevice == VK_NULL_HANDLE) {
+        if (picked.physicalDevice == VK_NULL_HANDLE) {
           // use 1st
           picked = physicalDevice;
         }
       }
     }
-    if (_physicalDevices.size() > 0) {
+    if (this->physicalDevices.size() > 0) {
       // fall back. use 1st device
-      picked = _physicalDevices[0];
+      picked = this->physicalDevices[0];
     }
     return picked;
   }
 };
 
 struct Device : public not_copyable {
-  VkDevice _device = VK_NULL_HANDLE;
-  VkQueue _graphicsQueue = VK_NULL_HANDLE;
-  VkQueue _presentQueue = VK_NULL_HANDLE;
-  operator VkDevice() { return _device; }
+  VkDevice device = VK_NULL_HANDLE;
+  VkQueue graphicsQueue = VK_NULL_HANDLE;
+  VkQueue presentQueue = VK_NULL_HANDLE;
+  operator VkDevice() const { return this->device; }
   ~Device() {
-    if (_device != VK_NULL_HANDLE) {
-      vkDestroyDevice(_device, nullptr);
+    if (this->device != VK_NULL_HANDLE) {
+      vkDestroyDevice(this->device, nullptr);
     }
   }
-  std::vector<const char *> _validationLayers;
-  std::vector<const char *> _deviceExtensions = {
+  std::vector<const char *> validationLayers;
+  std::vector<const char *> deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
   };
-  std::vector<float> _queuePriorities = {1.0f};
-  std::vector<VkDeviceQueueCreateInfo> _queueCreateInfos;
-  VkPhysicalDeviceFeatures _deviceFeatures{
+  std::vector<float> queuePriorities = {1.0f};
+  std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+  VkPhysicalDeviceFeatures deviceFeatures{
       .samplerAnisotropy = VK_TRUE,
   };
-  VkDeviceCreateInfo _createInfo{
+  VkDeviceCreateInfo createInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 0,
       .enabledLayerCount = 0,
       .enabledExtensionCount = 0,
-      .pEnabledFeatures = &_deviceFeatures,
+      .pEnabledFeatures = &this->deviceFeatures,
   };
 
   VkResult create(VkPhysicalDevice physicalDevice, uint32_t graphics,
                   uint32_t present) {
-    if (_validationLayers.size() > 0) {
-      for (auto name : _validationLayers) {
+    if (this->validationLayers.size() > 0) {
+      for (auto name : this->validationLayers) {
         Logger::Info("device layer: %s\n", name);
       }
-      _createInfo.enabledLayerCount = _validationLayers.size();
-      _createInfo.ppEnabledLayerNames = _validationLayers.data();
+      this->createInfo.enabledLayerCount = this->validationLayers.size();
+      this->createInfo.ppEnabledLayerNames = this->validationLayers.data();
     }
-    if (_deviceExtensions.size() > 0) {
-      for (auto name : _deviceExtensions) {
+    if (this->deviceExtensions.size() > 0) {
+      for (auto name : this->deviceExtensions) {
         Logger::Info("device extension: %s\n", name);
       }
-      _createInfo.enabledExtensionCount = _deviceExtensions.size();
-      _createInfo.ppEnabledExtensionNames = _deviceExtensions.data();
+      this->createInfo.enabledExtensionCount = this->deviceExtensions.size();
+      this->createInfo.ppEnabledExtensionNames = this->deviceExtensions.data();
     }
 
     std::set<uint32_t> uniqueQueueFamilies = {graphics, present};
@@ -408,141 +414,148 @@ struct Device : public not_copyable {
           .pNext = 0,
           .flags = 0,
           .queueFamilyIndex = queueFamily,
-          .queueCount = static_cast<uint32_t>(_queuePriorities.size()),
-          .pQueuePriorities = _queuePriorities.data(),
+          .queueCount = static_cast<uint32_t>(this->queuePriorities.size()),
+          .pQueuePriorities = this->queuePriorities.data(),
       };
-      _queueCreateInfos.push_back(queueCreateInfo);
+      this->queueCreateInfos.push_back(queueCreateInfo);
     }
-    _createInfo.queueCreateInfoCount =
-        static_cast<uint32_t>(_queueCreateInfos.size());
-    _createInfo.pQueueCreateInfos = _queueCreateInfos.data();
+    this->createInfo.queueCreateInfoCount =
+        static_cast<uint32_t>(this->queueCreateInfos.size());
+    this->createInfo.pQueueCreateInfos = this->queueCreateInfos.data();
 
-    auto result =
-        vkCreateDevice(physicalDevice, &_createInfo, nullptr, &_device);
+    auto result = vkCreateDevice(physicalDevice, &this->createInfo, nullptr,
+                                 &this->device);
     if (result != VK_SUCCESS) {
       return result;
     }
 
-    vkGetDeviceQueue(_device, graphics, 0, &_graphicsQueue);
-    vkGetDeviceQueue(_device, present, 0, &_presentQueue);
+    vkGetDeviceQueue(this->device, graphics, 0, &this->graphicsQueue);
+    vkGetDeviceQueue(this->device, present, 0, &this->presentQueue);
 
     return VK_SUCCESS;
   }
 };
 
 struct Fence : public not_copyable {
-  VkDevice _device;
-  VkFence _fence = VK_NULL_HANDLE;
-  operator VkFence() { return _fence; }
-  Fence(VkDevice device, bool signaled) : _device(device) {
+  VkDevice device;
+  VkFence fence = VK_NULL_HANDLE;
+  operator VkFence() const { return this->fence; }
+  Fence(VkDevice _device, bool signaled) : device(_device) {
     VkFenceCreateInfo fenceInfo{
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
     };
     if (signaled) {
       fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
     }
-    VKO_CHECK(vkCreateFence(_device, &fenceInfo, nullptr, &_fence));
+    VKO_CHECK(vkCreateFence(this->device, &fenceInfo, nullptr, &this->fence));
   }
   ~Fence() {
-    if (_fence != VK_NULL_HANDLE) {
-      vkDestroyFence(_device, _fence, nullptr);
+    if (this->fence != VK_NULL_HANDLE) {
+      vkDestroyFence(this->device, this->fence, nullptr);
     }
   }
-  void reset() { vkResetFences(_device, 1, &_fence); }
+  void reset() { vkResetFences(this->device, 1, &this->fence); }
 
   void block() {
-    VKO_CHECK(vkWaitForFences(_device, 1, &_fence, VK_TRUE, UINT64_MAX));
+    VKO_CHECK(
+        vkWaitForFences(this->device, 1, &this->fence, VK_TRUE, UINT64_MAX));
   }
 };
 
 struct Semaphore : public not_copyable {
-  VkDevice _device;
-  VkSemaphore _semaphore = VK_NULL_HANDLE;
-  operator VkSemaphore() { return _semaphore; }
-  Semaphore(VkDevice device) : _device(device) {
+  VkDevice device;
+  VkSemaphore semaphore = VK_NULL_HANDLE;
+  operator VkSemaphore() const { return this->semaphore; }
+  Semaphore(VkDevice _device) : device(_device) {
     VkSemaphoreCreateInfo semaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
     };
-    VKO_CHECK(
-        vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_semaphore));
+    VKO_CHECK(vkCreateSemaphore(this->device, &semaphoreCreateInfo, nullptr,
+                                &this->semaphore));
   }
-  ~Semaphore() { vkDestroySemaphore(_device, _semaphore, nullptr); }
+  ~Semaphore() { vkDestroySemaphore(this->device, this->semaphore, nullptr); }
 };
 
 class SemaphorePool {
-  VkDevice _device = VK_NULL_HANDLE;
-  std::list<VkSemaphore> _owned;
-  std::list<VkSemaphore> _semaphores;
+  VkDevice device = VK_NULL_HANDLE;
+  std::list<VkSemaphore> owned;
+  std::list<VkSemaphore> semaphores;
 
 public:
-  SemaphorePool(VkDevice device) : _device(device) {}
+  SemaphorePool(VkDevice _device) : device(_device) {}
   ~SemaphorePool() {
-    vkDeviceWaitIdle(_device);
-    for (auto &semaphore : _owned) {
-      vkDestroySemaphore(_device, semaphore, nullptr);
+    vkDeviceWaitIdle(this->device);
+    for (auto &semaphore : this->owned) {
+      vkDestroySemaphore(this->device, semaphore, nullptr);
     }
   }
   VkSemaphore getOrCreateSemaphore() {
-    if (!_semaphores.empty()) {
-      auto semaphore = _semaphores.front();
-      _semaphores.pop_front();
+    if (!this->semaphores.empty()) {
+      auto semaphore = this->semaphores.front();
+      this->semaphores.pop_front();
       return semaphore;
     }
     VkSemaphoreCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
     VkSemaphore semaphore;
-    VKO_CHECK(vkCreateSemaphore(_device, &info, nullptr, &semaphore));
-    _owned.push_back(semaphore);
+    VKO_CHECK(vkCreateSemaphore(this->device, &info, nullptr, &semaphore));
+    this->owned.push_back(semaphore);
     return semaphore;
   }
   void returnSemaphore(VkSemaphore semaphore) {
-    _semaphores.push_back(semaphore);
+    this->semaphores.push_back(semaphore);
   }
 };
 
 struct Surface : public not_copyable {
-  VkInstance _instance;
-  VkSurfaceKHR _surface;
-  VkPhysicalDevice _physicalDevice;
-  VkSurfaceCapabilitiesKHR _capabilities;
-  std::vector<VkSurfaceFormatKHR> _formats;
-  std::vector<VkPresentModeKHR> _presentModes;
+  VkInstance instance;
+  VkSurfaceKHR surface;
+  operator VkSurfaceKHR() const { return this->surface; }
+  VkPhysicalDevice physicalDevice;
+  VkSurfaceCapabilitiesKHR capabilities;
+  std::vector<VkSurfaceFormatKHR> formats;
+  std::vector<VkPresentModeKHR> presentModes;
 
-  Surface(VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice gpu)
-      : _instance(instance), _surface(surface), _physicalDevice(gpu) {
+  Surface(VkInstance _instance, VkSurfaceKHR _surface,
+          VkPhysicalDevice _physicalDevice)
+      : instance(_instance), surface(_surface),
+        physicalDevice(_physicalDevice) {
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &_capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        this->physicalDevice, this->surface, &this->capabilities);
 
     uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount, nullptr);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(this->physicalDevice, this->surface,
+                                         &formatCount, nullptr);
     if (formatCount != 0) {
-      _formats.resize(formatCount);
-      vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &formatCount,
-                                           _formats.data());
+      this->formats.resize(formatCount);
+      vkGetPhysicalDeviceSurfaceFormatsKHR(this->physicalDevice, this->surface,
+                                           &formatCount, this->formats.data());
     }
 
     uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &presentModeCount,
-                                              nullptr);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(
+        this->physicalDevice, this->surface, &presentModeCount, nullptr);
     if (presentModeCount != 0) {
-      _presentModes.resize(presentModeCount);
-      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &presentModeCount,
-                                                _presentModes.data());
+      this->presentModes.resize(presentModeCount);
+      vkGetPhysicalDeviceSurfacePresentModesKHR(
+          this->physicalDevice, this->surface, &presentModeCount,
+          this->presentModes.data());
     }
   }
 
-  ~Surface() { vkDestroySurfaceKHR(_instance, _surface, nullptr); }
+  ~Surface() { vkDestroySurfaceKHR(this->instance, this->surface, nullptr); }
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat() const {
-    if (_formats.empty()) {
+    if (this->formats.empty()) {
       return {
           .format = VK_FORMAT_UNDEFINED,
       };
     }
-    for (const auto &availableFormat : _formats) {
+    for (const auto &availableFormat : this->formats) {
       if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
           availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
         return availableFormat;
@@ -556,12 +569,12 @@ struct Surface : public not_copyable {
       //   break;
       // }
     }
-    return _formats[0];
+    return this->formats[0];
   }
   VkPresentModeKHR chooseSwapPresentMode() const {
 #ifdef ANDROID
 #else
-    for (const auto &availablePresentMode : _presentModes) {
+    for (const auto &availablePresentMode : this->presentModes) {
       if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
         return availablePresentMode;
       }
@@ -573,29 +586,29 @@ struct Surface : public not_copyable {
 };
 
 struct Swapchain : public not_copyable {
-  VkDevice _device;
-  VkQueue _presentQueue = VK_NULL_HANDLE;
-  VkSwapchainKHR _swapchain = VK_NULL_HANDLE;
+  VkDevice device;
+  VkQueue presentQueue = VK_NULL_HANDLE;
+  VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 
-  VkCommandPool _commandPool = VK_NULL_HANDLE;
-  std::vector<VkImage> _images;
-  std::vector<VkCommandBuffer> _commandBuffers;
+  VkCommandPool commandPool = VK_NULL_HANDLE;
+  std::vector<VkImage> images;
+  std::vector<VkCommandBuffer> commandBuffers;
 
-  Swapchain(VkDevice device) : _device(device) {}
+  std::vector<std::shared_ptr<Semaphore>> submitCompleteSemaphores;
 
-  std::vector<std::shared_ptr<Semaphore>> _submitCompleteSemaphores;
+  Swapchain(VkDevice _device) : device(_device) {}
 
   ~Swapchain() {
-    if (_commandPool != VK_NULL_HANDLE) {
-      vkDestroyCommandPool(_device, _commandPool, nullptr);
+    if (this->commandPool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(this->device, this->commandPool, nullptr);
     }
-    if (_swapchain != VK_NULL_HANDLE) {
-      vkDestroySwapchainKHR(_device, _swapchain, nullptr);
+    if (this->swapchain != VK_NULL_HANDLE) {
+      vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
     }
   }
 
-  uint32_t _queueFamilyIndices[2] = {};
-  VkSwapchainCreateInfoKHR _createInfo{
+  uint32_t queueFamilyIndices[2] = {};
+  VkSwapchainCreateInfoKHR createInfo{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
       .imageArrayLayers = 1,
       .imageUsage =
@@ -625,13 +638,13 @@ struct Swapchain : public not_copyable {
                   VkPresentModeKHR presentMode, uint32_t graphicsFamily,
                   uint32_t presentFamily,
                   VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE) {
-    vkGetDeviceQueue(_device, presentFamily, 0, &_presentQueue);
+    vkGetDeviceQueue(this->device, presentFamily, 0, &this->presentQueue);
 
     // get here for latest currentExtent
     VkSurfaceCapabilitiesKHR capabilities;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &capabilities);
 
-    _createInfo.surface = surface;
+    this->createInfo.surface = surface;
     // Determine the number of VkImage's to use in the swapchain.
     // Ideally, we desire to own 1 image at a time, the rest of the images can
     // either be rendered to and/or
@@ -642,20 +655,20 @@ struct Swapchain : public not_copyable {
     //   // Application must settle for fewer images than desired.
     //   desiredSwapchainImages = surfaceProperties.maxImageCount;
     // }
-    _createInfo.minImageCount = capabilities.minImageCount + 1;
-    _createInfo.imageFormat = surfaceFormat.format;
-    _createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    _createInfo.imageExtent = capabilities.currentExtent;
+    this->createInfo.minImageCount = capabilities.minImageCount + 1;
+    this->createInfo.imageFormat = surfaceFormat.format;
+    this->createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    this->createInfo.imageExtent = capabilities.currentExtent;
     if (graphicsFamily == presentFamily) {
-      _createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-      _createInfo.queueFamilyIndexCount = 0;     // Optional
-      _createInfo.pQueueFamilyIndices = nullptr; // Optional
+      this->createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      this->createInfo.queueFamilyIndexCount = 0;     // Optional
+      this->createInfo.pQueueFamilyIndices = nullptr; // Optional
     } else {
-      _createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-      _createInfo.queueFamilyIndexCount = 2;
-      _queueFamilyIndices[0] = graphicsFamily;
-      _queueFamilyIndices[1] = presentFamily;
-      _createInfo.pQueueFamilyIndices = _queueFamilyIndices;
+      this->createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+      this->createInfo.queueFamilyIndexCount = 2;
+      this->queueFamilyIndices[0] = graphicsFamily;
+      this->queueFamilyIndices[1] = presentFamily;
+      this->createInfo.pQueueFamilyIndices = this->queueFamilyIndices;
     }
     // Figure out a suitable surface transform.
     // VkSurfaceTransformFlagBitsKHR preTransform;
@@ -664,26 +677,29 @@ struct Swapchain : public not_copyable {
     //   preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     // else
     //   preTransform = surfaceProperties.currentTransform;
-    _createInfo.preTransform = capabilities.currentTransform;
-    _createInfo.presentMode = presentMode;
-    _createInfo.oldSwapchain = oldSwapchain;
-    auto result =
-        vkCreateSwapchainKHR(_device, &_createInfo, nullptr, &_swapchain);
+    this->createInfo.preTransform = capabilities.currentTransform;
+    this->createInfo.presentMode = presentMode;
+    this->createInfo.oldSwapchain = oldSwapchain;
+    auto result = vkCreateSwapchainKHR(this->device, &this->createInfo, nullptr,
+                                       &this->swapchain);
     if (result != VK_SUCCESS) {
       return result;
     }
 
     uint32_t imageCount;
-    vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, nullptr);
+    vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
+                            nullptr);
     Logger::Info("swapchain images: %d\n", imageCount);
     if (imageCount > 0) {
-      _images.resize(imageCount);
-      vkGetSwapchainImagesKHR(_device, _swapchain, &imageCount, _images.data());
+      this->images.resize(imageCount);
+      vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
+                              this->images.data());
     }
 
-    _submitCompleteSemaphores.resize(imageCount);
+    this->submitCompleteSemaphores.resize(imageCount);
     for (uint32_t i = 0; i < imageCount; ++i) {
-      _submitCompleteSemaphores[i] = std::make_shared<Semaphore>(_device);
+      this->submitCompleteSemaphores[i] =
+          std::make_shared<Semaphore>(this->device);
     }
 
     VkCommandPoolCreateInfo CommandPoolCreateInfo{
@@ -692,19 +708,20 @@ struct Swapchain : public not_copyable {
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = graphicsFamily,
     };
-    VKO_CHECK(vkCreateCommandPool(_device, &CommandPoolCreateInfo, nullptr,
-                                  &_commandPool));
+    VKO_CHECK(vkCreateCommandPool(this->device, &CommandPoolCreateInfo, nullptr,
+                                  &this->commandPool));
 
-    _commandBuffers.resize(imageCount);
+    this->commandBuffers.resize(imageCount);
     VkCommandBufferAllocateInfo CommandBufferAllocateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .pNext = nullptr,
-        .commandPool = _commandPool,
+        .commandPool = this->commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = static_cast<uint32_t>(_commandBuffers.size()),
+        .commandBufferCount =
+            static_cast<uint32_t>(this->commandBuffers.size()),
     };
-    VKO_CHECK(vkAllocateCommandBuffers(_device, &CommandBufferAllocateInfo,
-                                       _commandBuffers.data()));
+    VKO_CHECK(vkAllocateCommandBuffers(this->device, &CommandBufferAllocateInfo,
+                                       this->commandBuffers.data()));
 
     return VK_SUCCESS;
   }
@@ -720,9 +737,9 @@ struct Swapchain : public not_copyable {
 
   AcquiredImage acquireNextImage(VkSemaphore imageAvailableSemaphore) {
     uint32_t imageIndex;
-    auto result = vkAcquireNextImageKHR(_device, _swapchain, UINT64_MAX,
-                                        imageAvailableSemaphore, VK_NULL_HANDLE,
-                                        &imageIndex);
+    auto result = vkAcquireNextImageKHR(this->device, this->swapchain,
+                                        UINT64_MAX, imageAvailableSemaphore,
+                                        VK_NULL_HANDLE, &imageIndex);
     if (result != VK_SUCCESS) {
       return {result};
     }
@@ -736,29 +753,30 @@ struct Swapchain : public not_copyable {
     return {result,
             epoch_time_nano,
             imageIndex,
-            _images[imageIndex],
-            _commandBuffers[imageIndex],
-            _submitCompleteSemaphores[imageIndex]};
+            this->images[imageIndex],
+            this->commandBuffers[imageIndex],
+            this->submitCompleteSemaphores[imageIndex]};
   }
 
   VkResult present(uint32_t imageIndex) {
     VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &_submitCompleteSemaphores[imageIndex]->_semaphore,
+        .pWaitSemaphores =
+            &this->submitCompleteSemaphores[imageIndex]->semaphore,
         // swapchain
         .swapchainCount = 1,
-        .pSwapchains = &_swapchain,
+        .pSwapchains = &this->swapchain,
         .pImageIndices = &imageIndex,
     };
-    return vkQueuePresentKHR(_presentQueue, &presentInfo);
+    return vkQueuePresentKHR(this->presentQueue, &presentInfo);
   }
 };
 
 struct SwapchainFramebuffer {
-  VkDevice _device;
-  VkImageView _imageView;
-  VkFramebuffer _framebuffer;
+  VkDevice device;
+  VkImageView imageView;
+  VkFramebuffer framebuffer;
 
   VkImageViewCreateInfo _createInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -778,25 +796,26 @@ struct SwapchainFramebuffer {
       .layers = 1,
   };
 
-  SwapchainFramebuffer(VkDevice device, VkImage image, VkExtent2D extent,
+  SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
                        VkFormat format, VkRenderPass renderPass)
-      : _device(device) {
+      : device(_device) {
     _createInfo.image = image;
     _createInfo.format = format;
-    VKO_CHECK(vkCreateImageView(device, &_createInfo, nullptr, &_imageView));
+    VKO_CHECK(
+        vkCreateImageView(device, &_createInfo, nullptr, &this->imageView));
 
-    _framebufferInfo.pAttachments = &_imageView;
+    _framebufferInfo.pAttachments = &this->imageView;
     _framebufferInfo.attachmentCount = 1;
     _framebufferInfo.renderPass = renderPass;
     _framebufferInfo.width = extent.width;
     _framebufferInfo.height = extent.height;
-    VKO_CHECK(
-        vkCreateFramebuffer(device, &_framebufferInfo, nullptr, &_framebuffer));
+    VKO_CHECK(vkCreateFramebuffer(device, &_framebufferInfo, nullptr,
+                                  &this->framebuffer));
   }
 
   ~SwapchainFramebuffer() {
-    vkDestroyFramebuffer(_device, _framebuffer, nullptr);
-    vkDestroyImageView(_device, _imageView, nullptr);
+    vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
+    vkDestroyImageView(this->device, this->imageView, nullptr);
   }
 };
 

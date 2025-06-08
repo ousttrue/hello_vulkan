@@ -41,4 +41,8 @@ INFO:   [02] o_ooo____
 INFO:   [03] ___oo_o__
 INFO:   [04] ___oo__o_
 INFO:   [05] ___oo___o
+
+I vko     : [Adreno (TM) 615] INTEGRATED_GPU
+I vko     :   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+I vko     :   [00] ooo__o___
 ```

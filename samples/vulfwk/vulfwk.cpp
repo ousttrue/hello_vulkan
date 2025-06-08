@@ -16,10 +16,10 @@ VulkanFramework::~VulkanFramework() {
 bool VulkanFramework::initializeInstance(
     const std::vector<const char *> &layerNames,
     const std::vector<const char *> &extensionNames) {
-  Instance._validationLayers = layerNames;
-  Instance._instanceExtensions = extensionNames;
-  Instance._appInfo.pApplicationName = _appName.c_str();
-  Instance._appInfo.pEngineName = _engineName.c_str();
+  Instance.validationLayers = layerNames;
+  Instance.instanceExtensions = extensionNames;
+  Instance.appInfo.pApplicationName = _appName.c_str();
+  Instance.appInfo.pEngineName = _engineName.c_str();
   if (Instance.create() != VK_SUCCESS) {
     vko::Logger::Error("failed to create instance!");
     return false;
@@ -33,14 +33,14 @@ bool VulkanFramework::initializeDevice(
     VkSurfaceKHR surface) {
 
   _picked = Instance.pickPhysicalDevice(surface);
-  Surface = std::make_shared<vko::Surface>(Instance, surface,
-                                           _picked._physicalDevice);
+  Surface =
+      std::make_shared<vko::Surface>(Instance, surface, _picked.physicalDevice);
 
-  Device._validationLayers = Instance._validationLayers;
-  VKO_CHECK(Device.create(_picked._physicalDevice, _picked._graphicsFamily,
-                         _picked._presentFamily));
+  Device.validationLayers = Instance.validationLayers;
+  VKO_CHECK(Device.create(_picked.physicalDevice, _picked.graphicsFamilyIndex,
+                          _picked.presentFamilyIndex));
 
-  Pipeline = PipelineImpl::create(_picked._physicalDevice, surface, Device,
+  Pipeline = PipelineImpl::create(_picked.physicalDevice, surface, Device,
                                   Surface->chooseSwapSurfaceFormat().format,
                                   AssetManager);
   if (!Pipeline) {
@@ -50,7 +50,7 @@ bool VulkanFramework::initializeDevice(
   _semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
 
   SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
-  vkGetDeviceQueue(Device, _picked._graphicsFamily, 0, &_graphicsQueue);
+  vkGetDeviceQueue(Device, _picked.graphicsFamilyIndex, 0, &_graphicsQueue);
 
   return true;
 }
@@ -61,13 +61,13 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
     vkDeviceWaitIdle(Device);
 
     Swapchain = std::make_shared<vko::Swapchain>(Device);
-    Swapchain->create(_picked._physicalDevice, Surface->_surface,
+    Swapchain->create(_picked.physicalDevice, *Surface,
                       Surface->chooseSwapSurfaceFormat(),
-                      Surface->chooseSwapPresentMode(), _picked._graphicsFamily,
-                      _picked._presentFamily);
+                      Surface->chooseSwapPresentMode(),
+                      _picked.graphicsFamilyIndex, _picked.presentFamilyIndex);
 
     _images.clear();
-    _images.resize(Swapchain->_images.size());
+    _images.resize(Swapchain->images.size());
   }
 
   auto semaphore = _semaphorePool->getOrCreateSemaphore();
@@ -76,13 +76,13 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
   auto image = _images[acquired.imageIndex];
   if (!image) {
     image = std::make_shared<vko::SwapchainFramebuffer>(
-        Device, acquired.image, Swapchain->_createInfo.imageExtent,
-        Swapchain->_createInfo.imageFormat, Pipeline->renderPass());
+        Device, acquired.image, Swapchain->createInfo.imageExtent,
+        Swapchain->createInfo.imageFormat, Pipeline->renderPass());
     _images[acquired.imageIndex] = image;
   }
 
   Pipeline->draw(acquired.commandBuffer, acquired.imageIndex,
-                 image->_framebuffer, Swapchain->_createInfo.imageExtent);
+                 image->framebuffer, Swapchain->createInfo.imageExtent);
 
   VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
   VkSubmitInfo submitInfo = {
@@ -93,11 +93,12 @@ bool VulkanFramework::drawFrame(uint32_t width, uint32_t height) {
       .commandBufferCount = 1,
       .pCommandBuffers = &acquired.commandBuffer,
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &acquired.submitCompleteSemaphore->_semaphore,
+      .pSignalSemaphores = &acquired.submitCompleteSemaphore->semaphore,
   };
 
   SubmitCompleteFence->reset();
-  VKO_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submitInfo, *SubmitCompleteFence));
+  VKO_CHECK(
+      vkQueueSubmit(_graphicsQueue, 1, &submitInfo, *SubmitCompleteFence));
 
   SubmitCompleteFence->block();
   _semaphorePool->returnSemaphore(semaphore);
