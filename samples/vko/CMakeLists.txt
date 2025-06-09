@@ -25,9 +25,15 @@ else()
                                                  Vulkan::shaderc_combined)
   endfunction()
 
-  # 03
-  subdirs(03_texture)
 endif()
 
 add_vko_sample(01_clear 01_clear/main_loop.cpp)
 add_vko_sample(02_triangle glsl_to_spv.cpp 02_triangle/main_loop.cpp)
+add_vko_sample(
+  03_texture
+  glsl_to_spv.cpp
+  03_texture/main_loop.cpp
+  03_texture/memory_allocator.cpp
+  03_texture/pipeline_object.cpp
+  03_texture/swapchain_command.cpp
+  03_texture/per_image_object.cpp)
