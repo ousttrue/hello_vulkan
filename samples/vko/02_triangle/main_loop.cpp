@@ -1,7 +1,9 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
+#include "vko/vko.h"
 #include "vko/vko_pipeline.h"
 #include <assert.h>
+#include <vulkan/vulkan_core.h>
 
 auto VS = R"(#version 450
 
@@ -54,14 +56,14 @@ static VkShaderModule createShaderModule(VkDevice device,
 
 class PipelineImpl {
   VkDevice Device;
-  VkRenderPass RenderPass;
-  VkPipelineLayout PipelineLayout;
-  VkPipeline GraphicsPipeline;
+  VkRenderPass RenderPass = VK_NULL_HANDLE;
+  VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
+  VkPipeline GraphicsPipeline = VK_NULL_HANDLE;
 
 public:
   PipelineImpl(VkDevice device, VkRenderPass renderPass,
                VkPipelineLayout pipelineLayout, VkPipeline graphicsPipeline)
-      : Device(device), RenderPass(renderPass), PipelineLayout(pipelineLayout),
+      : Device(device), PipelineLayout(pipelineLayout),
         GraphicsPipeline(graphicsPipeline) {}
 
   ~PipelineImpl() {
@@ -81,12 +83,7 @@ public:
 
   static std::shared_ptr<PipelineImpl> create(VkPhysicalDevice physicalDevice,
                                               VkDevice device,
-                                              VkFormat swapchainImageFormat,
-                                              void *AssetManager) {
-    auto renderPass = createRenderPass(device, swapchainImageFormat);
-    if (renderPass == VK_NULL_HANDLE) {
-      return {};
-    }
+                                              VkRenderPass renderPass) {
 
     auto vertShaderCode = glsl_vs_to_spv(VS);
     if (vertShaderCode.empty()) {
@@ -229,63 +226,17 @@ public:
 
     return std::shared_ptr<PipelineImpl>(p);
   }
-
-  static VkRenderPass createRenderPass(VkDevice device,
-                                       VkFormat swapchainImageFormat) {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapchainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    VkRenderPass renderPass;
-    if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
-        VK_SUCCESS) {
-      vko::Logger::Error("failed to create render pass!");
-      return {};
-    }
-
-    return renderPass;
-  }
 };
 
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
                const vko::Device &device) {
 
-  auto Pipeline =
-      PipelineImpl::create(physicalDevice.physicalDevice, device,
-                           surface.chooseSwapSurfaceFormat().format, nullptr);
+  // RenderPass renderPass(device);
+  // VKO_CHECK(renderPass.create(surface.chooseSwapSurfaceFormat().format));
+  auto Pipeline = PipelineImpl::create(
+      physicalDevice.physicalDevice, device,
+      vko::createSimpleRenderPass(device, surface.chooseSwapSurfaceFormat().format));
   assert(Pipeline);
 
   vko::Swapchain swapchain(device);
@@ -323,14 +274,14 @@ void main_loop(const std::function<bool()> &runLoop,
       VkClearValue clearColor = {
           .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
       };
-      vko::CommandBufferScope scope(
-          cmd, Pipeline->renderPass(), image->framebuffer,
-          swapchain.createInfo.imageExtent, clearColor);
+      vko::CommandBufferScope scope(cmd, Pipeline->renderPass(), image->framebuffer,
+                                    swapchain.createInfo.imageExtent,
+                                    clearColor);
       scope.draw(Pipeline->pipeline(), 3);
     }
 
     VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
-                  flight.submitFence));
+                            flight.submitFence));
     VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 
