@@ -11,4 +11,4 @@ target_include_directories(
   ${TARGET} PRIVATE ${ANDROID_NDK}/sources/android/cpufeatures
                     ${magic_enum_SOURCE_DIR}/include)
 target_link_libraries(${TARGET} PRIVATE android log android_native_app_glue
-                                        vko)
+                                        vko vulkan)

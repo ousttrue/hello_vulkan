@@ -101,4 +101,4 @@ else()
 endif()
 
 subdirs(#
-        vulfwk hello_xr/cpp)
+        hello_xr/cpp)

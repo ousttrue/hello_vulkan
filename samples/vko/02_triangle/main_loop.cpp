@@ -1,46 +1,35 @@
-#include "vulfwk_pipeline.h"
-#include "glsl_to_spv.h"
-#include <shaderc/shaderc.h>
-#include <vko/vko.h>
+#include "../main_loop.h"
+#include "../glsl_to_spv.h"
+#include <assert.h>
 
-#if ANDROID
-#include <android_native_app_glue.h>
-static std::vector<char> readFile(const char *filePath, void *p) {
-  auto manager = reinterpret_cast<AAssetManager *>(p);
-  AAsset *asset = AAssetManager_open(manager, filePath, AASSET_MODE_BUFFER);
-  if (!asset) {
-    vko::Logger::Error("failed to AAssetManager_open: %s", filePath);
-    return {};
-  }
+class PipelineImpl {
+  VkDevice Device;
+  VkRenderPass RenderPass;
+  VkPipelineLayout PipelineLayout;
+  VkPipeline GraphicsPipeline;
 
-  size_t size = AAsset_getLength(asset);
-  std::vector<char> buffer(size);
+public:
+  PipelineImpl(VkDevice device, VkRenderPass renderPass,
+               VkPipelineLayout pipelineLayout, VkPipeline graphicsPipeline);
 
-  AAsset_read(asset, buffer.data(), size);
-  AAsset_close(asset);
+  ~PipelineImpl();
 
-  return buffer;
-}
-#else
-#include <fstream>
-static std::vector<char> readFile(const char *filename, void *) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-  if (!file.is_open()) {
-    vko::Logger::Error("failed to open: %s", filename);
-    return {};
-  }
+  VkRenderPass renderPass() const { return RenderPass; }
 
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
+  static std::shared_ptr<PipelineImpl> create(VkPhysicalDevice physicalDevice,
+                                              VkDevice device,
+                                              VkFormat swapchainImageFormat,
+                                              void *AssetManager);
 
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-  file.close();
+  static VkRenderPass createRenderPass(VkDevice device,
+                                       VkFormat swapchainImageFormat);
 
-  return buffer;
-}
-#endif
+  void draw(VkCommandBuffer commandBuffer, uint32_t imageIndex,
+            VkFramebuffer framebuffer, VkExtent2D imageExtent);
 
+  bool recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex,
+                           VkFramebuffer framebuffer, VkExtent2D imageExtent);
+};
 static VkShaderModule createShaderModule(VkDevice device,
                                          const std::vector<char> &code) {
   VkShaderModuleCreateInfo createInfo{};
@@ -110,7 +99,8 @@ void main() {
     fragColor = colors[gl_VertexIndex];
 }
 )";
-  auto vertShaderCode = glsl_vs_to_spv(vertShaderSrc.data(), vertShaderSrc.size());
+  auto vertShaderCode =
+      glsl_vs_to_spv(vertShaderSrc.data(), vertShaderSrc.size());
   if (vertShaderCode.empty()) {
     return {};
   }
@@ -129,7 +119,8 @@ void main() {
     outColor = vec4(fragColor, 1.0);
 }
 )";
-  auto fragShaderCode = glsl_fs_to_spv(fragShaderSrc.data(), fragShaderSrc.size());
+  auto fragShaderCode =
+      glsl_fs_to_spv(fragShaderSrc.data(), fragShaderSrc.size());
   if (fragShaderCode.empty()) {
     return {};
   }
@@ -369,4 +360,70 @@ bool PipelineImpl::recordCommandBuffer(VkCommandBuffer commandBuffer,
   }
 
   return true;
+}
+
+void main_loop(const std::function<bool()> &runLoop,
+               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
+               const vko::Device &device) {
+
+  auto Pipeline =
+      PipelineImpl::create(physicalDevice.physicalDevice, device,
+                           surface.chooseSwapSurfaceFormat().format, nullptr);
+  assert(Pipeline);
+
+  vko::Swapchain swapchain(device);
+  swapchain.create(
+      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
+      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
+      physicalDevice.presentFamilyIndex);
+
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> images(
+      swapchain.images.size());
+
+  // auto semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
+
+  // auto SubmitCompleteFence = std::make_shared<vko::Fence>(Device, true);
+  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
+                                   swapchain.images.size());
+
+  // auto _semaphorePool = std::make_shared<vko::SemaphorePool>(Device);
+  while (runLoop()) {
+    auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
+
+    auto image = images[acquired.imageIndex];
+    if (!image) {
+      image = std::make_shared<vko::SwapchainFramebuffer>(
+          device, acquired.image, swapchain.createInfo.imageExtent,
+          swapchain.createInfo.imageFormat, Pipeline->renderPass());
+      images[acquired.imageIndex] = image;
+    }
+
+    auto [cmd, flight, oldSemaphore] =
+        flightManager.blockAndReset(acquireSemaphore);
+    if (oldSemaphore != VK_NULL_HANDLE) {
+      flightManager.reuseSemaphore(oldSemaphore);
+    }
+
+    Pipeline->draw(cmd, acquired.imageIndex, image->framebuffer,
+                   swapchain.createInfo.imageExtent);
+
+    VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &acquireSemaphore,
+        .pWaitDstStageMask = &waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &flight.submitSemaphore,
+    };
+    VKO_CHECK(vkQueueSubmit(device.graphicsQueue, 1, &submitInfo,
+                            flight.submitFence));
+
+    VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
+  }
+
+  vkDeviceWaitIdle(device);
 }

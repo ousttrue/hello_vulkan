@@ -92,36 +92,6 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
-    // const shaders_wf = b.addWriteFiles();
-    // shaders_wf.step.dependOn(so.step);
-    // _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.vert.spv"), "shader.vert.spv");
-    // _ = shaders_wf.addCopyFile(so.build_dir.path(b, "samples/vulfwk/shader.frag.spv"), "shader.frag.spv");
-
-    build_apk(
-        b,
-        tools,
-        so,
-        .{
-            .package_name = "com.ousttrue.vulfwk",
-            .apk_name = "vulfwk",
-            .contents = .{
-                .android_manifest = b.path("samples/vulfwk/android/AndroidManifest.xml"),
-                // .assets_directory = shaders_wf.getDirectory(),
-                .appends = &.{
-                    .{ .path = .{
-                        .src = so.build_dir.path(b, "samples/vulfwk/libvulfwk.so"),
-                        .dst = "lib/arm64-v8a/libvulfwk.so",
-                    } },
-                    .{
-                        .path = .{
-                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
-                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
-                        },
-                    },
-                },
-            },
-        },
-    );
 
     build_apk(
         b,
@@ -153,6 +123,31 @@ pub fn build(b: *std.Build) void {
                     .{ .path = .{
                         .src = so.build_dir.path(b, "samples/vko/lib01_clear.so"),
                         .dst = "lib/arm64-v8a/lib01_clear.so",
+                    } },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
+    );
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "com.ousttrue.vko02_triangle",
+            .apk_name = "vko02_triangle",
+            .contents = .{
+                .android_manifest = b.path("samples/vko/02_triangle/AndroidManifest.xml"),
+                // .assets_directory = shaders_wf.getDirectory(),
+                .appends = &.{
+                    .{ .path = .{
+                        .src = so.build_dir.path(b, "samples/vko/lib02_triangle.so"),
+                        .dst = "lib/arm64-v8a/lib02_triangle.so",
                     } },
                     .{
                         .path = .{
