@@ -46,6 +46,7 @@ export default defineConfig({
               { text: "image", link: "/vulkan/pipeline/image" },
               { text: "descriptor", link: "/vulkan/pipeline/descriptor" },
               { text: "graphics pipeline", link: "/vulkan/pipeline/pipeline" },
+              { text: "record", link: "/vulkan/pipeline/record" },
             ],
           },
           {

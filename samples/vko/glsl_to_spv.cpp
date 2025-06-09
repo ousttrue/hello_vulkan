@@ -26,17 +26,15 @@ std::vector<uint32_t> compile_file(const std::string &name,
   return result;
 }
 
-std::vector<char> glsl_vs_to_spv(const char *p, size_t len) {
-  auto compiled =
-      compile_file("vs", shaderc_glsl_vertex_shader, std::string(p, p + len));
+std::vector<char> glsl_vs_to_spv(const char *p) {
+  auto compiled = compile_file("vs", shaderc_glsl_vertex_shader, p);
   std::vector<char> ret(compiled.size() * 4);
   memcpy(ret.data(), compiled.data(), ret.size());
   return ret;
 }
 
-std::vector<char> glsl_fs_to_spv(const char *p, size_t len) {
-  auto compiled =
-      compile_file("fs", shaderc_glsl_fragment_shader, std::string(p, p + len));
+std::vector<char> glsl_fs_to_spv(const char *p) {
+  auto compiled = compile_file("fs", shaderc_glsl_fragment_shader, p);
   std::vector<char> ret(compiled.size() * 4);
   memcpy(ret.data(), compiled.data(), ret.size());
   return ret;
