@@ -138,6 +138,32 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
+
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "com.ousttrue.vko_01_clear",
+            .apk_name = "vko_01_clear",
+            .contents = .{
+                .android_manifest = b.path("samples/vko/01_clear/AndroidManifest.xml"),
+                // .assets_directory = shaders_wf.getDirectory(),
+                .appends = &.{
+                    .{ .path = .{
+                        .src = so.build_dir.path(b, "samples/vko/lib01_clear.so"),
+                        .dst = "lib/arm64-v8a/lib01_clear.so",
+                    } },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
+    );
 }
 
 const ApkOpts = struct {

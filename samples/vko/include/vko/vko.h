@@ -434,6 +434,22 @@ struct Device : public not_copyable {
 
     return VK_SUCCESS;
   }
+
+  VkResult submit(VkCommandBuffer cmd, VkSemaphore acquireSemaphore,
+                  VkSemaphore submitSemaphore, VkFence submitFence) const {
+    VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &acquireSemaphore,
+        .pWaitDstStageMask = &waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &submitSemaphore,
+    };
+    return vkQueueSubmit(this->graphicsQueue, 1, &submitInfo, submitFence);
+  }
 };
 
 struct Fence : public not_copyable {
