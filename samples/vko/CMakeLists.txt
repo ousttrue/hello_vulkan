@@ -35,5 +35,4 @@ add_vko_sample(
   03_texture/main_loop.cpp
   03_texture/memory_allocator.cpp
   03_texture/pipeline_object.cpp
-  03_texture/swapchain_command.cpp
   03_texture/per_image_object.cpp)

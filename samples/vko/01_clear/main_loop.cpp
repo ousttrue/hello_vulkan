@@ -96,11 +96,11 @@ void main_loop(const std::function<bool()> &runLoop,
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
     VKO_CHECK(acquired.result);
 
-    auto [cmd, flight, oldSemaphore] =
-        flightManager.blockAndReset(acquireSemaphore);
+    auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
     if (oldSemaphore != VK_NULL_HANDLE) {
       flightManager.reuseSemaphore(oldSemaphore);
     }
+    vkResetCommandBuffer(cmd, 0);
 
     {
       auto color =

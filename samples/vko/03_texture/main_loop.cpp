@@ -1,7 +1,53 @@
 #include "../main_loop.h"
 #include "per_image_object.h"
 #include "pipeline_object.h"
-#include "swapchain_command.h"
+#include "vko/vko.h"
+
+struct DescriptorCopy {
+  VkDevice device;
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> descriptorSets;
+
+  DescriptorCopy(VkDevice _device, VkDescriptorSetLayout descriptorSetLayout,
+                 uint32_t count)
+      : device(_device) {
+    VkDescriptorPoolSize poolSizes[] = {
+        VkDescriptorPoolSize{
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = static_cast<uint32_t>(count),
+        },
+        VkDescriptorPoolSize{
+            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = static_cast<uint32_t>(count),
+        },
+    };
+    VkDescriptorPoolCreateInfo poolInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        // specifies the maximum number of descriptor sets that may be allocated
+        .maxSets = count,
+        .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
+        .pPoolSizes = poolSizes,
+    };
+    VKO_CHECK(vkCreateDescriptorPool(_device, &poolInfo, nullptr,
+                                     &this->descriptorPool));
+
+    std::vector<VkDescriptorSetLayout> layouts(count, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = this->descriptorPool,
+        .descriptorSetCount = count,
+        .pSetLayouts = layouts.data(),
+    };
+    this->descriptorSets.resize(count);
+    VKO_CHECK(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
+                                       this->descriptorSets.data()));
+  }
+  ~DescriptorCopy() {
+    // The descriptor pool should be destroyed here since it relies on the
+    // number of images
+    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
+  }
+};
 
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
@@ -11,22 +57,22 @@ void main_loop(const std::function<bool()> &runLoop,
   vkGetDeviceQueue(device, physicalDevice.graphicsFamilyIndex, 0,
                    &graphicsQueue);
 
-  auto swapchainCommand =
-      std::make_shared<SwapchainCommand>(physicalDevice.physicalDevice, device,
-                                         physicalDevice.graphicsFamilyIndex);
-
   vko::Swapchain swapchain(device);
   swapchain.create(
       physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex, VK_NULL_HANDLE);
+
   auto pipeline = PipelineObject::create(
       physicalDevice.physicalDevice, device, physicalDevice.graphicsFamilyIndex,
       surface.chooseSwapSurfaceFormat().format);
 
-  swapchainCommand->createSwapchainDependent(swapchain.createInfo.imageExtent,
-                                             swapchain.images.size(),
-                                             pipeline->descriptorSetLayout());
+  DescriptorCopy descriptors(device, pipeline->descriptorSetLayout(),
+                             swapchain.images.size());
+
+  std::vector<std::shared_ptr<class PerImageObject>> backbuffers;
+  backbuffers.resize(swapchain.images.size());
+
   pipeline->createGraphicsPipeline(swapchain.createInfo.imageExtent);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
@@ -42,28 +88,29 @@ void main_loop(const std::function<bool()> &runLoop,
     auto result = acquired.result;
     if (result == VK_SUCCESS) {
 
-      auto [_, flight, oldSemaphore] =
-          flightManager.blockAndReset(acquireSemaphore);
+      auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
       if (oldSemaphore != VK_NULL_HANDLE) {
         flightManager.reuseSemaphore(oldSemaphore);
       }
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
-      auto [commandBuffer, descriptorSet, backbuffer] =
-          swapchainCommand->frameResource(acquired.imageIndex);
+      auto descriptorSet = descriptors.descriptorSets[acquired.imageIndex];
 
+      auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
         // new backbuffer(framebuffer)
-        backbuffer = swapchainCommand->createFrameResource(
-            acquired.imageIndex, acquired.image,
-            swapchain.createInfo.imageExtent, swapchain.createInfo.imageFormat,
-            pipeline->renderPass());
+        backbuffer = PerImageObject::create(
+            physicalDevice.physicalDevice, device,
+            physicalDevice.graphicsFamilyIndex, acquired.imageIndex,
+            acquired.image, swapchain.createInfo.imageExtent,
+            swapchain.createInfo.imageFormat, pipeline->renderPass());
+        backbuffers[acquired.imageIndex] = backbuffer;
 
         auto [imageView, sampler] = pipeline->texture();
-        backbuffer->bindTexture(imageView, sampler);
+        backbuffer->bindTexture(imageView, sampler, descriptorSet);
 
-        pipeline->record(commandBuffer, backbuffer->framebuffer(),
+        pipeline->record(cmd, backbuffer->framebuffer(),
                          swapchain.createInfo.imageExtent, descriptorSet);
       }
 
@@ -87,7 +134,7 @@ void main_loop(const std::function<bool()> &runLoop,
           .pWaitSemaphores = &acquireSemaphore,
           .pWaitDstStageMask = waitStages,
           .commandBufferCount = 1,
-          .pCommandBuffers = &commandBuffer,
+          .pCommandBuffers = &cmd,
           // specify which semaphore to signal once command buffer has finished
           .signalSemaphoreCount = 1,
           .pSignalSemaphores = &flight.submitSemaphore,

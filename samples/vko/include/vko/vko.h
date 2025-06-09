@@ -891,7 +891,7 @@ public:
   }
 
   std::tuple<VkCommandBuffer, Flight, VkSemaphore>
-  blockAndReset(VkSemaphore acquireSemaphore) {
+  sync(VkSemaphore acquireSemaphore) {
     auto index = (this->frameCount++) % this->flights.size();
     // keep acquireSemaphore
     auto &flight = this->flights[index];
@@ -903,7 +903,6 @@ public:
     vkResetFences(this->device, 1, &flight.submitFence);
 
     auto cmd = this->commandBuffers[index];
-    vkResetCommandBuffer(cmd, 0);
 
     return {cmd, flight, oldSemaphore};
   }

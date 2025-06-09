@@ -5,16 +5,34 @@
 
 PerImageObject::PerImageObject(
     VkDevice device, VkImage swapchainImage, VkRenderPass renderPass,
-    VkExtent2D extent, VkFormat format, VkDescriptorSet descriptorSet,
+    VkExtent2D extent, VkFormat format,
     const std::shared_ptr<BufferObject> &uniformBUffer)
     : _device(device),
       _framebuffer(device, swapchainImage, extent, format, renderPass),
-      _renderPass(renderPass), _extent(extent), _descriptorSet(descriptorSet),
-      _uniformBuffer(uniformBUffer) {}
+      _renderPass(renderPass), _extent(extent), _uniformBuffer(uniformBUffer) {}
 
 PerImageObject::~PerImageObject() {}
 
-void PerImageObject::bindTexture(VkImageView imageView, VkSampler sampler) {
+std::shared_ptr<PerImageObject>
+PerImageObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
+                       uint32_t graphicsQueueFamilyIndex, uint32_t currentImage,
+                       VkImage swapchainImage, VkExtent2D swapchainExtent,
+                       VkFormat format, VkRenderPass renderPass) {
+  auto memory = std::make_shared<MemoryAllocator>(physicalDevice, device,
+                                                  graphicsQueueFamilyIndex);
+
+  auto uniformBuffer = memory->createBuffer(
+      nullptr, sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+  return std::make_shared<PerImageObject>(device, swapchainImage, renderPass,
+                                          swapchainExtent, format,
+                                          uniformBuffer);
+}
+
+void PerImageObject::bindTexture(VkImageView imageView, VkSampler sampler,
+                                 VkDescriptorSet descriptorSet) {
   VkDescriptorBufferInfo bufferInfo{
       .buffer = _uniformBuffer->buffer(),
       .offset = 0,
@@ -28,7 +46,7 @@ void PerImageObject::bindTexture(VkImageView imageView, VkSampler sampler) {
   VkWriteDescriptorSet descriptorWrites[2] = {
       {
           .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = _descriptorSet,
+          .dstSet = descriptorSet,
           .dstBinding = 0,
           .dstArrayElement = 0,
           .descriptorCount = 1,
@@ -37,7 +55,7 @@ void PerImageObject::bindTexture(VkImageView imageView, VkSampler sampler) {
       },
       {
           .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = _descriptorSet,
+          .dstSet = descriptorSet,
           .dstBinding = 1,
           .dstArrayElement = 0,
           .descriptorCount = 1,
