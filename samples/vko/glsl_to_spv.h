@@ -1,5 +1,5 @@
 #pragma once
 #include <vector>
 
-std::vector<char> glsl_vs_to_spv(const char *p);
-std::vector<char> glsl_fs_to_spv(const char *p);
+std::vector<uint32_t> glsl_vs_to_spv(const char *p);
+std::vector<uint32_t> glsl_fs_to_spv(const char *p);

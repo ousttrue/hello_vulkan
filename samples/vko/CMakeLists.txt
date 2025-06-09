@@ -25,6 +25,8 @@ else()
                                                  Vulkan::shaderc_combined)
   endfunction()
 
+  # 03
+  subdirs(03_texture)
 endif()
 
 add_vko_sample(01_clear 01_clear/main_loop.cpp)

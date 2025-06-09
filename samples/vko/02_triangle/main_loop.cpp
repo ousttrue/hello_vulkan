@@ -38,207 +38,38 @@ void main() {
 }
 )";
 
-static VkShaderModule createShaderModule(VkDevice device,
-                                         const std::vector<char> &code) {
-  VkShaderModuleCreateInfo createInfo{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = code.size(),
-      .pCode = reinterpret_cast<const uint32_t *>(code.data()),
-  };
-  VkShaderModule shaderModule;
-  if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
-      VK_SUCCESS) {
-    vko::Logger::Error("failed to create shader module!");
-    return VK_NULL_HANDLE;
-  }
-  return shaderModule;
-}
-
-class PipelineImpl {
-  VkDevice Device;
-  VkRenderPass RenderPass = VK_NULL_HANDLE;
-  VkPipelineLayout PipelineLayout = VK_NULL_HANDLE;
-  VkPipeline GraphicsPipeline = VK_NULL_HANDLE;
-
-public:
-  PipelineImpl(VkDevice device, VkRenderPass renderPass,
-               VkPipelineLayout pipelineLayout, VkPipeline graphicsPipeline)
-      : Device(device), PipelineLayout(pipelineLayout),
-        GraphicsPipeline(graphicsPipeline) {}
-
-  ~PipelineImpl() {
-    if (GraphicsPipeline) {
-      vkDestroyPipeline(Device, GraphicsPipeline, nullptr);
-    }
-    if (PipelineLayout) {
-      vkDestroyPipelineLayout(Device, PipelineLayout, nullptr);
-    }
-    if (RenderPass) {
-      vkDestroyRenderPass(Device, RenderPass, nullptr);
-    }
-  }
-
-  VkRenderPass renderPass() const { return RenderPass; }
-  VkPipeline pipeline() const { return GraphicsPipeline; }
-
-  static std::shared_ptr<PipelineImpl> create(VkPhysicalDevice physicalDevice,
-                                              VkDevice device,
-                                              VkRenderPass renderPass) {
-
-    auto vertShaderCode = glsl_vs_to_spv(VS);
-    if (vertShaderCode.empty()) {
-      return {};
-    }
-
-    auto fragShaderCode = glsl_fs_to_spv(FS);
-    if (fragShaderCode.empty()) {
-      return {};
-    }
-
-    VkShaderModule vertShaderModule =
-        createShaderModule(device, vertShaderCode);
-    if (vertShaderModule == VK_NULL_HANDLE) {
-      return {};
-    }
-    VkShaderModule fragShaderModule =
-        createShaderModule(device, fragShaderCode);
-    if (fragShaderModule == VK_NULL_HANDLE) {
-      return {};
-    }
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo,
-                                                      fragShaderStageInfo};
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizer.depthBiasEnable = VK_FALSE;
-
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask =
-        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.logicOp = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-    colorBlending.blendConstants[0] = 0.0f;
-    colorBlending.blendConstants[1] = 0.0f;
-    colorBlending.blendConstants[2] = 0.0f;
-    colorBlending.blendConstants[3] = 0.0f;
-
-    std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT,
-                                                 VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount =
-        static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-
-    VkPipelineLayout pipelineLayout;
-    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                               &pipelineLayout) != VK_SUCCESS) {
-      vko::Logger::Error("failed to create pipeline layout!");
-      return {};
-    }
-
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipelineLayout;
-    pipelineInfo.renderPass = renderPass;
-    pipelineInfo.subpass = 0;
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-    VkPipeline graphicsPipeline;
-    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                  nullptr, &graphicsPipeline) != VK_SUCCESS) {
-      vko::Logger::Error("failed to create graphics pipeline!");
-      return {};
-    }
-
-    vkDestroyShaderModule(device, fragShaderModule, nullptr);
-    vkDestroyShaderModule(device, vertShaderModule, nullptr);
-
-    auto p =
-        new PipelineImpl(device, renderPass, pipelineLayout, graphicsPipeline);
-
-    return std::shared_ptr<PipelineImpl>(p);
-  }
-};
-
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
                const vko::Device &device) {
+  //
+  // pipeline
+  //
+  vko::Logger::Info("convert glsl to spv and create shader module...");
+  auto vsSpv = glsl_vs_to_spv(VS);
+  vko::ShaderModule vs(device, vko::createShaderModule(device, vsSpv),
+                       VK_SHADER_STAGE_VERTEX_BIT, "main");
+  assert(vs != VK_NULL_HANDLE);
 
-  // RenderPass renderPass(device);
-  // VKO_CHECK(renderPass.create(surface.chooseSwapSurfaceFormat().format));
-  auto Pipeline = PipelineImpl::create(
-      physicalDevice.physicalDevice, device,
-      vko::createSimpleRenderPass(device, surface.chooseSwapSurfaceFormat().format));
-  assert(Pipeline);
+  auto fsSpv = glsl_fs_to_spv(FS);
+  vko::ShaderModule fs(device, vko::createShaderModule(device, fsSpv),
+                       VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+  assert(fs != VK_NULL_HANDLE);
 
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 0,
+      .pushConstantRangeCount = 0,
+  };
+  VkPipelineLayout pipelineLayout;
+  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                   &pipelineLayout));
+
+  auto pipeline = vko::createSimpleGraphicsPipeline(
+      device, surface.chooseSwapSurfaceFormat().format, vs, fs, pipelineLayout);
+
+  //
+  // swapchain
+  //
   vko::Swapchain swapchain(device);
   swapchain.create(
       physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
@@ -259,7 +90,7 @@ void main_loop(const std::function<bool()> &runLoop,
     if (!image) {
       image = std::make_shared<vko::SwapchainFramebuffer>(
           device, acquired.image, swapchain.createInfo.imageExtent,
-          swapchain.createInfo.imageFormat, Pipeline->renderPass());
+          swapchain.createInfo.imageFormat, pipeline.renderPass);
       images[acquired.imageIndex] = image;
     }
 
@@ -270,14 +101,13 @@ void main_loop(const std::function<bool()> &runLoop,
     }
 
     {
-      // record command
       VkClearValue clearColor = {
           .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
       };
-      vko::CommandBufferScope scope(cmd, Pipeline->renderPass(), image->framebuffer,
-                                    swapchain.createInfo.imageExtent,
-                                    clearColor);
-      scope.draw(Pipeline->pipeline(), 3);
+      vko::CommandBufferRecording recording(
+          cmd, pipeline.renderPass, image->framebuffer,
+          swapchain.createInfo.imageExtent, clearColor);
+      recording.draw(pipeline.graphicsPipeline, 3);
     }
 
     VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
