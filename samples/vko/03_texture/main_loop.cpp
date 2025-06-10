@@ -3,6 +3,31 @@
 #include "scene.h"
 #include "vko/vko.h"
 
+auto VS = R"(#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(binding = 0) uniform UniformBufferObject
+{
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} ubo;
+
+layout(location = 0) in vec2 inPosition;
+layout(location = 1) in vec3 inColor;
+layout(location = 2) in vec2 inTexCoord;
+
+layout(location = 0) out vec3 fragColor;
+layout(location = 1) out vec2 fragTexCoord;
+
+void main()
+{
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0); 
+    fragColor = inColor; 
+    fragTexCoord = inTexCoord;
+}
+)";
+
 #include <glm/fwd.hpp>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -37,31 +62,6 @@ struct UniformBufferObject {
   }
 };
 
-auto VS = R"(#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(binding = 0) uniform UniformBufferObject
-{
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-} ubo;
-
-layout(location = 0) in vec2 inPosition;
-layout(location = 1) in vec3 inColor;
-layout(location = 2) in vec2 inTexCoord;
-
-layout(location = 0) out vec3 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
-
-void main()
-{
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0); 
-    fragColor = inColor; 
-    fragTexCoord = inTexCoord;
-}
-)";
-
 auto FS = R"(#version 450
 #extension GL_ARB_separate_shader_objects : enable
 
@@ -78,8 +78,38 @@ void main()
 }
 )";
 
+struct Viewport {
+  std::vector<VkViewport> viewports;
+  std::vector<VkRect2D> scissors;
+  VkPipelineViewportStateCreateInfo viewportState;
+  Viewport(VkExtent2D extent) {
+    this->viewports.push_back({
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    });
+    this->scissors.push_back({
+        .offset = {0, 0},
+        .extent = extent,
+    });
+    update();
+  }
+  void update() {
+    this->viewportState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = static_cast<uint32_t>(std::size(this->viewports)),
+        .pViewports = this->viewports.data(),
+        .scissorCount = static_cast<uint32_t>(std::size(this->scissors)),
+        .pScissors = this->scissors.data(),
+    };
+  }
+};
+
 vko::Pipeline createPipelineObject(
-    VkPhysicalDevice physicalDevice, VkDevice device,
+    VkDevice device,
     //
     VkFormat swapchainFormat, VkExtent2D swapchainExtent,
     //
@@ -143,26 +173,6 @@ vko::Pipeline createPipelineObject(
       .primitiveRestartEnable = VK_FALSE,
   };
 
-  VkViewport viewport{
-      .x = 0.0f,
-      .y = 0.0f,
-      .width = (float)swapchainExtent.width,
-      .height = (float)swapchainExtent.height,
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-  VkRect2D scissor{
-      .offset = {0, 0},
-      .extent = swapchainExtent,
-  };
-  VkPipelineViewportStateCreateInfo viewportState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .pViewports = &viewport,
-      .scissorCount = 1,
-      .pScissors = &scissor,
-  };
-
   // build the rasterizer
   VkPipelineRasterizationStateCreateInfo rasterizer{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -213,13 +223,14 @@ vko::Pipeline createPipelineObject(
       .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
   };
 
+  Viewport viewport(swapchainExtent);
   VkGraphicsPipelineCreateInfo pipelineInfo{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .stageCount = 2,
       .pStages = shaderStages,
       .pVertexInputState = &vertexInputInfo,
       .pInputAssemblyState = &inputAssembly,
-      .pViewportState = &viewportState,
+      .pViewportState = &viewport.viewportState,
       .pRasterizationState = &rasterizer,
       .pMultisampleState = &multisampling,
       .pDepthStencilState = nullptr,
@@ -347,7 +358,7 @@ void main_loop(const std::function<bool()> &runLoop,
                       },
                   });
 
-  auto pipeline = createPipelineObject(physicalDevice, device,
+  auto pipeline = createPipelineObject(device,
                                        //
                                        surface.chooseSwapSurfaceFormat().format,
                                        swapchain.createInfo.imageExtent,
