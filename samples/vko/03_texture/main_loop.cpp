@@ -1,7 +1,47 @@
 #include "../main_loop.h"
-#include "per_image_object.h"
+#include "memory_allocator.h"
 #include "pipeline_object.h"
+#include "types.h"
 #include "vko/vko.h"
+
+static void bindTexture(VkDevice device,
+                        const std::shared_ptr<BufferObject> &uniformBuffer,
+                        VkImageView imageView, VkSampler sampler,
+                        VkDescriptorSet descriptorSet) {
+  VkDescriptorBufferInfo bufferInfo{
+      .buffer = uniformBuffer->buffer(),
+      .offset = 0,
+      .range = sizeof(UniformBufferObject),
+  };
+  VkDescriptorImageInfo imageInfo{
+      .sampler = sampler,
+      .imageView = imageView,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  VkWriteDescriptorSet descriptorWrites[2] = {
+      {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = descriptorSet,
+          .dstBinding = 0,
+          .dstArrayElement = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .pBufferInfo = &bufferInfo,
+      },
+      {
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = descriptorSet,
+          .dstBinding = 1,
+          .dstArrayElement = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .pImageInfo = &imageInfo,
+      },
+  };
+  vkUpdateDescriptorSets(device,
+                         static_cast<uint32_t>(std::size(descriptorWrites)),
+                         descriptorWrites, 0, nullptr);
+}
 
 struct DescriptorCopy {
   VkDevice device;
@@ -70,8 +110,8 @@ void main_loop(const std::function<bool()> &runLoop,
   DescriptorCopy descriptors(device, pipeline->descriptorSetLayout(),
                              swapchain.images.size());
 
-  std::vector<std::shared_ptr<class PerImageObject>> backbuffers;
-  backbuffers.resize(swapchain.images.size());
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(swapchain.images.size());
+  std::vector<std::shared_ptr<BufferObject>> uniformBuffers(swapchain.images.size());
 
   pipeline->createGraphicsPipeline(swapchain.createInfo.imageExtent);
 
@@ -99,18 +139,26 @@ void main_loop(const std::function<bool()> &runLoop,
 
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
+        auto memory = std::make_shared<MemoryAllocator>(
+            physicalDevice, device, physicalDevice.graphicsFamilyIndex);
+
+        auto ubo =
+            memory->createBuffer(nullptr, sizeof(UniformBufferObject),
+                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        uniformBuffers[acquired.imageIndex] = ubo;
+
         // new backbuffer(framebuffer)
-        backbuffer = PerImageObject::create(
-            physicalDevice.physicalDevice, device,
-            physicalDevice.graphicsFamilyIndex, acquired.imageIndex,
-            acquired.image, swapchain.createInfo.imageExtent,
+        backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
+            device, acquired.image, swapchain.createInfo.imageExtent,
             swapchain.createInfo.imageFormat, pipeline->renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
 
         auto [imageView, sampler] = pipeline->texture();
-        backbuffer->bindTexture(imageView, sampler, descriptorSet);
+        bindTexture(device, ubo, imageView, sampler, descriptorSet);
 
-        pipeline->record(cmd, backbuffer->framebuffer(),
+        pipeline->record(cmd, backbuffer->framebuffer,
                          swapchain.createInfo.imageExtent, descriptorSet);
       }
 
@@ -121,7 +169,11 @@ void main_loop(const std::function<bool()> &runLoop,
         float time = std::chrono::duration<float, std::chrono::seconds::period>(
                          currentTime - startTime)
                          .count();
-        backbuffer->updateUbo(time, swapchain.createInfo.imageExtent);
+        // backbuffer->updateUbo(time, swapchain.createInfo.imageExtent);
+        UniformBufferObject ubo{};
+        ubo.setTime(time, swapchain.createInfo.imageExtent.width,
+                    swapchain.createInfo.imageExtent.height);
+        uniformBuffers[acquired.imageIndex]->copy(ubo);
       }
 
       // submit command

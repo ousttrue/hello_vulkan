@@ -85,6 +85,7 @@ struct not_copyable {
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Physical_devices_and_queue_families
 struct PhysicalDevice {
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  operator VkPhysicalDevice() const { return this->physicalDevice; }
   VkPhysicalDeviceProperties properties = {};
   VkPhysicalDeviceFeatures features = {};
   std::vector<VkQueueFamilyProperties> queueFamilyProperties;
