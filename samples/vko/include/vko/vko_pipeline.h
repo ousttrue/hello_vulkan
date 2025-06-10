@@ -1,5 +1,6 @@
 #pragma once
 #include "vko.h"
+#include <functional>
 
 namespace vko {
 
@@ -324,9 +325,8 @@ struct Buffer : not_copyable {
   VkBuffer buffer;
   std::shared_ptr<DeviceMemory> memory;
 
-  Buffer(VkPhysicalDevice physicalDevice, VkDevice _device,
-               VkDeviceSize size, VkBufferUsageFlags usage,
-               VkMemoryPropertyFlags properties)
+  Buffer(VkPhysicalDevice physicalDevice, VkDevice _device, VkDeviceSize size,
+         VkBufferUsageFlags usage, VkMemoryPropertyFlags properties)
       : device(_device) {
 
     VkBufferCreateInfo bufferInfo{
@@ -362,10 +362,9 @@ struct Image : not_copyable {
   VkImage image;
   std::shared_ptr<DeviceMemory> memory;
 
-  Image(VkPhysicalDevice physicalDevice, VkDevice _device,
-                uint32_t width, uint32_t height, VkFormat format,
-                VkImageTiling tiling, VkImageUsageFlags usage,
-                VkMemoryPropertyFlags properties)
+  Image(VkPhysicalDevice physicalDevice, VkDevice _device, uint32_t width,
+        uint32_t height, VkFormat format, VkImageTiling tiling,
+        VkImageUsageFlags usage, VkMemoryPropertyFlags properties)
       : device(_device) {
 
     VkImageCreateInfo imageInfo{
@@ -393,5 +392,70 @@ struct Image : not_copyable {
   }
   ~Image() { vkDestroyImage(this->device, this->image, nullptr); }
 };
+
+struct CommandPool : not_copyable {
+  VkDevice device;
+  VkQueue queue;
+  VkCommandPool commandPool;
+  operator VkCommandPool() const { return this->commandPool; }
+  CommandPool(VkDevice _device, uint32_t queueFamilyIndex) : device(_device) {
+    vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
+    VkCommandPoolCreateInfo poolInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = 0,
+        .queueFamilyIndex = queueFamilyIndex,
+    };
+    VKO_CHECK(vkCreateCommandPool(this->device, &poolInfo, nullptr,
+                                  &this->commandPool));
+  }
+  ~CommandPool() {
+    vkDestroyCommandPool(this->device, this->commandPool, nullptr);
+  }
+};
+
+inline VkCommandBuffer beginSingleTimeCommands(VkDevice device,
+                                               VkCommandPool commandPool) {
+  VkCommandBufferAllocateInfo allocInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = commandPool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+  VkCommandBuffer commandBuffer;
+  vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+  return commandBuffer;
+}
+
+inline void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool,
+                                  VkQueue graphicsQueue,
+                                  VkCommandBuffer commandBuffer) {
+  vkEndCommandBuffer(commandBuffer);
+
+  VkSubmitInfo submitInfo{
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &commandBuffer,
+  };
+  vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+
+  vkQueueWaitIdle(graphicsQueue);
+
+  vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+inline void executeCommandSync(
+    VkDevice device, VkQueue graphicsQueue, VkCommandPool commandPool,
+    const std::function<void(VkCommandBuffer)> &commandRecorder) {
+  auto command = beginSingleTimeCommands(device, commandPool);
+  commandRecorder(command);
+  endSingleTimeCommands(device, commandPool, graphicsQueue, command);
+}
 
 } // namespace vko

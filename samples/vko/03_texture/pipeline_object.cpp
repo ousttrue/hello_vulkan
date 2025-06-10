@@ -55,86 +55,6 @@ void main()
 }
 )";
 
-class MemoryAllocator {
-  VkPhysicalDeviceMemoryProperties _memProperties;
-  VkDevice _device;
-  VkQueue _graphicsQueue;
-  VkCommandPool _commandPool;
-
-public:
-  MemoryAllocator(VkPhysicalDevice physicalDevice, VkDevice device,
-                  uint32_t graphicsQueueFamilyIndex);
-  ~MemoryAllocator();
-
-  void oneTimeCommandSync(
-      const std::function<void(VkCommandBuffer)> &commandRecorder);
-};
-MemoryAllocator::MemoryAllocator(VkPhysicalDevice physicalDevice,
-                                 VkDevice device,
-                                 uint32_t graphicsQueueFamilyIndex)
-    : _device(device) {
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &_memProperties);
-
-  vkGetDeviceQueue(_device, graphicsQueueFamilyIndex, 0, &_graphicsQueue);
-  VkCommandPoolCreateInfo poolInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = 0,
-      .queueFamilyIndex = graphicsQueueFamilyIndex,
-  };
-  if (vkCreateCommandPool(device, &poolInfo, nullptr, &_commandPool) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create command pool!");
-  }
-}
-
-MemoryAllocator::~MemoryAllocator() {
-  vkDestroyCommandPool(_device, _commandPool, nullptr);
-}
-
-static VkCommandBuffer beginSingleTimeCommands(VkDevice device,
-                                               VkCommandPool commandPool) {
-  VkCommandBufferAllocateInfo allocInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = commandPool,
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = 1,
-  };
-  VkCommandBuffer commandBuffer;
-  vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
-
-  VkCommandBufferBeginInfo beginInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-  return commandBuffer;
-}
-
-void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool,
-                           VkQueue graphicsQueue,
-                           VkCommandBuffer commandBuffer) {
-  vkEndCommandBuffer(commandBuffer);
-
-  VkSubmitInfo submitInfo{
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &commandBuffer,
-  };
-  vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-
-  vkQueueWaitIdle(graphicsQueue);
-
-  vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-}
-
-void MemoryAllocator::oneTimeCommandSync(
-    const std::function<void(VkCommandBuffer)> &commandRecorder) {
-  auto command = beginSingleTimeCommands(_device, _commandPool);
-  commandRecorder(command);
-  endSingleTimeCommands(_device, _commandPool, _graphicsQueue, command);
-}
-
 struct DescriptorSetLayout {
   VkDevice _device;
   VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
@@ -182,6 +102,7 @@ struct DescriptorSetLayout {
     vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout, nullptr);
   }
 };
+
 static void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                                   VkFormat format, VkImageLayout oldLayout,
                                   VkImageLayout newLayout) {
@@ -244,23 +165,6 @@ void UniformBufferObject::setTime(float time, float width, float height) {
   // GLM was designed for OpenGL, therefor Y-coordinate (of the clip
   // coodinates) is inverted, the following code flips this around!
   this->proj.m[5] /*[1][1]*/ *= -1;
-}
-
-static std::vector<char> readFile(const std::string &filename) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open()) {
-    throw std::runtime_error("failed to open file!");
-  }
-
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
-
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-  file.close();
-
-  return buffer;
 }
 
 static VkShaderModule createShaderModule(VkDevice device,
@@ -370,8 +274,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
   auto ptr = std::shared_ptr<PipelineObject>(new PipelineObject(
       device, descriptorSetLayout, pipelineLayout, renderPass));
 
-  auto memory = std::make_shared<MemoryAllocator>(physicalDevice, device,
-                                                  graphicsQueueFamilyIndex);
+  vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
 
   {
     // ptr->createTextureImage(memory);
@@ -397,13 +300,16 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    memory->oneTimeCommandSync([self = ptr](auto commandBuffer) {
-      transitionImageLayout(commandBuffer, self->_texture->image,
-                            VK_FORMAT_R8G8B8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    });
+    vko::executeCommandSync(
+        device, commandPool.queue, commandPool,
+        [self = ptr](auto commandBuffer) {
+          transitionImageLayout(
+              commandBuffer, self->_texture->image, VK_FORMAT_R8G8B8_SRGB,
+              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        });
 
-    memory->oneTimeCommandSync(
+    vko::executeCommandSync(
+        device, commandPool.queue, commandPool,
 
         [self = ptr, stagingBuffer, texWidth, texHeight](auto commandBuffer) {
           copyBufferToImage(commandBuffer, stagingBuffer->buffer,
@@ -412,36 +318,32 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
                             static_cast<uint32_t>(texHeight));
         });
 
-    memory->oneTimeCommandSync([self = ptr](auto commandBuffer) {
-      transitionImageLayout(commandBuffer, self->_texture->image,
-                            VK_FORMAT_R8G8B8A8_SRGB,
-                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    });
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+                            [self = ptr](auto commandBuffer) {
+                              transitionImageLayout(
+                                  commandBuffer, self->_texture->image,
+                                  VK_FORMAT_R8G8B8A8_SRGB,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                            });
   }
   {
-    // ptr->createTextureImageView();
-    // ptr->_textureImageView =
-    //     ptr->createImageView(ptr->_texture->image(),
-    //     VK_FORMAT_R8G8B8A8_SRGB);
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = ptr->_texture->image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB; // format;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
+    VkImageViewCreateInfo viewInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = ptr->_texture->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_SRGB, // format;
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
+    };
     // VkImageView imageView;
     if (vkCreateImageView(device, &viewInfo, nullptr,
                           &ptr->_textureImageView) != VK_SUCCESS) {
       throw std::runtime_error("failed to create texture image view!");
     }
-
-    // return imageView;
   }
   {
     // ptr->createTextureSampler();
@@ -473,7 +375,6 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     }
   }
   {
-    // ptr->createVertexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
     auto stagingBuffer = std::make_shared<vko::Buffer>(
@@ -486,15 +387,15 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    memory->oneTimeCommandSync([stagingBuffer,
-                                vertexBuffer = ptr->_vertexBuffer,
-                                bufferSize](auto commandBuffer) {
-      stagingBuffer->copyCommand(commandBuffer, vertexBuffer->buffer,
-                                 bufferSize);
-    });
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+                            [stagingBuffer, vertexBuffer = ptr->_vertexBuffer,
+                             bufferSize](auto commandBuffer) {
+                              stagingBuffer->copyCommand(commandBuffer,
+                                                         vertexBuffer->buffer,
+                                                         bufferSize);
+                            });
   }
   {
-    // ptr->createIndexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     auto stagingBuffer = std::make_shared<vko::Buffer>(
@@ -508,11 +409,13 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    memory->oneTimeCommandSync([stagingBuffer, indexBuffer = ptr->_indexBuffer,
-                                bufferSize](auto commandBuffer) {
-      stagingBuffer->copyCommand(commandBuffer, indexBuffer->buffer,
-                                 bufferSize);
-    });
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+                            [stagingBuffer, indexBuffer = ptr->_indexBuffer,
+                             bufferSize](auto commandBuffer) {
+                              stagingBuffer->copyCommand(commandBuffer,
+                                                         indexBuffer->buffer,
+                                                         bufferSize);
+                            });
   }
 
   return ptr;
