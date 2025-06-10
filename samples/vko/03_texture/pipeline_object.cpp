@@ -47,15 +47,15 @@ void main()
 }
 )";
 
-PipelineObject::PipelineObject(
-    VkPhysicalDevice physicalDevice, VkDevice _device,
+vko::Pipeline createPipelineObject(
+    VkPhysicalDevice physicalDevice, VkDevice device,
     //
     VkFormat swapchainFormat, VkExtent2D swapchainExtent,
     //
     VkDescriptorSetLayout descriptorSetLayout,
     const VkVertexInputBindingDescription &vertexInputBindingDescription,
-    const std::vector<VkVertexInputAttributeDescription> &attributeDescriptions)
-    : device(_device) {
+    const std::vector<VkVertexInputAttributeDescription>
+        &attributeDescriptions) {
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -64,17 +64,18 @@ PipelineObject::PipelineObject(
       .pushConstantRangeCount = 0,
       .pPushConstantRanges = nullptr,
   };
+  VkPipelineLayout pipelineLayout;
   VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                   &this->pipelineLayout));
+                                   &pipelineLayout));
 
-  this->renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
+  auto renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   // auto vertShaderCode = readFile("shaders/vert.spv");
   VkShaderModule vertShaderModule =
-      vko::createShaderModule(_device, glsl_vs_to_spv(VS));
+      vko::createShaderModule(device, glsl_vs_to_spv(VS));
   // auto fragShaderCode = readFile("shaders/frag.spv");
   VkShaderModule fragShaderModule =
-      vko::createShaderModule(_device, glsl_fs_to_spv(FS));
+      vko::createShaderModule(device, glsl_fs_to_spv(FS));
   VkPipelineShaderStageCreateInfo shaderStages[] = {
       {
           .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -193,22 +194,18 @@ PipelineObject::PipelineObject(
       .pDepthStencilState = nullptr,
       .pColorBlendState = &colorBlending,
       .pDynamicState = nullptr,
-      .layout = this->pipelineLayout,
-      .renderPass = this->renderPass,
+      .layout = pipelineLayout,
+      .renderPass = renderPass,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
   };
-  if (vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                nullptr,
-                                &this->graphicsPipeline) != VK_SUCCESS) {
+  VkPipeline graphicsPipeline;
+  if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                nullptr, &graphicsPipeline) != VK_SUCCESS) {
     throw std::runtime_error("failed to create graphics pipeline!");
   }
-  vkDestroyShaderModule(_device, fragShaderModule, nullptr);
-  vkDestroyShaderModule(_device, vertShaderModule, nullptr);
-}
+  vkDestroyShaderModule(device, fragShaderModule, nullptr);
+  vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
-PipelineObject::~PipelineObject() {
-  vkDestroyPipeline(this->device, this->graphicsPipeline, nullptr);
-  vkDestroyRenderPass(this->device, this->renderPass, nullptr);
-  vkDestroyPipelineLayout(this->device, this->pipelineLayout, nullptr);
+  return {device, renderPass, pipelineLayout, graphicsPipeline};
 }

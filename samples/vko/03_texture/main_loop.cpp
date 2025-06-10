@@ -76,99 +76,7 @@ static void bindTexture(VkDevice device,
                          descriptorWrites, 0, nullptr);
 }
 
-struct DescriptorCopy {
-  VkDevice device;
-  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  std::vector<VkDescriptorSet> descriptorSets;
-
-  DescriptorCopy(VkDevice _device, VkDescriptorSetLayout descriptorSetLayout,
-                 uint32_t count)
-      : device(_device) {
-    VkDescriptorPoolSize poolSizes[] = {
-        VkDescriptorPoolSize{
-            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = static_cast<uint32_t>(count),
-        },
-        VkDescriptorPoolSize{
-            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = static_cast<uint32_t>(count),
-        },
-    };
-    VkDescriptorPoolCreateInfo poolInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        // specifies the maximum number of descriptor sets that may be allocated
-        .maxSets = count,
-        .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
-        .pPoolSizes = poolSizes,
-    };
-    VKO_CHECK(vkCreateDescriptorPool(_device, &poolInfo, nullptr,
-                                     &this->descriptorPool));
-
-    std::vector<VkDescriptorSetLayout> layouts(count, descriptorSetLayout);
-    VkDescriptorSetAllocateInfo descriptorAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = this->descriptorPool,
-        .descriptorSetCount = count,
-        .pSetLayouts = layouts.data(),
-    };
-    this->descriptorSets.resize(count);
-    VKO_CHECK(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
-                                       this->descriptorSets.data()));
-  }
-  ~DescriptorCopy() {
-    // The descriptor pool should be destroyed here since it relies on the
-    // number of images
-    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
-  }
-};
-
-struct DescriptorSetLayout {
-  VkDevice _device;
-  VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
-
-  VkDescriptorSetLayoutBinding bindings[2] = {
-      {
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-          .pImmutableSamplers = nullptr,
-      },
-      {
-          .binding = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = 1,
-          // indicate that we want to use the combined image sampler
-          // descriptor in the fragment shader
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .pImmutableSamplers = nullptr,
-      },
-  };
-
-  VkDescriptorSetLayoutCreateInfo layoutInfo{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(std::size(bindings)),
-      .pBindings = bindings,
-  };
-
-  // VkDescriptorSetLayout descriptorSetLayout;
-  DescriptorSetLayout(VkDevice device) : _device(device) {
-    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
-                                    &_descriptorSetLayout) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create descriptor set layout!");
-    }
-  }
-
-  static std::shared_ptr<DescriptorSetLayout> create(VkDevice device) {
-    auto ptr =
-        std::shared_ptr<DescriptorSetLayout>(new DescriptorSetLayout(device));
-    return ptr;
-  }
-
-  ~DescriptorSetLayout() {
-    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout, nullptr);
-  }
-};
+;
 
 static void record(VkCommandBuffer commandBuffer,
                    //
@@ -242,28 +150,59 @@ void main_loop(const std::function<bool()> &runLoop,
       physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex, VK_NULL_HANDLE);
+  auto imageCount = swapchain.images.size();
 
-  auto descriptorSetLayout = DescriptorSetLayout::create(device);
+  vko::DescriptorSets descriptorSets(
+      device,
+      {
+          {
+              .binding = 0,
+              .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+              .descriptorCount = 1,
+              .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+              .pImmutableSamplers = nullptr,
+          },
+          {
+              .binding = 1,
+              .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+              .descriptorCount = 1,
+              // indicate that we want to use the combined image sampler
+              // descriptor in the fragment shader
+              .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+              .pImmutableSamplers = nullptr,
+          },
+      });
+  descriptorSets.allocate(
+      imageCount,
+      {
+          VkDescriptorPoolSize{
+              .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+              .descriptorCount = static_cast<uint32_t>(imageCount),
+          },
+          VkDescriptorPoolSize{
+              .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+              .descriptorCount = static_cast<uint32_t>(imageCount),
+          },
+      }
+  );
 
-  PipelineObject pipeline(physicalDevice, device,
-                          //
-                          surface.chooseSwapSurfaceFormat().format,
-                          swapchain.createInfo.imageExtent,
-                          //
-                          descriptorSetLayout->_descriptorSetLayout,
-                          scene.vertexInputBindingDescription,
-                          scene.attributeDescriptions);
+  auto pipeline = createPipelineObject(physicalDevice, device,
+                                       //
+                                       surface.chooseSwapSurfaceFormat().format,
+                                       swapchain.createInfo.imageExtent,
+                                       //
+                                       descriptorSets.descriptorSetLayout,
+                                       scene.vertexInputBindingDescription,
+                                       scene.attributeDescriptions);
 
-  DescriptorCopy descriptors(device, descriptorSetLayout->_descriptorSetLayout,
-                             swapchain.images.size());
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
-      swapchain.images.size());
+      imageCount);
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
-      swapchain.images.size());
+      imageCount);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   swapchain.images.size());
+                                   imageCount);
 
   VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -284,7 +223,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
-      auto descriptorSet = descriptors.descriptorSets[acquired.imageIndex];
+      auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
 
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {

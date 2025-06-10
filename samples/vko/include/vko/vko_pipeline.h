@@ -125,6 +125,55 @@ struct ShaderModule : not_copyable {
   }
 };
 
+struct DescriptorSets : not_copyable {
+  VkDevice device;
+  VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> descriptorSets;
+
+  DescriptorSets(VkDevice _device,
+                 const std::vector<VkDescriptorSetLayoutBinding> &bindings)
+      : device(_device) {
+    // assert(bindings.size());
+    VkDescriptorSetLayoutCreateInfo layoutInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(std::size(bindings)),
+        .pBindings = bindings.data(),
+    };
+    VKO_CHECK(vkCreateDescriptorSetLayout(this->device, &layoutInfo, nullptr,
+                                          &this->descriptorSetLayout));
+  }
+
+  ~DescriptorSets() {
+    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->descriptorSetLayout,
+                                 nullptr);
+  }
+
+  void allocate(uint32_t count,
+                const std::vector<VkDescriptorPoolSize> &poolSizes) {
+    VkDescriptorPoolCreateInfo poolInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = count,
+        .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
+        .pPoolSizes = poolSizes.data(),
+    };
+    VKO_CHECK(vkCreateDescriptorPool(this->device, &poolInfo, nullptr,
+                                     &this->descriptorPool));
+
+    std::vector<VkDescriptorSetLayout> layouts(count, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = this->descriptorPool,
+        .descriptorSetCount = count,
+        .pSetLayouts = layouts.data(),
+    };
+    this->descriptorSets.resize(count);
+    VKO_CHECK(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
+                                       this->descriptorSets.data()));
+  }
+};
+
 struct Pipeline : not_copyable {
   VkDevice device;
   VkRenderPass renderPass = VK_NULL_HANDLE;
