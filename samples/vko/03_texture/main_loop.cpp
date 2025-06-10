@@ -87,6 +87,54 @@ struct DescriptorCopy {
   }
 };
 
+struct DescriptorSetLayout {
+  VkDevice _device;
+  VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
+
+  VkDescriptorSetLayoutBinding bindings[2] = {
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+          .pImmutableSamplers = nullptr,
+      },
+      {
+          .binding = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = 1,
+          // indicate that we want to use the combined image sampler
+          // descriptor in the fragment shader
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .pImmutableSamplers = nullptr,
+      },
+  };
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(std::size(bindings)),
+      .pBindings = bindings,
+  };
+
+  // VkDescriptorSetLayout descriptorSetLayout;
+  DescriptorSetLayout(VkDevice device) : _device(device) {
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
+                                    &_descriptorSetLayout) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+  }
+
+  static std::shared_ptr<DescriptorSetLayout> create(VkDevice device) {
+    auto ptr =
+        std::shared_ptr<DescriptorSetLayout>(new DescriptorSetLayout(device));
+    return ptr;
+  }
+
+  ~DescriptorSetLayout() {
+    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout, nullptr);
+  }
+};
+
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
                const vko::Device &device) {
@@ -101,11 +149,14 @@ void main_loop(const std::function<bool()> &runLoop,
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex, VK_NULL_HANDLE);
 
+  auto descriptorSetLayout = DescriptorSetLayout::create(device);
+
   PipelineObject pipeline(physicalDevice.physicalDevice, device,
                           physicalDevice.graphicsFamilyIndex,
-                          surface.chooseSwapSurfaceFormat().format);
+                          surface.chooseSwapSurfaceFormat().format,
+                          descriptorSetLayout->_descriptorSetLayout);
 
-  DescriptorCopy descriptors(device, pipeline.descriptorSetLayout(),
+  DescriptorCopy descriptors(device, descriptorSetLayout->_descriptorSetLayout,
                              swapchain.images.size());
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(

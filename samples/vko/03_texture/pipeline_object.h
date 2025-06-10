@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <vko/vko_pipeline.h>
+#include <vulkan/vulkan_core.h>
 
 struct Vec2 {
   float x;
@@ -33,7 +34,7 @@ struct UniformBufferObject {
 class PipelineObject {
   VkDevice _device;
 
-  std::shared_ptr<struct DescriptorSetLayout> _descriptorSetLayout;
+  VkDescriptorSetLayout _descriptorSetLayout;
   VkPipelineLayout _pipelineLayout;
   VkRenderPass _renderPass;
 
@@ -49,14 +50,14 @@ class PipelineObject {
 
 public:
   PipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
-                 uint32_t graphicsQueueFamilyIndex, VkFormat swapchainFormat);
+                 uint32_t graphicsQueueFamilyIndex, VkFormat swapchainFormat,
+                 VkDescriptorSetLayout descriptorSetLayout);
   ~PipelineObject();
   void createGraphicsPipeline(VkExtent2D swapchainExtent);
   void record(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer,
               VkExtent2D extent, VkDescriptorSet descriptorSet);
 
   VkRenderPass renderPass() const;
-  VkDescriptorSetLayout descriptorSetLayout() const;
   std::tuple<VkImageView, VkSampler> texture() const {
     return {_textureImageView, _textureSampler};
   }
