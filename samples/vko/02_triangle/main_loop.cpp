@@ -45,15 +45,10 @@ void main_loop(const std::function<bool()> &runLoop,
   // pipeline
   //
   vko::Logger::Info("convert glsl to spv and create shader module...");
-  auto vsSpv = glsl_vs_to_spv(VS);
-  vko::ShaderModule vs(device, vko::createShaderModule(device, vsSpv),
-                       VK_SHADER_STAGE_VERTEX_BIT, "main");
-  assert(vs != VK_NULL_HANDLE);
-
-  auto fsSpv = glsl_fs_to_spv(FS);
-  vko::ShaderModule fs(device, vko::createShaderModule(device, fsSpv),
-                       VK_SHADER_STAGE_FRAGMENT_BIT, "main");
-  assert(fs != VK_NULL_HANDLE);
+  auto vs =
+      vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
+  auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
+                                                    "main");
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,

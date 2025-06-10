@@ -1,6 +1,7 @@
 #pragma once
 #include "vko.h"
 #include <functional>
+#include <vulkan/vulkan_core.h>
 
 namespace vko {
 
@@ -104,9 +105,23 @@ struct ShaderModule : not_copyable {
     this->pipelineShaderStageCreateInfo.pName = this->name.c_str();
   }
 
-public:
   ~ShaderModule() {
     vkDestroyShaderModule(this->device, this->shaderModule, nullptr);
+  }
+
+  static ShaderModule createVertexShader(VkDevice device,
+                                         const std::vector<uint32_t> &spv,
+                                         const char *entryPoint) {
+    auto m = createShaderModule(device, spv);
+    return vko::ShaderModule(device, m, VK_SHADER_STAGE_VERTEX_BIT, entryPoint);
+  }
+
+  static ShaderModule createFragmentShader(VkDevice device,
+                                           const std::vector<uint32_t> &spv,
+                                           const char *entryPoint) {
+    auto m = createShaderModule(device, spv);
+    return vko::ShaderModule(device, m, VK_SHADER_STAGE_FRAGMENT_BIT,
+                             entryPoint);
   }
 };
 

@@ -47,16 +47,10 @@ class PipelineObject {
   // after swapchain
   VkPipeline _graphicsPipeline = VK_NULL_HANDLE;
 
-  PipelineObject(
-      VkDevice device,
-      const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
-      VkPipelineLayout pipelineLayout, VkRenderPass renderPass);
-
 public:
+  PipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
+                 uint32_t graphicsQueueFamilyIndex, VkFormat swapchainFormat);
   ~PipelineObject();
-  static std::shared_ptr<PipelineObject>
-  create(VkPhysicalDevice physicalDevice, VkDevice device,
-         uint32_t graphicsQueueFamilyIndex, VkFormat swapchainFormat);
   void createGraphicsPipeline(VkExtent2D swapchainExtent);
   void record(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer,
               VkExtent2D extent, VkDescriptorSet descriptorSet);

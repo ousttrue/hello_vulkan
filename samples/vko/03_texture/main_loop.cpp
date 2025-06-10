@@ -101,11 +101,11 @@ void main_loop(const std::function<bool()> &runLoop,
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex, VK_NULL_HANDLE);
 
-  auto pipeline = PipelineObject::create(
-      physicalDevice.physicalDevice, device, physicalDevice.graphicsFamilyIndex,
-      surface.chooseSwapSurfaceFormat().format);
+  PipelineObject pipeline(physicalDevice.physicalDevice, device,
+                          physicalDevice.graphicsFamilyIndex,
+                          surface.chooseSwapSurfaceFormat().format);
 
-  DescriptorCopy descriptors(device, pipeline->descriptorSetLayout(),
+  DescriptorCopy descriptors(device, pipeline.descriptorSetLayout(),
                              swapchain.images.size());
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
@@ -113,7 +113,7 @@ void main_loop(const std::function<bool()> &runLoop,
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
-  pipeline->createGraphicsPipeline(swapchain.createInfo.imageExtent);
+  pipeline.createGraphicsPipeline(swapchain.createInfo.imageExtent);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    swapchain.images.size());
@@ -149,14 +149,14 @@ void main_loop(const std::function<bool()> &runLoop,
         // new backbuffer(framebuffer)
         backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
-            swapchain.createInfo.imageFormat, pipeline->renderPass());
+            swapchain.createInfo.imageFormat, pipeline.renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
 
-        auto [imageView, sampler] = pipeline->texture();
+        auto [imageView, sampler] = pipeline.texture();
         bindTexture(device, ubo, imageView, sampler, descriptorSet);
 
-        pipeline->record(cmd, backbuffer->framebuffer,
-                         swapchain.createInfo.imageExtent, descriptorSet);
+        pipeline.record(cmd, backbuffer->framebuffer,
+                        swapchain.createInfo.imageExtent, descriptorSet);
       }
 
       {

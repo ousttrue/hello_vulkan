@@ -1,5 +1,6 @@
 #include "pipeline_object.h"
 #include "../glsl_to_spv.h"
+#include "vko/vko.h"
 #include <array>
 #include <fstream>
 #include <functional>
@@ -54,6 +55,27 @@ void main()
     outColor = texture(texSampler, fragTexCoord);
 }
 )";
+
+static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                              VkImage image, uint32_t width, uint32_t height) {
+  VkBufferImageCopy region{
+      .bufferOffset = 0,
+      // functions as "padding" for the image destination
+      .bufferRowLength = 0,
+      .bufferImageHeight = 0,
+      .imageSubresource =
+          {
+              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+              .mipLevel = 0,
+              .baseArrayLayer = 0,
+              .layerCount = 1,
+          },
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {width, height, 1},
+  };
+  vkCmdCopyBufferToImage(commandBuffer, buffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+}
 
 struct DescriptorSetLayout {
   VkDevice _device;
@@ -206,78 +228,26 @@ static VkVertexInputBindingDescription Vertex_getBindingDescription() {
   return bindingDescription;
 }
 
-PipelineObject::PipelineObject(
-    VkDevice device,
-    const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
-    VkPipelineLayout pipelineLayout, VkRenderPass renderPass)
-    : _device(device), _descriptorSetLayout(descriptorSetLayout),
-      _pipelineLayout(pipelineLayout), _renderPass(renderPass) {}
-
-PipelineObject::~PipelineObject() {
-  vkDestroyRenderPass(_device, _renderPass, nullptr);
-
-  if (_graphicsPipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
-    _graphicsPipeline = VK_NULL_HANDLE;
-  }
-
-  vkDestroySampler(_device, _textureSampler, nullptr);
-  vkDestroyImageView(_device, _textureImageView, nullptr);
-  _texture = {};
-
-  vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
-}
-
-static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
-                              VkImage image, uint32_t width, uint32_t height) {
-  VkBufferImageCopy region{
-      .bufferOffset = 0,
-      // functions as "padding" for the image destination
-      .bufferRowLength = 0,
-      .bufferImageHeight = 0,
-      .imageSubresource =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .mipLevel = 0,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-      .imageOffset = {0, 0, 0},
-      .imageExtent = {width, height, 1},
-  };
-  vkCmdCopyBufferToImage(commandBuffer, buffer, image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-}
-
-std::shared_ptr<PipelineObject>
-PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
-                       uint32_t graphicsQueueFamilyIndex,
-                       VkFormat swapchainFormat) {
-  auto descriptorSetLayout = DescriptorSetLayout::create(device);
-
+PipelineObject::PipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
+                               uint32_t graphicsQueueFamilyIndex,
+                               VkFormat swapchainFormat)
+    : _device(device) {
+  this->_descriptorSetLayout = DescriptorSetLayout::create(device);
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
-      .pSetLayouts = &descriptorSetLayout->_descriptorSetLayout,
+      .pSetLayouts = &_descriptorSetLayout->_descriptorSetLayout,
       .pushConstantRangeCount = 0,
       .pPushConstantRanges = nullptr,
   };
+  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                   &this->_pipelineLayout));
 
-  VkPipelineLayout pipelineLayout;
-  if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                             &pipelineLayout) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create pipeline layout!");
-  }
-
-  auto renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
-
-  auto ptr = std::shared_ptr<PipelineObject>(new PipelineObject(
-      device, descriptorSetLayout, pipelineLayout, renderPass));
+  this->_renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
 
   {
-    // ptr->createTextureImage(memory);
     int texWidth = 2;
     int texHeight = 2;
     int texChannels = 4;
@@ -294,7 +264,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBuffer->memory->assign(pixels);
-    ptr->_texture = std::make_shared<vko::Image>(
+    this->_texture = std::make_shared<vko::Image>(
         physicalDevice, device, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -302,7 +272,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
 
     vko::executeCommandSync(
         device, commandPool.queue, commandPool,
-        [self = ptr](auto commandBuffer) {
+        [self = this](auto commandBuffer) {
           transitionImageLayout(
               commandBuffer, self->_texture->image, VK_FORMAT_R8G8B8_SRGB,
               VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -311,7 +281,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     vko::executeCommandSync(
         device, commandPool.queue, commandPool,
 
-        [self = ptr, stagingBuffer, texWidth, texHeight](auto commandBuffer) {
+        [self = this, stagingBuffer, texWidth, texHeight](auto commandBuffer) {
           copyBufferToImage(commandBuffer, stagingBuffer->buffer,
                             self->_texture->image,
                             static_cast<uint32_t>(texWidth),
@@ -319,7 +289,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         });
 
     vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [self = ptr](auto commandBuffer) {
+                            [self = this](auto commandBuffer) {
                               transitionImageLayout(
                                   commandBuffer, self->_texture->image,
                                   VK_FORMAT_R8G8B8A8_SRGB,
@@ -330,7 +300,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
   {
     VkImageViewCreateInfo viewInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = ptr->_texture->image,
+        .image = this->_texture->image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = VK_FORMAT_R8G8B8A8_SRGB, // format;
         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -341,7 +311,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     };
     // VkImageView imageView;
     if (vkCreateImageView(device, &viewInfo, nullptr,
-                          &ptr->_textureImageView) != VK_SUCCESS) {
+                          &this->_textureImageView) != VK_SUCCESS) {
       throw std::runtime_error("failed to create texture image view!");
     }
   }
@@ -355,7 +325,8 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     samplerInfo.minFilter = VK_FILTER_LINEAR;
     // note: image axes are UVW (rather than XYZ)
     samplerInfo.addressModeU =
-        VK_SAMPLER_ADDRESS_MODE_REPEAT; // repeat the texture when out of bounds
+        VK_SAMPLER_ADDRESS_MODE_REPEAT; // repeat the texture when out of
+                                        // bounds
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.anisotropyEnable = VK_TRUE;
@@ -369,8 +340,8 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
 
-    if (vkCreateSampler(device, &samplerInfo, nullptr, &ptr->_textureSampler) !=
-        VK_SUCCESS) {
+    if (vkCreateSampler(device, &samplerInfo, nullptr,
+                        &this->_textureSampler) != VK_SUCCESS) {
       throw std::runtime_error("failed to create texture sampler!");
     }
   }
@@ -382,13 +353,13 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBuffer->memory->assign(vertices.data(), bufferSize);
-    ptr->_vertexBuffer = std::make_shared<vko::Buffer>(
+    this->_vertexBuffer = std::make_shared<vko::Buffer>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, vertexBuffer = ptr->_vertexBuffer,
+                            [stagingBuffer, vertexBuffer = this->_vertexBuffer,
                              bufferSize](auto commandBuffer) {
                               stagingBuffer->copyCommand(commandBuffer,
                                                          vertexBuffer->buffer,
@@ -404,21 +375,34 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBuffer->memory->assign(indices.data(), bufferSize);
 
-    ptr->_indexBuffer = std::make_shared<vko::Buffer>(
+    this->_indexBuffer = std::make_shared<vko::Buffer>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, indexBuffer = ptr->_indexBuffer,
+                            [stagingBuffer, indexBuffer = this->_indexBuffer,
                              bufferSize](auto commandBuffer) {
                               stagingBuffer->copyCommand(commandBuffer,
                                                          indexBuffer->buffer,
                                                          bufferSize);
                             });
   }
+}
 
-  return ptr;
+PipelineObject::~PipelineObject() {
+  vkDestroyRenderPass(_device, _renderPass, nullptr);
+
+  if (_graphicsPipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
+    _graphicsPipeline = VK_NULL_HANDLE;
+  }
+
+  vkDestroySampler(_device, _textureSampler, nullptr);
+  vkDestroyImageView(_device, _textureImageView, nullptr);
+  _texture = {};
+
+  vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
 void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
