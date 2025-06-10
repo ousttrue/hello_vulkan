@@ -3,21 +3,6 @@
 #include <memory>
 #include <vko/vko_pipeline.h>
 
-class BufferObject {
-  VkDevice _device;
-  VkBuffer _buffer;
-
-public:
-  std::shared_ptr<vko::DeviceMemory> _memory;
-  BufferObject(VkPhysicalDevice physicalDevice, VkDevice device,
-               VkDeviceSize size, VkBufferUsageFlags usage,
-               VkMemoryPropertyFlags properties);
-  ~BufferObject();
-  VkBuffer buffer() const { return _buffer; }
-  void copyCommand(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
-                   VkDeviceSize size);
-};
-
 class TextureObject {
   VkDevice _device;
   VkImage _image;

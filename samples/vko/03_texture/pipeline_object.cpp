@@ -305,11 +305,11 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     };
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-    auto stagingBuffer = std::make_shared<BufferObject>(
+    auto stagingBuffer = std::make_shared<vko::BufferObject>(
         physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->_memory->assign(pixels);
+    stagingBuffer->memory->assign(pixels);
     ptr->_texture = memory->createImage(
         texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -324,7 +324,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     memory->oneTimeCommandSync(
 
         [self = ptr, stagingBuffer, texWidth, texHeight](auto commandBuffer) {
-          copyBufferToImage(commandBuffer, stagingBuffer->buffer(),
+          copyBufferToImage(commandBuffer, stagingBuffer->buffer,
                             self->_texture->image(),
                             static_cast<uint32_t>(texWidth),
                             static_cast<uint32_t>(texHeight));
@@ -394,12 +394,12 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     // ptr->createVertexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    auto stagingBuffer = std::make_shared<BufferObject>(
+    auto stagingBuffer = std::make_shared<vko::BufferObject>(
         physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->_memory->assign(vertices.data(), bufferSize);
-    ptr->_vertexBuffer = std::make_shared<BufferObject>(
+    stagingBuffer->memory->assign(vertices.data(), bufferSize);
+    ptr->_vertexBuffer = std::make_shared<vko::BufferObject>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
@@ -407,7 +407,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     memory->oneTimeCommandSync([stagingBuffer,
                                 vertexBuffer = ptr->_vertexBuffer,
                                 bufferSize](auto commandBuffer) {
-      stagingBuffer->copyCommand(commandBuffer, vertexBuffer->buffer(),
+      stagingBuffer->copyCommand(commandBuffer, vertexBuffer->buffer,
                                  bufferSize);
     });
   }
@@ -415,20 +415,21 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     // ptr->createIndexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    auto stagingBuffer = std::make_shared<BufferObject>(
+    auto stagingBuffer = std::make_shared<vko::BufferObject>(
         physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->_memory->assign(indices.data(), bufferSize);
+    stagingBuffer->memory->assign(indices.data(), bufferSize);
 
-    ptr->_indexBuffer = std::make_shared<BufferObject>(
+    ptr->_indexBuffer = std::make_shared<vko::BufferObject>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     memory->oneTimeCommandSync([stagingBuffer, indexBuffer = ptr->_indexBuffer,
                                 bufferSize](auto commandBuffer) {
-      stagingBuffer->copyCommand(commandBuffer, indexBuffer->buffer(), bufferSize);
+      stagingBuffer->copyCommand(commandBuffer, indexBuffer->buffer,
+                                 bufferSize);
     });
   }
 
@@ -635,10 +636,10 @@ void PipelineObject::record(VkCommandBuffer commandBuffer,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     _graphicsPipeline);
 
-  VkBuffer vertexBuffers[] = {_vertexBuffer->buffer()};
+  VkBuffer vertexBuffers[] = {_vertexBuffer->buffer};
   VkDeviceSize offsets[] = {0};
   vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-  vkCmdBindIndexBuffer(commandBuffer, _indexBuffer->buffer(), 0,
+  vkCmdBindIndexBuffer(commandBuffer, _indexBuffer->buffer, 0,
                        VK_INDEX_TYPE_UINT16);
 
   // take the descriptor set for the corresponding swap image, and bind it

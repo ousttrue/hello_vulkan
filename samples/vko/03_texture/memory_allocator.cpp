@@ -1,40 +1,6 @@
 #include "memory_allocator.h"
 #include <stdexcept>
 
-BufferObject::BufferObject(VkPhysicalDevice physicalDevice, VkDevice device,
-                           VkDeviceSize size, VkBufferUsageFlags usage,
-                           VkMemoryPropertyFlags properties)
-    : _device(device) {
-
-  VkBufferCreateInfo bufferInfo{
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = size,
-      .usage = usage,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-  };
-  if (vkCreateBuffer(this->_device, &bufferInfo, nullptr, &this->_buffer) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create buffer!");
-  }
-
-  _memory = std::make_shared<vko::DeviceMemory>(device, physicalDevice,
-                                           this->_buffer, properties);
-
-  vkBindBufferMemory(this->_device, this->_buffer, *_memory, 0);
-}
-
-BufferObject::~BufferObject() { vkDestroyBuffer(_device, _buffer, nullptr); }
-
-void BufferObject::copyCommand(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
-                          VkDeviceSize size) {
-  VkBufferCopy copyRegion{
-      .srcOffset = 0, // optional
-      .dstOffset = 0, // optional
-      .size = size,
-  };
-  vkCmdCopyBuffer(commandBuffer, _buffer, dstBuffer, 1, &copyRegion);
-}
-
 TextureObject::TextureObject(VkDevice device, VkImage image,
                              VkDeviceMemory imageMemory)
     : _device(device), _image(image), _imageMemory(imageMemory) {

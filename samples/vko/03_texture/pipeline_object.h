@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include <vulkan/vulkan.h>
+#include <vko/vko_pipeline.h>
 
 struct Vec2 {
   float x;
@@ -37,8 +37,8 @@ class PipelineObject {
   VkPipelineLayout _pipelineLayout;
   VkRenderPass _renderPass;
 
-  std::shared_ptr<class BufferObject> _vertexBuffer;
-  std::shared_ptr<BufferObject> _indexBuffer;
+  std::shared_ptr<vko::BufferObject> _vertexBuffer;
+  std::shared_ptr<vko::BufferObject> _indexBuffer;
   std::shared_ptr<class TextureObject> _texture;
   VkImageView _textureImageView = VK_NULL_HANDLE;
   VkSampler _textureSampler = VK_NULL_HANDLE;

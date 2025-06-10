@@ -320,4 +320,40 @@ struct DeviceMemory : not_copyable {
   template <typename T> void assign(const T &src) { assign(&src, sizeof(src)); }
 };
 
+struct BufferObject : not_copyable {
+  VkDevice device;
+  VkBuffer buffer;
+  std::shared_ptr<vko::DeviceMemory> memory;
+
+  BufferObject(VkPhysicalDevice physicalDevice, VkDevice _device,
+               VkDeviceSize size, VkBufferUsageFlags usage,
+               VkMemoryPropertyFlags properties)
+      : device(_device) {
+
+    VkBufferCreateInfo bufferInfo{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VKO_CHECK(
+        vkCreateBuffer(this->device, &bufferInfo, nullptr, &this->buffer));
+
+    this->memory = std::make_shared<vko::DeviceMemory>(
+        this->device, physicalDevice, this->buffer, properties);
+
+    vkBindBufferMemory(this->device, this->buffer, *this->memory, 0);
+  }
+  ~BufferObject() { vkDestroyBuffer(this->device, this->buffer, nullptr); }
+  void copyCommand(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
+                   VkDeviceSize size) {
+    VkBufferCopy copyRegion{
+        .srcOffset = 0, // optional
+        .dstOffset = 0, // optional
+        .size = size,
+    };
+    vkCmdCopyBuffer(commandBuffer, this->buffer, dstBuffer, 1, &copyRegion);
+  }
+};
+
 } // namespace vko
