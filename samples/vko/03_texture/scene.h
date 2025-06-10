@@ -39,6 +39,32 @@ struct Scene {
       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
   };
 
+  // auto bindingDescription = Vertex_getBindingDescription();
+  // auto attributeDescriptions = Vertex_getAttributeDescriptions();
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions = {
+      // describes position
+      {
+          .location = 0,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32_SFLOAT,
+          .offset = offsetof(Vertex, pos),
+      },
+      // describes color
+      {
+          .location = 1,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = offsetof(Vertex, color),
+      },
+      // uv
+      {
+          .location = 2,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32_SFLOAT,
+          .offset = offsetof(Vertex, texCoord),
+      },
+  };
+
   std::shared_ptr<vko::Buffer> indexBuffer;
   uint32_t indexDrawCount = 0;
 

@@ -1,20 +1,10 @@
 #include "pipeline_object.h"
 #include "../glsl_to_spv.h"
-#include "scene.h"
 #include "vko/vko.h"
 #include <array>
-#include <fstream>
-#include <functional>
-#include <glm/fwd.hpp>
-#include <memory>
 #include <stdexcept>
 #include <vko/vko_pipeline.h>
 #include <vulkan/vulkan_core.h>
-
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp> //<-- includes functions such as ones that allow rotation, and perspective
 
 auto VS = R"(#version 450
 #extension GL_ARB_separate_shader_objects : enable
@@ -57,84 +47,34 @@ void main()
 }
 )";
 
-void UniformBufferObject::setTime(float time, float width, float height) {
-  // time * radians(90.0f) = rotation of 90 degrees per second!
-  *((glm::mat4 *)&this->model) = glm::rotate(
-      glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-  // specify view position
-  *((glm::mat4 *)&this->view) =
-      glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                  glm::vec3(0.0f, 0.0f, 1.0f));
-  // view from a 45 degree angle
-  *((glm::mat4 *)&this->proj) =
-      glm::perspective(glm::radians(45.0f), width / height, 1.0f, 10.0f);
+PipelineObject::PipelineObject(
+    VkPhysicalDevice physicalDevice, VkDevice _device,
+    //
+    VkFormat swapchainFormat, VkExtent2D swapchainExtent,
+    //
+    VkDescriptorSetLayout descriptorSetLayout,
+    const VkVertexInputBindingDescription &vertexInputBindingDescription,
+    const std::vector<VkVertexInputAttributeDescription> &attributeDescriptions)
+    : device(_device) {
 
-  // GLM was designed for OpenGL, therefor Y-coordinate (of the clip
-  // coodinates) is inverted, the following code flips this around!
-  this->proj.m[5] /*[1][1]*/ *= -1;
-}
-
-static VkShaderModule createShaderModule(VkDevice device,
-                                         const std::vector<uint32_t> &code) {
-  VkShaderModuleCreateInfo createInfo{};
-  createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  createInfo.codeSize = code.size() * 4;
-  createInfo.pCode = code.data();
-
-  VkShaderModule shaderModule;
-
-  if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to create shader module!");
-  }
-
-  return shaderModule;
-}
-
-PipelineObject::PipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
-                               uint32_t graphicsQueueFamilyIndex,
-                               VkFormat swapchainFormat,
-                               VkDescriptorSetLayout descriptorSetLayout)
-    : _device(device), _descriptorSetLayout(descriptorSetLayout) {
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = 1,
-      .pSetLayouts = &_descriptorSetLayout,
+      .pSetLayouts = &descriptorSetLayout,
       .pushConstantRangeCount = 0,
       .pPushConstantRanges = nullptr,
   };
   VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                   &this->_pipelineLayout));
+                                   &this->pipelineLayout));
 
-  this->_renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
-
-  vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
-}
-
-PipelineObject::~PipelineObject() {
-  vkDestroyRenderPass(_device, _renderPass, nullptr);
-
-  if (_graphicsPipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
-    _graphicsPipeline = VK_NULL_HANDLE;
-  }
-
-  vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
-}
-
-void PipelineObject::createGraphicsPipeline(const Scene &scene,
-                                            VkExtent2D swapchainExtent) {
-  if (_graphicsPipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
-    _graphicsPipeline = VK_NULL_HANDLE;
-  }
+  this->renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   // auto vertShaderCode = readFile("shaders/vert.spv");
   VkShaderModule vertShaderModule =
-      createShaderModule(_device, glsl_vs_to_spv(VS));
+      vko::createShaderModule(_device, glsl_vs_to_spv(VS));
   // auto fragShaderCode = readFile("shaders/frag.spv");
   VkShaderModule fragShaderModule =
-      createShaderModule(_device, glsl_fs_to_spv(FS));
+      vko::createShaderModule(_device, glsl_fs_to_spv(FS));
   VkPipelineShaderStageCreateInfo shaderStages[] = {
       {
           .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -150,42 +90,16 @@ void PipelineObject::createGraphicsPipeline(const Scene &scene,
       },
   };
 
-  // auto bindingDescription = Vertex_getBindingDescription();
-  // auto attributeDescriptions = Vertex_getAttributeDescriptions();
-  VkVertexInputAttributeDescription attributeDescriptions[]{
-      // describes position
-      {
-          .location = 0,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = offsetof(Vertex, pos),
-      },
-      // describes color
-      {
-          .location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, color),
-      },
-      // uv
-      {
-          .location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = offsetof(Vertex, texCoord),
-      },
-  };
-
   // This struct decribes the format of the vertex data:
   //    1. Bindings (spacing between data and if per-instance or per-vertex
   //    2. Attribute descriptions (what is passed to vertex shader)
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = &scene.vertexInputBindingDescription,
+      .pVertexBindingDescriptions = &vertexInputBindingDescription,
       .vertexAttributeDescriptionCount =
           static_cast<uint32_t>(std::size(attributeDescriptions)),
-      .pVertexAttributeDescriptions = attributeDescriptions,
+      .pVertexAttributeDescriptions = attributeDescriptions.data(),
   };
 
   // This struct describes two things as well:
@@ -279,69 +193,22 @@ void PipelineObject::createGraphicsPipeline(const Scene &scene,
       .pDepthStencilState = nullptr,
       .pColorBlendState = &colorBlending,
       .pDynamicState = nullptr,
-      .layout = _pipelineLayout,
-      .renderPass = _renderPass,
+      .layout = this->pipelineLayout,
+      .renderPass = this->renderPass,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
   };
   if (vkCreateGraphicsPipelines(_device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                nullptr, &_graphicsPipeline) != VK_SUCCESS) {
+                                nullptr,
+                                &this->graphicsPipeline) != VK_SUCCESS) {
     throw std::runtime_error("failed to create graphics pipeline!");
   }
   vkDestroyShaderModule(_device, fragShaderModule, nullptr);
   vkDestroyShaderModule(_device, vertShaderModule, nullptr);
 }
 
-void PipelineObject::record(VkCommandBuffer commandBuffer,
-                            VkFramebuffer framebuffer, VkExtent2D extent,
-                            VkDescriptorSet descriptorSet, const Scene &scene) {
-
-  VkCommandBufferBeginInfo beginInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = 0,
-      .pInheritanceInfo = nullptr,
-  };
-  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-    throw std::runtime_error("failed to begin recording command buffer!");
-  }
-
-  VkRenderPassBeginInfo renderPassInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = _renderPass,
-      .framebuffer = framebuffer,
-      .renderArea =
-          {
-              .offset = {0, 0},
-              .extent = extent,
-          },
-      .clearValueCount = 1,
-      .pClearValues = &_clearColor,
-  };
-  vkCmdBeginRenderPass(commandBuffer, &renderPassInfo,
-                       VK_SUBPASS_CONTENTS_INLINE);
-
-  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    _graphicsPipeline);
-
-  VkBuffer vertexBuffers[] = {scene.vertexBuffer->buffer};
-  VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-  vkCmdBindIndexBuffer(commandBuffer, scene.indexBuffer->buffer, 0,
-                       VK_INDEX_TYPE_UINT16);
-
-  // take the descriptor set for the corresponding swap image, and bind it
-  // to the descriptors in the shader
-  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          _pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-  // Tell Vulkan to draw the triangle USING THE INDEX BUFFER!
-  vkCmdDrawIndexed(commandBuffer, scene.indexDrawCount, 1, 0, 0, 0);
-
-  vkCmdEndRenderPass(commandBuffer);
-
-  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-    throw std::runtime_error("failed to record command buffer!");
-  }
+PipelineObject::~PipelineObject() {
+  vkDestroyPipeline(this->device, this->graphicsPipeline, nullptr);
+  vkDestroyRenderPass(this->device, this->renderPass, nullptr);
+  vkDestroyPipelineLayout(this->device, this->pipelineLayout, nullptr);
 }
-
-VkRenderPass PipelineObject::renderPass() const { return _renderPass; }

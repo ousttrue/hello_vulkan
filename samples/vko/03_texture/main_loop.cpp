@@ -2,7 +2,40 @@
 #include "pipeline_object.h"
 #include "scene.h"
 #include "vko/vko.h"
+
+#include <glm/fwd.hpp>
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/ext/matrix_projection.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+struct Matrix {
+  float m[16];
+};
+
+struct UniformBufferObject {
+  Matrix model;
+  Matrix view;
+  Matrix proj;
+  void setTime(float time, float width, float height) {
+    // time * radians(90.0f) = rotation of 90 degrees per second!
+    *((glm::mat4 *)&this->model) =
+        glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f),
+                    glm::vec3(0.0f, 0.0f, 1.0f));
+    // specify view position
+    *((glm::mat4 *)&this->view) =
+        glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 0.0f, 1.0f));
+    // view from a 45 degree angle
+    *((glm::mat4 *)&this->proj) =
+        glm::perspective(glm::radians(45.0f), width / height, 1.0f, 10.0f);
+
+    // GLM was designed for OpenGL, therefor Y-coordinate (of the clip
+    // coodinates) is inverted, the following code flips this around!
+    this->proj.m[5] /*[1][1]*/ *= -1;
+  }
+};
 
 static void bindTexture(VkDevice device,
                         const std::shared_ptr<vko::Buffer> &uniformBuffer,
@@ -137,9 +170,68 @@ struct DescriptorSetLayout {
   }
 };
 
+static void record(VkCommandBuffer commandBuffer,
+                   //
+                   VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
+                   VkPipeline graphicsPipeline,
+                   //
+                   VkFramebuffer framebuffer, VkExtent2D extent,
+                   VkClearValue clearColor, VkDescriptorSet descriptorSet,
+                   const Scene &scene) {
+
+  VkCommandBufferBeginInfo beginInfo{
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = 0,
+      .pInheritanceInfo = nullptr,
+  };
+  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    throw std::runtime_error("failed to begin recording command buffer!");
+  }
+
+  VkRenderPassBeginInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+      .renderPass = renderPass,
+      .framebuffer = framebuffer,
+      .renderArea =
+          {
+              .offset = {0, 0},
+              .extent = extent,
+          },
+      .clearValueCount = 1,
+      .pClearValues = &clearColor,
+  };
+  vkCmdBeginRenderPass(commandBuffer, &renderPassInfo,
+                       VK_SUBPASS_CONTENTS_INLINE);
+
+  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    graphicsPipeline);
+
+  VkBuffer vertexBuffers[] = {scene.vertexBuffer->buffer};
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+  vkCmdBindIndexBuffer(commandBuffer, scene.indexBuffer->buffer, 0,
+                       VK_INDEX_TYPE_UINT16);
+
+  // take the descriptor set for the corresponding swap image, and bind it
+  // to the descriptors in the shader
+  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+  // Tell Vulkan to draw the triangle USING THE INDEX BUFFER!
+  vkCmdDrawIndexed(commandBuffer, scene.indexDrawCount, 1, 0, 0, 0);
+
+  vkCmdEndRenderPass(commandBuffer);
+
+  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    throw std::runtime_error("failed to record command buffer!");
+  }
+}
+
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
                const vko::Device &device) {
+
+  Scene scene(physicalDevice, device, physicalDevice.graphicsFamilyIndex);
 
   VkQueue graphicsQueue;
   vkGetDeviceQueue(device, physicalDevice.graphicsFamilyIndex, 0,
@@ -153,12 +245,14 @@ void main_loop(const std::function<bool()> &runLoop,
 
   auto descriptorSetLayout = DescriptorSetLayout::create(device);
 
-  PipelineObject pipeline(physicalDevice.physicalDevice, device,
-                          physicalDevice.graphicsFamilyIndex,
+  PipelineObject pipeline(physicalDevice, device,
+                          //
                           surface.chooseSwapSurfaceFormat().format,
-                          descriptorSetLayout->_descriptorSetLayout);
-
-  Scene scene(physicalDevice, device, physicalDevice.graphicsFamilyIndex);
+                          swapchain.createInfo.imageExtent,
+                          //
+                          descriptorSetLayout->_descriptorSetLayout,
+                          scene.vertexInputBindingDescription,
+                          scene.attributeDescriptions);
 
   DescriptorCopy descriptors(device, descriptorSetLayout->_descriptorSetLayout,
                              swapchain.images.size());
@@ -168,10 +262,10 @@ void main_loop(const std::function<bool()> &runLoop,
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
-  pipeline.createGraphicsPipeline(scene, swapchain.createInfo.imageExtent);
-
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    swapchain.images.size());
+
+  VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
 
   while (runLoop()) {
     // * 0.
@@ -204,14 +298,19 @@ void main_loop(const std::function<bool()> &runLoop,
         // new backbuffer(framebuffer)
         backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
-            swapchain.createInfo.imageFormat, pipeline.renderPass());
+            swapchain.createInfo.imageFormat, pipeline.renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
 
         bindTexture(device, ubo, scene.texture->imageView,
                     scene.texture->sampler, descriptorSet);
 
-        pipeline.record(cmd, backbuffer->framebuffer,
-                        swapchain.createInfo.imageExtent, descriptorSet, scene);
+        record(cmd,
+               //
+               pipeline.pipelineLayout, pipeline.renderPass,
+               pipeline.graphicsPipeline,
+               //
+               backbuffer->framebuffer, swapchain.createInfo.imageExtent,
+               clearColor, descriptorSet, scene);
       }
 
       {
