@@ -7,7 +7,7 @@ class PipelineObject {
 
   std::shared_ptr<struct DescriptorSetLayout> _descriptorSetLayout;
   std::shared_ptr<struct PipelineLayout> _pipelineLayout;
-  std::shared_ptr<struct RenderPass> _renderPass;
+  VkRenderPass _renderPass;
 
   std::shared_ptr<class BufferObject> _vertexBuffer;
   std::shared_ptr<BufferObject> _indexBuffer;
@@ -23,7 +23,7 @@ class PipelineObject {
       VkDevice device,
       const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
       const std::shared_ptr<PipelineLayout> &pipelineLayout,
-      const std::shared_ptr<RenderPass> &renderPass);
+      VkRenderPass renderPass);
 
 public:
   ~PipelineObject();

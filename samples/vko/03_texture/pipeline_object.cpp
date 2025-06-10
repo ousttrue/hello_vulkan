@@ -2,13 +2,13 @@
 #include "../glsl_to_spv.h"
 #include "DescriptorSet.h"
 #include "PipelineLayout.h"
-#include "RenderPass.h"
 #include "memory_allocator.h"
 #include "types.h"
 #include <array>
 #include <fstream>
 #include <glm/fwd.hpp>
 #include <stdexcept>
+#include <vko/vko_pipeline.h>
 #include <vulkan/vulkan_core.h>
 
 #define GLM_FORCE_RADIANS
@@ -181,11 +181,13 @@ PipelineObject::PipelineObject(
     VkDevice device,
     const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
     const std::shared_ptr<PipelineLayout> &pipelineLayout,
-    const std::shared_ptr<RenderPass> &renderPass)
+    VkRenderPass renderPass)
     : _device(device), _descriptorSetLayout(descriptorSetLayout),
       _pipelineLayout(pipelineLayout), _renderPass(renderPass) {}
 
 PipelineObject::~PipelineObject() {
+  vkDestroyRenderPass(_device, _renderPass, nullptr);
+
   if (_graphicsPipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
     _graphicsPipeline = VK_NULL_HANDLE;
@@ -224,7 +226,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
   auto descriptorSetLayout = DescriptorSetLayout::create(device);
   auto pipelineLayout =
       PipelineLayout::create(device, descriptorSetLayout->_descriptorSetLayout);
-  auto renderPass = RenderPass::create(device, swapchainFormat);
+  auto renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   auto ptr = std::shared_ptr<PipelineObject>(new PipelineObject(
       device, descriptorSetLayout, pipelineLayout, renderPass));
@@ -530,7 +532,7 @@ void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
       .pColorBlendState = &colorBlending,
       .pDynamicState = nullptr,
       .layout = _pipelineLayout->_pipelineLayout,
-      .renderPass = _renderPass->_renderPass,
+      .renderPass = _renderPass,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
   };
@@ -557,7 +559,7 @@ void PipelineObject::record(VkCommandBuffer commandBuffer,
 
   VkRenderPassBeginInfo renderPassInfo{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = _renderPass->_renderPass,
+      .renderPass = _renderPass,
       .framebuffer = framebuffer,
       .renderArea =
           {
@@ -599,6 +601,4 @@ VkDescriptorSetLayout PipelineObject::descriptorSetLayout() const {
   return _descriptorSetLayout->_descriptorSetLayout;
 }
 
-VkRenderPass PipelineObject::renderPass() const {
-  return _renderPass->_renderPass;
-}
+VkRenderPass PipelineObject::renderPass() const { return _renderPass; }
