@@ -37,9 +37,9 @@ class PipelineObject {
   VkPipelineLayout _pipelineLayout;
   VkRenderPass _renderPass;
 
-  std::shared_ptr<vko::BufferObject> _vertexBuffer;
-  std::shared_ptr<vko::BufferObject> _indexBuffer;
-  std::shared_ptr<class TextureObject> _texture;
+  std::shared_ptr<vko::Buffer> _vertexBuffer;
+  std::shared_ptr<vko::Buffer> _indexBuffer;
+  std::shared_ptr<vko::Image> _texture;
   VkImageView _textureImageView = VK_NULL_HANDLE;
   VkSampler _textureSampler = VK_NULL_HANDLE;
   VkClearValue _clearColor = {0.0f, 0.0f, 0.0f, 1.0f};

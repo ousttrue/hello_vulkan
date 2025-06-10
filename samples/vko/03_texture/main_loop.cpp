@@ -1,10 +1,9 @@
 #include "../main_loop.h"
-#include "memory_allocator.h"
 #include "pipeline_object.h"
 #include "vko/vko.h"
 
 static void bindTexture(VkDevice device,
-                        const std::shared_ptr<vko::BufferObject> &uniformBuffer,
+                        const std::shared_ptr<vko::Buffer> &uniformBuffer,
                         VkImageView imageView, VkSampler sampler,
                         VkDescriptorSet descriptorSet) {
   VkDescriptorBufferInfo bufferInfo{
@@ -111,7 +110,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
-  std::vector<std::shared_ptr<vko::BufferObject>> uniformBuffers(
+  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
   pipeline->createGraphicsPipeline(swapchain.createInfo.imageExtent);
@@ -140,10 +139,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
-        auto memory = std::make_shared<MemoryAllocator>(
-            physicalDevice, device, physicalDevice.graphicsFamilyIndex);
-
-        auto ubo = std::make_shared<vko::BufferObject>(
+        auto ubo = std::make_shared<vko::Buffer>(
             physicalDevice, device, sizeof(UniformBufferObject),
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |

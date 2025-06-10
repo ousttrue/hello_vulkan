@@ -276,10 +276,9 @@ struct DeviceMemory : not_copyable {
   // VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
   // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
   DeviceMemory(VkDevice _device, VkPhysicalDevice physicalDevice,
-               VkBuffer buffer, VkMemoryPropertyFlags properties)
+               const VkMemoryRequirements &memRequirements,
+               VkMemoryPropertyFlags properties)
       : device(_device) {
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(this->device, buffer, &memRequirements);
     VkMemoryAllocateInfo allocateInfo{
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memRequirements.size,
@@ -320,12 +319,12 @@ struct DeviceMemory : not_copyable {
   template <typename T> void assign(const T &src) { assign(&src, sizeof(src)); }
 };
 
-struct BufferObject : not_copyable {
+struct Buffer : not_copyable {
   VkDevice device;
   VkBuffer buffer;
-  std::shared_ptr<vko::DeviceMemory> memory;
+  std::shared_ptr<DeviceMemory> memory;
 
-  BufferObject(VkPhysicalDevice physicalDevice, VkDevice _device,
+  Buffer(VkPhysicalDevice physicalDevice, VkDevice _device,
                VkDeviceSize size, VkBufferUsageFlags usage,
                VkMemoryPropertyFlags properties)
       : device(_device) {
@@ -339,12 +338,14 @@ struct BufferObject : not_copyable {
     VKO_CHECK(
         vkCreateBuffer(this->device, &bufferInfo, nullptr, &this->buffer));
 
-    this->memory = std::make_shared<vko::DeviceMemory>(
-        this->device, physicalDevice, this->buffer, properties);
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(this->device, buffer, &memRequirements);
+    this->memory = std::make_shared<DeviceMemory>(this->device, physicalDevice,
+                                                  memRequirements, properties);
 
     vkBindBufferMemory(this->device, this->buffer, *this->memory, 0);
   }
-  ~BufferObject() { vkDestroyBuffer(this->device, this->buffer, nullptr); }
+  ~Buffer() { vkDestroyBuffer(this->device, this->buffer, nullptr); }
   void copyCommand(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
                    VkDeviceSize size) {
     VkBufferCopy copyRegion{
@@ -354,6 +355,43 @@ struct BufferObject : not_copyable {
     };
     vkCmdCopyBuffer(commandBuffer, this->buffer, dstBuffer, 1, &copyRegion);
   }
+};
+
+struct Image : not_copyable {
+  VkDevice device;
+  VkImage image;
+  std::shared_ptr<DeviceMemory> memory;
+
+  Image(VkPhysicalDevice physicalDevice, VkDevice _device,
+                uint32_t width, uint32_t height, VkFormat format,
+                VkImageTiling tiling, VkImageUsageFlags usage,
+                VkMemoryPropertyFlags properties)
+      : device(_device) {
+
+    VkImageCreateInfo imageInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = VK_SHARING_MODE_EXCLUSIVE,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = {.width = width, .height = height, .depth = 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = tiling,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    VKO_CHECK(vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(_device, image, &memRequirements);
+    this->memory = std::make_shared<DeviceMemory>(this->device, physicalDevice,
+                                                  memRequirements, properties);
+
+    vkBindImageMemory(this->device, this->image, *this->memory, 0);
+  }
+  ~Image() { vkDestroyImage(this->device, this->image, nullptr); }
 };
 
 } // namespace vko
