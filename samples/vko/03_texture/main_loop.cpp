@@ -37,45 +37,6 @@ struct UniformBufferObject {
   }
 };
 
-static void bindTexture(VkDevice device,
-                        const std::shared_ptr<vko::Buffer> &uniformBuffer,
-                        VkImageView imageView, VkSampler sampler,
-                        VkDescriptorSet descriptorSet) {
-  VkDescriptorBufferInfo bufferInfo{
-      .buffer = uniformBuffer->buffer,
-      .offset = 0,
-      .range = sizeof(UniformBufferObject),
-  };
-  VkDescriptorImageInfo imageInfo{
-      .sampler = sampler,
-      .imageView = imageView,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
-  VkWriteDescriptorSet descriptorWrites[2] = {
-      {
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = descriptorSet,
-          .dstBinding = 0,
-          .dstArrayElement = 0,
-          .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .pBufferInfo = &bufferInfo,
-      },
-      {
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = descriptorSet,
-          .dstBinding = 1,
-          .dstArrayElement = 0,
-          .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .pImageInfo = &imageInfo,
-      },
-  };
-  vkUpdateDescriptorSets(device,
-                         static_cast<uint32_t>(std::size(descriptorWrites)),
-                         descriptorWrites, 0, nullptr);
-}
-
 ;
 
 static void record(VkCommandBuffer commandBuffer,
@@ -173,18 +134,16 @@ void main_loop(const std::function<bool()> &runLoop,
           },
       });
   descriptorSets.allocate(
-      imageCount,
-      {
-          VkDescriptorPoolSize{
-              .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-              .descriptorCount = static_cast<uint32_t>(imageCount),
-          },
-          VkDescriptorPoolSize{
-              .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-              .descriptorCount = static_cast<uint32_t>(imageCount),
-          },
-      }
-  );
+      imageCount, {
+                      VkDescriptorPoolSize{
+                          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                          .descriptorCount = static_cast<uint32_t>(imageCount),
+                      },
+                      VkDescriptorPoolSize{
+                          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          .descriptorCount = static_cast<uint32_t>(imageCount),
+                      },
+                  });
 
   auto pipeline = createPipelineObject(physicalDevice, device,
                                        //
@@ -195,11 +154,9 @@ void main_loop(const std::function<bool()> &runLoop,
                                        scene.vertexInputBindingDescription,
                                        scene.attributeDescriptions);
 
-
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
       imageCount);
-  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
-      imageCount);
+  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(imageCount);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    imageCount);
@@ -234,14 +191,23 @@ void main_loop(const std::function<bool()> &runLoop,
                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         uniformBuffers[acquired.imageIndex] = ubo;
 
-        // new backbuffer(framebuffer)
+        descriptorSets.update(
+            acquired.imageIndex,
+            VkDescriptorBufferInfo{
+                .buffer = ubo->buffer,
+                .offset = 0,
+                .range = sizeof(UniformBufferObject),
+            },
+            VkDescriptorImageInfo{
+                .sampler = scene.texture->sampler,
+                .imageView = scene.texture->imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            });
+
         backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
             swapchain.createInfo.imageFormat, pipeline.renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
-
-        bindTexture(device, ubo, scene.texture->imageView,
-                    scene.texture->sampler, descriptorSet);
 
         record(cmd,
                //

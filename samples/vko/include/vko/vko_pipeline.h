@@ -172,6 +172,33 @@ struct DescriptorSets : not_copyable {
     VKO_CHECK(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
                                        this->descriptorSets.data()));
   }
+
+  void update(uint32_t index, VkDescriptorBufferInfo bufferInfo,
+              VkDescriptorImageInfo imageInfo) {
+    VkWriteDescriptorSet descriptorWrites[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = this->descriptorSets[index],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &bufferInfo,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = this->descriptorSets[index],
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &imageInfo,
+        },
+    };
+    vkUpdateDescriptorSets(device,
+                           static_cast<uint32_t>(std::size(descriptorWrites)),
+                           descriptorWrites, 0, nullptr);
+  }
 };
 
 struct Pipeline : not_copyable {
