@@ -309,7 +309,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->copy(pixels);
+    stagingBuffer->_memory->assign(pixels);
     ptr->_texture = memory->createImage(
         texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -398,7 +398,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->copy(vertices.data(), bufferSize);
+    stagingBuffer->_memory->assign(vertices.data(), bufferSize);
     ptr->_vertexBuffer = std::make_shared<BufferObject>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -407,7 +407,8 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     memory->oneTimeCommandSync([stagingBuffer,
                                 vertexBuffer = ptr->_vertexBuffer,
                                 bufferSize](auto commandBuffer) {
-      stagingBuffer->copyTo(commandBuffer, vertexBuffer->buffer(), bufferSize);
+      stagingBuffer->copyCommand(commandBuffer, vertexBuffer->buffer(),
+                                 bufferSize);
     });
   }
   {
@@ -418,7 +419,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
         physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->copy(indices.data(), bufferSize);
+    stagingBuffer->_memory->assign(indices.data(), bufferSize);
 
     ptr->_indexBuffer = std::make_shared<BufferObject>(
         physicalDevice, device, bufferSize,
@@ -427,7 +428,7 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
 
     memory->oneTimeCommandSync([stagingBuffer, indexBuffer = ptr->_indexBuffer,
                                 bufferSize](auto commandBuffer) {
-      stagingBuffer->copyTo(commandBuffer, indexBuffer->buffer(), bufferSize);
+      stagingBuffer->copyCommand(commandBuffer, indexBuffer->buffer(), bufferSize);
     });
   }
 

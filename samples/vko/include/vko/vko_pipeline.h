@@ -1,3 +1,4 @@
+#pragma once
 #include "vko.h"
 
 namespace vko {
@@ -265,6 +266,58 @@ struct CommandBufferRecording : public not_copyable {
                       pipeline);
     vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
   }
+};
+
+struct DeviceMemory : not_copyable {
+  VkDevice device;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  operator VkDeviceMemory() const { return this->memory; }
+  // VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+  // VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+  // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+  DeviceMemory(VkDevice _device, VkPhysicalDevice physicalDevice,
+               VkBuffer buffer, VkMemoryPropertyFlags properties)
+      : device(_device) {
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(this->device, buffer, &memRequirements);
+    VkMemoryAllocateInfo allocateInfo{
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = findMemoryType(
+            physicalDevice, memRequirements.memoryTypeBits, properties),
+    };
+    if (vkAllocateMemory(this->device, &allocateInfo, nullptr, &this->memory) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to allocate vertex buffer memory!");
+    }
+  }
+  ~DeviceMemory() {
+    if (this->memory != VK_NULL_HANDLE) {
+      vkFreeMemory(this->device, this->memory, nullptr);
+    }
+  }
+  static uint32_t findMemoryType(VkPhysicalDevice physicalDevice,
+                                 uint32_t typeFilter,
+                                 VkMemoryPropertyFlags properties) {
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+      if ((typeFilter & (1 << i)) &&
+          (memProperties.memoryTypes[i].propertyFlags & properties) ==
+              properties) {
+        return i;
+      }
+    }
+    throw std::runtime_error("failed to find suitable memory type!");
+  }
+  void assign(const void *p, size_t size) {
+    void *data;
+    vkMapMemory(this->device, this->memory, 0, size, 0, &data);
+    memcpy(data, p, size);
+    vkUnmapMemory(this->device, this->memory);
+  }
+  template <typename T> void assign(const T &src) { assign(&src, sizeof(src)); }
 };
 
 } // namespace vko

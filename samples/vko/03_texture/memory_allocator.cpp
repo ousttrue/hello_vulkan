@@ -17,22 +17,15 @@ BufferObject::BufferObject(VkPhysicalDevice physicalDevice, VkDevice device,
     throw std::runtime_error("failed to create buffer!");
   }
 
-  _memory = std::make_shared<DeviceMemory>(device, physicalDevice,
+  _memory = std::make_shared<vko::DeviceMemory>(device, physicalDevice,
                                            this->_buffer, properties);
 
-  vkBindBufferMemory(this->_device, this->_buffer, _memory->memory, 0);
+  vkBindBufferMemory(this->_device, this->_buffer, *_memory, 0);
 }
 
 BufferObject::~BufferObject() { vkDestroyBuffer(_device, _buffer, nullptr); }
 
-void BufferObject::copy(const void *p, size_t size) {
-  void *data;
-  vkMapMemory(_device, this->_memory->memory, 0, size, 0, &data);
-  memcpy(data, p, size);
-  vkUnmapMemory(_device, this->_memory->memory);
-}
-
-void BufferObject::copyTo(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
+void BufferObject::copyCommand(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
                           VkDeviceSize size) {
   VkBufferCopy copyRegion{
       .srcOffset = 0, // optional

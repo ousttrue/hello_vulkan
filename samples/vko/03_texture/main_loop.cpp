@@ -174,7 +174,7 @@ void main_loop(const std::function<bool()> &runLoop,
         UniformBufferObject ubo{};
         ubo.setTime(time, swapchain.createInfo.imageExtent.width,
                     swapchain.createInfo.imageExtent.height);
-        uniformBuffers[acquired.imageIndex]->copy(ubo);
+        uniformBuffers[acquired.imageIndex]->_memory->assign(ubo);
       }
 
       // submit command
