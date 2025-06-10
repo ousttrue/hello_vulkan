@@ -1,6 +1,8 @@
 #include "../main_loop.h"
 #include "pipeline_object.h"
+#include "scene.h"
 #include "vko/vko.h"
+#include <glm/ext/matrix_projection.hpp>
 
 static void bindTexture(VkDevice device,
                         const std::shared_ptr<vko::Buffer> &uniformBuffer,
@@ -156,6 +158,8 @@ void main_loop(const std::function<bool()> &runLoop,
                           surface.chooseSwapSurfaceFormat().format,
                           descriptorSetLayout->_descriptorSetLayout);
 
+  Scene scene(physicalDevice, device, physicalDevice.graphicsFamilyIndex);
+
   DescriptorCopy descriptors(device, descriptorSetLayout->_descriptorSetLayout,
                              swapchain.images.size());
 
@@ -164,7 +168,7 @@ void main_loop(const std::function<bool()> &runLoop,
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
-  pipeline.createGraphicsPipeline(swapchain.createInfo.imageExtent);
+  pipeline.createGraphicsPipeline(scene, swapchain.createInfo.imageExtent);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    swapchain.images.size());
@@ -203,11 +207,11 @@ void main_loop(const std::function<bool()> &runLoop,
             swapchain.createInfo.imageFormat, pipeline.renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
 
-        auto [imageView, sampler] = pipeline.texture();
-        bindTexture(device, ubo, imageView, sampler, descriptorSet);
+        bindTexture(device, ubo, scene.texture->imageView,
+                    scene.texture->sampler, descriptorSet);
 
         pipeline.record(cmd, backbuffer->framebuffer,
-                        swapchain.createInfo.imageExtent, descriptorSet);
+                        swapchain.createInfo.imageExtent, descriptorSet, scene);
       }
 
       {

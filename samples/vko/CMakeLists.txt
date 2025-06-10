@@ -33,5 +33,6 @@ add_vko_sample(
   03_texture
   glsl_to_spv.cpp
   03_texture/main_loop.cpp
+  03_texture/scene.cpp
   03_texture/pipeline_object.cpp
   )

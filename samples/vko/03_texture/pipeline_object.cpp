@@ -1,5 +1,6 @@
 #include "pipeline_object.h"
 #include "../glsl_to_spv.h"
+#include "scene.h"
 #include "vko/vko.h"
 #include <array>
 #include <fstream>
@@ -56,74 +57,6 @@ void main()
 }
 )";
 
-static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
-                              VkImage image, uint32_t width, uint32_t height) {
-  VkBufferImageCopy region{
-      .bufferOffset = 0,
-      // functions as "padding" for the image destination
-      .bufferRowLength = 0,
-      .bufferImageHeight = 0,
-      .imageSubresource =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .mipLevel = 0,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-      .imageOffset = {0, 0, 0},
-      .imageExtent = {width, height, 1},
-  };
-  vkCmdCopyBufferToImage(commandBuffer, buffer, image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-}
-
-static void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
-                                  VkFormat format, VkImageLayout oldLayout,
-                                  VkImageLayout newLayout) {
-
-  VkImageMemoryBarrier barrier{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      // can also use VK_IMAGE_LAYOUT_UNDEFINED if we don't care about the
-      // existing contents of image!
-      .oldLayout = oldLayout,
-      .newLayout = newLayout,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = image,
-      .subresourceRange =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .baseMipLevel = 0,
-              .levelCount = 1,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-  };
-
-  VkPipelineStageFlags sourceStage;
-  VkPipelineStageFlags destinationStage;
-  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else {
-    throw std::invalid_argument("unsupported layout transition!");
-  }
-
-  vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0,
-                       nullptr, 0, nullptr, 1, &barrier);
-}
-
 void UniformBufferObject::setTime(float time, float width, float height) {
   // time * radians(90.0f) = rotation of 90 degrees per second!
   *((glm::mat4 *)&this->model) = glm::rotate(
@@ -158,32 +91,10 @@ static VkShaderModule createShaderModule(VkDevice device,
   return shaderModule;
 }
 
-// Interleaving vertex attributes - includes position AND color attributes!
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // top-left and RED
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},  // top-right and GREEN
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},   // bottom-right and BLUE
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}   // bottom-left and WHITE
-};
-
-const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-
-static VkVertexInputBindingDescription Vertex_getBindingDescription() {
-  VkVertexInputBindingDescription bindingDescription{};
-  bindingDescription.binding = 0; // specify index of the binding
-  bindingDescription.stride =
-      sizeof(Vertex); // number of bytes from one entry to the next
-  bindingDescription.inputRate =
-      VK_VERTEX_INPUT_RATE_VERTEX; // Move to next data entry after each
-                                   // vertex
-
-  return bindingDescription;
-}
-
-PipelineObject::PipelineObject(
-    VkPhysicalDevice physicalDevice, VkDevice device,
-    uint32_t graphicsQueueFamilyIndex, VkFormat swapchainFormat,
-    VkDescriptorSetLayout descriptorSetLayout)
+PipelineObject::PipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
+                               uint32_t graphicsQueueFamilyIndex,
+                               VkFormat swapchainFormat,
+                               VkDescriptorSetLayout descriptorSetLayout)
     : _device(device), _descriptorSetLayout(descriptorSetLayout) {
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -198,148 +109,6 @@ PipelineObject::PipelineObject(
   this->_renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
-
-  {
-    int texWidth = 2;
-    int texHeight = 2;
-    int texChannels = 4;
-    uint8_t pixels[] = {
-        255, 0,   0,   255, // R
-        0,   255, 0,   255, // G
-        0,   0,   255, 255, // B
-        255, 255, 255, 255, // WHITE
-    };
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-    auto stagingBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->memory->assign(pixels);
-    this->_texture = std::make_shared<vko::Image>(
-        physicalDevice, device, texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vko::executeCommandSync(
-        device, commandPool.queue, commandPool,
-        [self = this](auto commandBuffer) {
-          transitionImageLayout(
-              commandBuffer, self->_texture->image, VK_FORMAT_R8G8B8_SRGB,
-              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        });
-
-    vko::executeCommandSync(
-        device, commandPool.queue, commandPool,
-
-        [self = this, stagingBuffer, texWidth, texHeight](auto commandBuffer) {
-          copyBufferToImage(commandBuffer, stagingBuffer->buffer,
-                            self->_texture->image,
-                            static_cast<uint32_t>(texWidth),
-                            static_cast<uint32_t>(texHeight));
-        });
-
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [self = this](auto commandBuffer) {
-                              transitionImageLayout(
-                                  commandBuffer, self->_texture->image,
-                                  VK_FORMAT_R8G8B8A8_SRGB,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                            });
-  }
-  {
-    VkImageViewCreateInfo viewInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = this->_texture->image,
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_SRGB, // format;
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .baseMipLevel = 0,
-                             .levelCount = 1,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1},
-    };
-    // VkImageView imageView;
-    if (vkCreateImageView(device, &viewInfo, nullptr,
-                          &this->_textureImageView) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create texture image view!");
-    }
-  }
-  {
-    // ptr->createTextureSampler();
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    // next two lines describe how to interpolate texels that are magnified or
-    // minified
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    // note: image axes are UVW (rather than XYZ)
-    samplerInfo.addressModeU =
-        VK_SAMPLER_ADDRESS_MODE_REPEAT; // repeat the texture when out of
-                                        // bounds
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = 16.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-
-    if (vkCreateSampler(device, &samplerInfo, nullptr,
-                        &this->_textureSampler) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create texture sampler!");
-    }
-  }
-  {
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    auto stagingBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->memory->assign(vertices.data(), bufferSize);
-    this->_vertexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, vertexBuffer = this->_vertexBuffer,
-                             bufferSize](auto commandBuffer) {
-                              stagingBuffer->copyCommand(commandBuffer,
-                                                         vertexBuffer->buffer,
-                                                         bufferSize);
-                            });
-  }
-  {
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-    auto stagingBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->memory->assign(indices.data(), bufferSize);
-
-    this->_indexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, indexBuffer = this->_indexBuffer,
-                             bufferSize](auto commandBuffer) {
-                              stagingBuffer->copyCommand(commandBuffer,
-                                                         indexBuffer->buffer,
-                                                         bufferSize);
-                            });
-  }
 }
 
 PipelineObject::~PipelineObject() {
@@ -350,14 +119,11 @@ PipelineObject::~PipelineObject() {
     _graphicsPipeline = VK_NULL_HANDLE;
   }
 
-  vkDestroySampler(_device, _textureSampler, nullptr);
-  vkDestroyImageView(_device, _textureImageView, nullptr);
-  _texture = {};
-
   vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
-void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
+void PipelineObject::createGraphicsPipeline(const Scene &scene,
+                                            VkExtent2D swapchainExtent) {
   if (_graphicsPipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(_device, _graphicsPipeline, nullptr);
     _graphicsPipeline = VK_NULL_HANDLE;
@@ -384,7 +150,7 @@ void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
       },
   };
 
-  auto bindingDescription = Vertex_getBindingDescription();
+  // auto bindingDescription = Vertex_getBindingDescription();
   // auto attributeDescriptions = Vertex_getAttributeDescriptions();
   VkVertexInputAttributeDescription attributeDescriptions[]{
       // describes position
@@ -416,7 +182,7 @@ void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = &bindingDescription,
+      .pVertexBindingDescriptions = &scene.vertexInputBindingDescription,
       .vertexAttributeDescriptionCount =
           static_cast<uint32_t>(std::size(attributeDescriptions)),
       .pVertexAttributeDescriptions = attributeDescriptions,
@@ -528,7 +294,7 @@ void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
 
 void PipelineObject::record(VkCommandBuffer commandBuffer,
                             VkFramebuffer framebuffer, VkExtent2D extent,
-                            VkDescriptorSet descriptorSet) {
+                            VkDescriptorSet descriptorSet, const Scene &scene) {
 
   VkCommandBufferBeginInfo beginInfo{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -557,10 +323,10 @@ void PipelineObject::record(VkCommandBuffer commandBuffer,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     _graphicsPipeline);
 
-  VkBuffer vertexBuffers[] = {_vertexBuffer->buffer};
+  VkBuffer vertexBuffers[] = {scene.vertexBuffer->buffer};
   VkDeviceSize offsets[] = {0};
   vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-  vkCmdBindIndexBuffer(commandBuffer, _indexBuffer->buffer, 0,
+  vkCmdBindIndexBuffer(commandBuffer, scene.indexBuffer->buffer, 0,
                        VK_INDEX_TYPE_UINT16);
 
   // take the descriptor set for the corresponding swap image, and bind it
@@ -569,7 +335,7 @@ void PipelineObject::record(VkCommandBuffer commandBuffer,
                           _pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
   // Tell Vulkan to draw the triangle USING THE INDEX BUFFER!
-  vkCmdDrawIndexed(commandBuffer, indices.size(), 1, 0, 0, 0);
+  vkCmdDrawIndexed(commandBuffer, scene.indexDrawCount, 1, 0, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer);
 
