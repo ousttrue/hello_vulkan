@@ -2,11 +2,39 @@
 #include <memory>
 #include <vulkan/vulkan.h>
 
+struct Vec2 {
+  float x;
+  float y;
+};
+
+struct Vec3 {
+  float x;
+  float y;
+  float z;
+};
+
+struct Vertex {
+  Vec2 pos;
+  Vec3 color;
+  Vec2 texCoord;
+};
+
+struct Matrix {
+  float m[16];
+};
+
+struct UniformBufferObject {
+  Matrix model;
+  Matrix view;
+  Matrix proj;
+  void setTime(float time, float width, float height);
+};
+
 class PipelineObject {
   VkDevice _device;
 
   std::shared_ptr<struct DescriptorSetLayout> _descriptorSetLayout;
-  std::shared_ptr<struct PipelineLayout> _pipelineLayout;
+  VkPipelineLayout _pipelineLayout;
   VkRenderPass _renderPass;
 
   std::shared_ptr<class BufferObject> _vertexBuffer;
@@ -22,8 +50,7 @@ class PipelineObject {
   PipelineObject(
       VkDevice device,
       const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
-      const std::shared_ptr<PipelineLayout> &pipelineLayout,
-      VkRenderPass renderPass);
+      VkPipelineLayout pipelineLayout, VkRenderPass renderPass);
 
 public:
   ~PipelineObject();

@@ -1,7 +1,6 @@
 #include "../main_loop.h"
 #include "memory_allocator.h"
 #include "pipeline_object.h"
-#include "types.h"
 #include "vko/vko.h"
 
 static void bindTexture(VkDevice device,
@@ -110,8 +109,10 @@ void main_loop(const std::function<bool()> &runLoop,
   DescriptorCopy descriptors(device, pipeline->descriptorSetLayout(),
                              swapchain.images.size());
 
-  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(swapchain.images.size());
-  std::vector<std::shared_ptr<BufferObject>> uniformBuffers(swapchain.images.size());
+  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
+      swapchain.images.size());
+  std::vector<std::shared_ptr<BufferObject>> uniformBuffers(
+      swapchain.images.size());
 
   pipeline->createGraphicsPipeline(swapchain.createInfo.imageExtent);
 

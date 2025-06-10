@@ -220,9 +220,9 @@ inline Pipeline createSimpleGraphicsPipeline(VkDevice device, VkFormat format,
 
 struct CommandBufferRecording : public not_copyable {
   VkCommandBuffer commandBuffer;
-  CommandBufferRecording(VkCommandBuffer _commandBuffer, VkRenderPass renderPass,
-                        VkFramebuffer framebuffer, VkExtent2D extent,
-                        VkClearValue clearColor)
+  CommandBufferRecording(VkCommandBuffer _commandBuffer,
+                         VkRenderPass renderPass, VkFramebuffer framebuffer,
+                         VkExtent2D extent, VkClearValue clearColor)
       : commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,

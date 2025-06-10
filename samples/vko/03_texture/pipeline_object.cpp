@@ -1,9 +1,6 @@
 #include "pipeline_object.h"
 #include "../glsl_to_spv.h"
-#include "DescriptorSet.h"
-#include "PipelineLayout.h"
 #include "memory_allocator.h"
-#include "types.h"
 #include <array>
 #include <fstream>
 #include <glm/fwd.hpp>
@@ -57,6 +54,53 @@ void main()
 }
 )";
 
+struct DescriptorSetLayout {
+  VkDevice _device;
+  VkDescriptorSetLayout _descriptorSetLayout = VK_NULL_HANDLE;
+
+  VkDescriptorSetLayoutBinding bindings[2] = {
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+          .pImmutableSamplers = nullptr,
+      },
+      {
+          .binding = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = 1,
+          // indicate that we want to use the combined image sampler
+          // descriptor in the fragment shader
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .pImmutableSamplers = nullptr,
+      },
+  };
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(std::size(bindings)),
+      .pBindings = bindings,
+  };
+
+  // VkDescriptorSetLayout descriptorSetLayout;
+  DescriptorSetLayout(VkDevice device) : _device(device) {
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr,
+                                    &_descriptorSetLayout) != VK_SUCCESS) {
+      throw std::runtime_error("failed to create descriptor set layout!");
+    }
+  }
+
+  static std::shared_ptr<DescriptorSetLayout> create(VkDevice device) {
+    auto ptr =
+        std::shared_ptr<DescriptorSetLayout>(new DescriptorSetLayout(device));
+    return ptr;
+  }
+
+  ~DescriptorSetLayout() {
+    vkDestroyDescriptorSetLayout(_device, _descriptorSetLayout, nullptr);
+  }
+};
 static void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
                                   VkFormat format, VkImageLayout oldLayout,
                                   VkImageLayout newLayout) {
@@ -180,8 +224,7 @@ static VkVertexInputBindingDescription Vertex_getBindingDescription() {
 PipelineObject::PipelineObject(
     VkDevice device,
     const std::shared_ptr<DescriptorSetLayout> &descriptorSetLayout,
-    const std::shared_ptr<PipelineLayout> &pipelineLayout,
-    VkRenderPass renderPass)
+    VkPipelineLayout pipelineLayout, VkRenderPass renderPass)
     : _device(device), _descriptorSetLayout(descriptorSetLayout),
       _pipelineLayout(pipelineLayout), _renderPass(renderPass) {}
 
@@ -196,6 +239,8 @@ PipelineObject::~PipelineObject() {
   vkDestroySampler(_device, _textureSampler, nullptr);
   vkDestroyImageView(_device, _textureImageView, nullptr);
   _texture = {};
+
+  vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
 static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
@@ -224,8 +269,21 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
                        uint32_t graphicsQueueFamilyIndex,
                        VkFormat swapchainFormat) {
   auto descriptorSetLayout = DescriptorSetLayout::create(device);
-  auto pipelineLayout =
-      PipelineLayout::create(device, descriptorSetLayout->_descriptorSetLayout);
+
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &descriptorSetLayout->_descriptorSetLayout,
+      .pushConstantRangeCount = 0,
+      .pPushConstantRanges = nullptr,
+  };
+
+  VkPipelineLayout pipelineLayout;
+  if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                             &pipelineLayout) != VK_SUCCESS) {
+    throw std::runtime_error("failed to create pipeline layout!");
+  }
+
   auto renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
 
   auto ptr = std::shared_ptr<PipelineObject>(new PipelineObject(
@@ -531,7 +589,7 @@ void PipelineObject::createGraphicsPipeline(VkExtent2D swapchainExtent) {
       .pDepthStencilState = nullptr,
       .pColorBlendState = &colorBlending,
       .pDynamicState = nullptr,
-      .layout = _pipelineLayout->_pipelineLayout,
+      .layout = _pipelineLayout,
       .renderPass = _renderPass,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
@@ -584,8 +642,7 @@ void PipelineObject::record(VkCommandBuffer commandBuffer,
   // take the descriptor set for the corresponding swap image, and bind it
   // to the descriptors in the shader
   vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          _pipelineLayout->_pipelineLayout, 0, 1,
-                          &descriptorSet, 0, nullptr);
+                          _pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
   // Tell Vulkan to draw the triangle USING THE INDEX BUFFER!
   vkCmdDrawIndexed(commandBuffer, indices.size(), 1, 0, 0, 0);
