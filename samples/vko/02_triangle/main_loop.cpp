@@ -59,8 +59,15 @@ void main_loop(const std::function<bool()> &runLoop,
   VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
                                    &pipelineLayout));
 
-  auto pipeline = vko::createSimpleGraphicsPipeline(
-      device, surface.chooseSwapSurfaceFormat().format, vs, fs, pipelineLayout);
+  auto renderPass =
+      createSimpleRenderPass(device, surface.chooseSwapSurfaceFormat().format);
+
+  auto pipeline =
+      vko::PipelineBilder().create(device, renderPass, pipelineLayout,
+                                   {
+                                       vs.pipelineShaderStageCreateInfo,
+                                       fs.pipelineShaderStageCreateInfo,
+                                   });
 
   //
   // swapchain

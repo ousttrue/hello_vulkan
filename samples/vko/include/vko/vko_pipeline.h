@@ -217,16 +217,7 @@ struct Pipeline : not_copyable {
   }
 };
 
-inline Pipeline createSimpleGraphicsPipeline(VkDevice device, VkFormat format,
-                                             const ShaderModule &vs,
-                                             const ShaderModule &fs,
-                                             VkPipelineLayout pipelineLayout) {
-
-  VkPipelineShaderStageCreateInfo shaderStages[] = {
-      vs.pipelineShaderStageCreateInfo,
-      fs.pipelineShaderStageCreateInfo,
-  };
-
+struct PipelineBilder {
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 0,
@@ -262,54 +253,76 @@ inline Pipeline createSimpleGraphicsPipeline(VkDevice device, VkFormat format,
       .sampleShadingEnable = VK_FALSE,
   };
 
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{
+  std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = {{
       .blendEnable = VK_FALSE,
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
+  }};
 
-  VkPipelineColorBlendStateCreateInfo colorBlending{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .logicOp = VK_LOGIC_OP_COPY,
-      .attachmentCount = 1,
-      .pAttachments = &colorBlendAttachment,
-      .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
-  };
+  Pipeline
+  create(VkDevice device, VkRenderPass renderPass,
+         VkPipelineLayout pipelineLayout,
+         const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages) {
 
-  VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
-                                    VK_DYNAMIC_STATE_SCISSOR};
-  VkPipelineDynamicStateCreateInfo dynamicState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = static_cast<uint32_t>(std::size(dynamicStates)),
-      .pDynamicStates = dynamicStates,
-  };
+    VkPipelineColorBlendStateCreateInfo colorBlending{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable = VK_FALSE,
+        .logicOp = VK_LOGIC_OP_COPY,
+        .attachmentCount =
+            static_cast<uint32_t>(std::size(this->colorBlendAttachments)),
+        .pAttachments = this->colorBlendAttachments.data(),
+        .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
+    };
 
-  auto renderPass = createSimpleRenderPass(device, format);
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
+                                      VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamicState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = static_cast<uint32_t>(std::size(dynamicStates)),
+        .pDynamicStates = dynamicStates,
+    };
 
-  VkGraphicsPipelineCreateInfo pipelineInfo{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = 2,
-      .pStages = shaderStages,
-      .pVertexInputState = &vertexInputInfo,
-      .pInputAssemblyState = &inputAssembly,
-      .pViewportState = &viewportState,
-      .pRasterizationState = &rasterizer,
-      .pMultisampleState = &multisampling,
-      .pColorBlendState = &colorBlending,
-      .pDynamicState = &dynamicState,
-      .layout = pipelineLayout,
-      .renderPass = renderPass,
-      .subpass = 0,
-      .basePipelineHandle = VK_NULL_HANDLE,
-  };
+    VkGraphicsPipelineCreateInfo pipelineInfo{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(std::size(shaderStages)),
+        .pStages = shaderStages.data(),
+        .pVertexInputState = &this->vertexInputInfo,
+        .pInputAssemblyState = &this->inputAssembly,
+        .pViewportState = &this->viewportState,
+        .pRasterizationState = &this->rasterizer,
+        .pMultisampleState = &this->multisampling,
+        .pColorBlendState = &colorBlending,
+        .pDynamicState = &dynamicState,
+        .layout = pipelineLayout,
+        .renderPass = renderPass,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+    };
 
-  VkPipeline graphicsPipeline;
-  VKO_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                      nullptr, &graphicsPipeline));
+    VkPipeline graphicsPipeline;
+    VKO_CHECK(vkCreateGraphicsPipelines(
+        device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline));
 
-  return {device, renderPass, pipelineLayout, graphicsPipeline};
-}
+    return {device, renderPass, pipelineLayout, graphicsPipeline};
+  }
+};
+
+// inline Pipeline createSimpleGraphicsPipeline(VkDevice device, VkFormat
+// format,
+//                                              const ShaderModule &vs,
+//                                              const ShaderModule &fs,
+//                                              VkPipelineLayout pipelineLayout)
+//                                              {
+//
+//   auto renderPass = createSimpleRenderPass(device, format);
+//
+//   return PipelineBilder().create(device, renderPass, pipelineLayout,
+//                                  {
+//                                      vs.pipelineShaderStageCreateInfo,
+//                                      fs.pipelineShaderStageCreateInfo,
+//                                  },
+//                                  format);
+// }
 
 struct CommandBufferRecording : public not_copyable {
   VkCommandBuffer commandBuffer;
