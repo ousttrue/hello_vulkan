@@ -305,11 +305,11 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     };
     VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-    auto stagingBuffer = memory->createBuffer(
-        pixels, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    auto stagingBuffer = std::make_shared<BufferObject>(
+        physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
+    stagingBuffer->copy(pixels);
     ptr->_texture = memory->createImage(
         texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -394,13 +394,13 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     // ptr->createVertexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    auto stagingBuffer = memory->createBuffer(
-        vertices.data(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    auto stagingBuffer = std::make_shared<BufferObject>(
+        physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    ptr->_vertexBuffer = memory->createBuffer(
-        nullptr, bufferSize,
+    stagingBuffer->copy(vertices.data(), bufferSize);
+    ptr->_vertexBuffer = std::make_shared<BufferObject>(
+        physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
@@ -414,13 +414,14 @@ PipelineObject::create(VkPhysicalDevice physicalDevice, VkDevice device,
     // ptr->createIndexBuffer(memory);
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    auto stagingBuffer = memory->createBuffer(
-        indices.data(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    auto stagingBuffer = std::make_shared<BufferObject>(
+        physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    stagingBuffer->copy(indices.data(), bufferSize);
 
-    ptr->_indexBuffer = memory->createBuffer(
-        nullptr, bufferSize,
+    ptr->_indexBuffer = std::make_shared<BufferObject>(
+        physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 

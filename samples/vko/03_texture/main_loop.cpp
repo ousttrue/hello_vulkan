@@ -143,11 +143,11 @@ void main_loop(const std::function<bool()> &runLoop,
         auto memory = std::make_shared<MemoryAllocator>(
             physicalDevice, device, physicalDevice.graphicsFamilyIndex);
 
-        auto ubo =
-            memory->createBuffer(nullptr, sizeof(UniformBufferObject),
-                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        auto ubo = std::make_shared<BufferObject>(
+            physicalDevice, device, sizeof(UniformBufferObject),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         uniformBuffers[acquired.imageIndex] = ubo;
 
         // new backbuffer(framebuffer)

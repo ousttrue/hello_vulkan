@@ -1,22 +1,35 @@
 #include "memory_allocator.h"
 #include <stdexcept>
 
-BufferObject::BufferObject(VkDevice device, VkBuffer buffer,
-                           VkDeviceMemory bufferMemory)
-    : _device(device), _buffer(buffer), _bufferMemory(bufferMemory) {
-  vkBindBufferMemory(device, buffer, bufferMemory, 0);
+BufferObject::BufferObject(VkPhysicalDevice physicalDevice, VkDevice device,
+                           VkDeviceSize size, VkBufferUsageFlags usage,
+                           VkMemoryPropertyFlags properties)
+    : _device(device) {
+
+  VkBufferCreateInfo bufferInfo{
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = size,
+      .usage = usage,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+  };
+  if (vkCreateBuffer(this->_device, &bufferInfo, nullptr, &this->_buffer) !=
+      VK_SUCCESS) {
+    throw std::runtime_error("failed to create buffer!");
+  }
+
+  _memory = std::make_shared<DeviceMemory>(device, physicalDevice,
+                                           this->_buffer, properties);
+
+  vkBindBufferMemory(this->_device, this->_buffer, _memory->memory, 0);
 }
 
-BufferObject::~BufferObject() {
-  vkDestroyBuffer(_device, _buffer, nullptr);
-  vkFreeMemory(_device, _bufferMemory, nullptr);
-}
+BufferObject::~BufferObject() { vkDestroyBuffer(_device, _buffer, nullptr); }
 
 void BufferObject::copy(const void *p, size_t size) {
   void *data;
-  vkMapMemory(_device, _bufferMemory, 0, size, 0, &data);
+  vkMapMemory(_device, this->_memory->memory, 0, size, 0, &data);
   memcpy(data, p, size);
-  vkUnmapMemory(_device, _bufferMemory);
+  vkUnmapMemory(_device, this->_memory->memory);
 }
 
 void BufferObject::copyTo(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
@@ -58,51 +71,8 @@ MemoryAllocator::MemoryAllocator(VkPhysicalDevice physicalDevice,
   }
 }
 
-MemoryAllocator::~MemoryAllocator(){
+MemoryAllocator::~MemoryAllocator() {
   vkDestroyCommandPool(_device, _commandPool, nullptr);
-}
-
-std::shared_ptr<BufferObject>
-// Helper function for buffer creation
-MemoryAllocator::createBuffer(const void *p, VkDeviceSize size,
-                              VkBufferUsageFlags usage,
-                              VkMemoryPropertyFlags properties) {
-  VkBufferCreateInfo bufferInfo{};
-  bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  bufferInfo.size = size;
-  bufferInfo.usage = usage;
-  bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-  VkBuffer buffer;
-  if (vkCreateBuffer(_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create buffer!");
-  }
-
-  VkMemoryRequirements memRequirements;
-  vkGetBufferMemoryRequirements(_device, buffer, &memRequirements);
-
-  VkMemoryAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  allocInfo.allocationSize = memRequirements.size;
-  allocInfo.memoryTypeIndex =
-      findMemoryType(memRequirements.memoryTypeBits, properties);
-
-  VkDeviceMemory bufferMemory;
-  if (vkAllocateMemory(_device, &allocInfo, nullptr, &bufferMemory) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate vertex buffer memory!");
-  }
-
-  if (p) {
-    void *data;
-    vkMapMemory(_device, bufferMemory, 0, size, 0, &data);
-    memcpy(data, p, static_cast<size_t>(size));
-    vkUnmapMemory(_device, bufferMemory);
-  }
-
-  auto ptr = std::shared_ptr<BufferObject>(
-      new BufferObject(_device, buffer, bufferMemory));
-  return ptr;
 }
 
 // Find the correct type of memory to use
