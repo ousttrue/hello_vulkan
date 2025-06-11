@@ -78,133 +78,6 @@ void main()
 }
 )";
 
-static vko::Pipeline createPipelineObject(
-    VkDevice device, VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
-    const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
-    VkExtent2D swapchainExtent,
-    const std::vector<VkVertexInputBindingDescription>
-        &vertexInputBindingDescriptions,
-    const std::vector<VkVertexInputAttributeDescription>
-        &attributeDescriptions) {
-
-  // This struct decribes the format of the vertex data:
-  //    1. Bindings (spacing between data and if per-instance or per-vertex
-  //    2. Attribute descriptions (what is passed to vertex shader)
-  VkPipelineVertexInputStateCreateInfo vertexInputInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount =
-          static_cast<uint32_t>(std::size(vertexInputBindingDescriptions)),
-      .pVertexBindingDescriptions = vertexInputBindingDescriptions.data(),
-      .vertexAttributeDescriptionCount =
-          static_cast<uint32_t>(std::size(attributeDescriptions)),
-      .pVertexAttributeDescriptions = attributeDescriptions.data(),
-  };
-
-  // This struct describes two things as well:
-  //    1. Type of geometry drawn from vertices
-  //    2. If primitive restart should be enabled
-  VkPipelineInputAssemblyStateCreateInfo inputAssembly{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = VK_FALSE,
-  };
-
-  VkViewport viewport{
-      .x = 0.0f,
-      .y = 0.0f,
-      .width = (float)swapchainExtent.width,
-      .height = (float)swapchainExtent.height,
-      .minDepth = 0.0f,
-      .maxDepth = 1.0f,
-  };
-  VkRect2D scissor{
-      .offset = {0, 0},
-      .extent = swapchainExtent,
-  };
-  VkPipelineViewportStateCreateInfo viewportState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .pViewports = &viewport,
-      .scissorCount = 1,
-      .pScissors = &scissor,
-  };
-
-  // build the rasterizer
-  VkPipelineRasterizationStateCreateInfo rasterizer{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .depthClampEnable = VK_FALSE,
-      .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
-      // counter clockwise (to match Y-flip in the projection matrix)
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .depthBiasEnable = VK_FALSE,
-      .depthBiasConstantFactor = 0.0f, // optional
-      .depthBiasClamp = 0.0f,          // optional
-      .depthBiasSlopeFactor = 0.0f,    // optional
-      .lineWidth = 1.0f,
-  };
-
-  // Multisampling
-  VkPipelineMultisampleStateCreateInfo multisampling{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-      .sampleShadingEnable = VK_FALSE,
-      .minSampleShading = 1.0f,          // optional
-      .pSampleMask = nullptr,            // optional
-      .alphaToCoverageEnable = VK_FALSE, // optional
-      .alphaToOneEnable = VK_FALSE,      // optional
-  };
-
-  // Color Blending
-  VkPipelineColorBlendAttachmentState colorBlendAttachment{
-      .blendEnable = VK_FALSE,
-      .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,  // optional
-      .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // optional
-      .colorBlendOp = VK_BLEND_OP_ADD,             // optional
-      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,  // optional
-      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // optional
-      .alphaBlendOp = VK_BLEND_OP_ADD,             // optional
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
-  // references the array of structures for all framebuffers and allows for
-  // blend factor specification
-  VkPipelineColorBlendStateCreateInfo colorBlending{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .logicOp = VK_LOGIC_OP_COPY, // optional
-      .attachmentCount = 1,
-      .pAttachments = &colorBlendAttachment,
-      .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
-  };
-
-  VkGraphicsPipelineCreateInfo pipelineInfo{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = static_cast<uint32_t>(std::size(shaderStages)),
-      .pStages = shaderStages.data(),
-      .pVertexInputState = &vertexInputInfo,
-      .pInputAssemblyState = &inputAssembly,
-      .pViewportState = &viewportState,
-      .pRasterizationState = &rasterizer,
-      .pMultisampleState = &multisampling,
-      .pDepthStencilState = nullptr,
-      .pColorBlendState = &colorBlending,
-      .pDynamicState = nullptr,
-      .layout = pipelineLayout,
-      .renderPass = renderPass,
-      .subpass = 0,
-      .basePipelineHandle = VK_NULL_HANDLE,
-  };
-  VkPipeline graphicsPipeline;
-  if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                nullptr, &graphicsPipeline) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create graphics pipeline!");
-  }
-
-  return {device, renderPass, pipelineLayout, graphicsPipeline};
-}
-
 static void record(VkCommandBuffer commandBuffer,
                    //
                    VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
@@ -331,10 +204,9 @@ void main_loop(const std::function<bool()> &runLoop,
   auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
                                                     "main");
 
-#if 0
   vko::PipelineBuilder builder;
-  auto pipeline =
-   builder.create(
+  builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  auto pipeline = builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
       scene.vertexInputBindingDescriptions, scene.attributeDescriptions,
@@ -350,13 +222,6 @@ void main_loop(const std::function<bool()> &runLoop,
           .offset = {0, 0},
           .extent = swapchain.createInfo.imageExtent,
       }});
-#else
-  auto pipeline = createPipelineObject(
-      device, renderPass, pipelineLayout,
-      {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
-      swapchain.createInfo.imageExtent, scene.vertexInputBindingDescriptions,
-      scene.attributeDescriptions);
-#endif
   ;
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
