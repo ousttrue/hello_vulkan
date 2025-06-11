@@ -62,12 +62,14 @@ void main_loop(const std::function<bool()> &runLoop,
   auto renderPass =
       createSimpleRenderPass(device, surface.chooseSwapSurfaceFormat().format);
 
-  auto pipeline =
-      vko::PipelineBilder().create(device, renderPass, pipelineLayout,
-                                   {
-                                       vs.pipelineShaderStageCreateInfo,
-                                       fs.pipelineShaderStageCreateInfo,
-                                   });
+  auto pipeline = vko::PipelineBuilder().create(
+      device, renderPass, pipelineLayout,
+      {
+          vs.pipelineShaderStageCreateInfo,
+          fs.pipelineShaderStageCreateInfo,
+      },
+      {}, {}, {}, {},
+      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   //
   // swapchain

@@ -217,7 +217,7 @@ struct Pipeline : not_copyable {
   }
 };
 
-struct PipelineBilder {
+struct PipelineBuilder {
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       // Bindings (spacing between data and if per-instance or per-vertex
@@ -232,12 +232,6 @@ struct PipelineBilder {
       .primitiveRestartEnable = VK_FALSE,
   };
 
-  VkPipelineViewportStateCreateInfo viewportState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
   VkPipelineRasterizationStateCreateInfo rasterizer{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .depthClampEnable = VK_FALSE,
@@ -246,6 +240,9 @@ struct PipelineBilder {
       .cullMode = VK_CULL_MODE_BACK_BIT,
       .frontFace = VK_FRONT_FACE_CLOCKWISE,
       .depthBiasEnable = VK_FALSE,
+      .depthBiasConstantFactor = 0.0f, // optional
+      .depthBiasClamp = 0.0f,          // optional
+      .depthBiasSlopeFactor = 0.0f,    // optional
       .lineWidth = 1.0f,
   };
 
@@ -253,10 +250,20 @@ struct PipelineBilder {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
       .sampleShadingEnable = VK_FALSE,
+      .minSampleShading = 1.0f,          // optional
+      .pSampleMask = nullptr,            // optional
+      .alphaToCoverageEnable = VK_FALSE, // optional
+      .alphaToOneEnable = VK_FALSE,      // optional
   };
 
   std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = {{
       .blendEnable = VK_FALSE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,  // optional
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO, // optional
+      .colorBlendOp = VK_BLEND_OP_ADD,             // optional
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,  // optional
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO, // optional
+      .alphaBlendOp = VK_BLEND_OP_ADD,             // optional
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
   }};
@@ -268,7 +275,10 @@ struct PipelineBilder {
          const std::vector<VkVertexInputBindingDescription>
              &vertexInputBindingDescriptions = {},
          const std::vector<VkVertexInputAttributeDescription>
-             &attributeDescriptions = {}) {
+             &attributeDescriptions = {},
+         const std::vector<VkViewport> &viewports = {},
+         const std::vector<VkRect2D> &scissors = {},
+         const std::vector<VkDynamicState> &dynamicStates = {}) {
 
     this->vertexInputInfo.vertexBindingDescriptionCount =
         static_cast<uint32_t>(std::size(vertexInputBindingDescriptions)),
@@ -290,12 +300,19 @@ struct PipelineBilder {
         .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
     };
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT,
-                                      VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineViewportStateCreateInfo viewportState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = static_cast<uint32_t>(std::size(viewports)),
+        .pViewports = viewports.data(),
+        .scissorCount = static_cast<uint32_t>(std::size(scissors)),
+        .pScissors = scissors.data(),
+    };
+    // std::vector<VkDynamicState> dynamicStates; //[] =
+    // {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
     VkPipelineDynamicStateCreateInfo dynamicState{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = static_cast<uint32_t>(std::size(dynamicStates)),
-        .pDynamicStates = dynamicStates,
+        .pDynamicStates = dynamicStates.data(),
     };
 
     VkGraphicsPipelineCreateInfo pipelineInfo{
@@ -304,11 +321,11 @@ struct PipelineBilder {
         .pStages = shaderStages.data(),
         .pVertexInputState = &this->vertexInputInfo,
         .pInputAssemblyState = &this->inputAssembly,
-        .pViewportState = &this->viewportState,
+        .pViewportState = &viewportState,
         .pRasterizationState = &this->rasterizer,
         .pMultisampleState = &this->multisampling,
         .pColorBlendState = &colorBlending,
-        .pDynamicState = &dynamicState,
+        .pDynamicState = dynamicStates.size() ? &dynamicState : nullptr,
         .layout = pipelineLayout,
         .renderPass = renderPass,
         .subpass = 0,

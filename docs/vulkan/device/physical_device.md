@@ -42,6 +42,30 @@ INFO:   [03] ___oo_o__
 INFO:   [04] ___oo__o_
 INFO:   [05] ___oo___o
 
+INFO: [NVIDIA GeForce RTX 4060 Laptop GPU] DISCRETE_GPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] ooooo____
+INFO:   [01] ___oo____
+INFO:   [02] o_ooo____
+INFO:   [03] ___oo_o__
+INFO:   [04] ___oo__o_
+INFO:   [05] ___oo___o
+INFO: [Microsoft Direct3D12 (NVIDIA GeForce RTX 4060 Laptop GPU)] DISCRETE_GPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] oooo_____
+INFO:   [01] o_oo_____
+INFO: [Intel(R) Iris(R) Xe Graphics] INTEGRATED_GPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] ooooo____
+INFO: [Microsoft Direct3D12 (Intel(R) Iris(R) Xe Graphics)] INTEGRATED_GPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] oooo_____
+INFO:   [01] o_oo_____
+INFO: [Microsoft Direct3D12 (Microsoft Basic Render Driver)] CPU
+INFO:   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
+INFO:   [00] oooo_____
+INFO:   [01] o_oo_____
+
 # Pixel3a
 I vko     : [Adreno (TM) 615] INTEGRATED_GPU
 I vko     :   queue info: present,graphics,compute,transfer,sparse,protected,video_de,video_en,optical
