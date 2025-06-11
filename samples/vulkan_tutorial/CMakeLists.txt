@@ -6,7 +6,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-SET(CMAKE_CXX_STANDARD 20)
 add_executable(${TARGET_NAME}
   main.cpp
 )

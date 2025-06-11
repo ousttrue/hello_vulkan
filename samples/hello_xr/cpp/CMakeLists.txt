@@ -1,5 +1,3 @@
-set(CMAKE_CXX_STANDARD 20)
-
 subdirs(common vkr openxr_program)
 
 if(ANDROID)

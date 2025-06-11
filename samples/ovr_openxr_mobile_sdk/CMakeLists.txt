@@ -1,5 +1,3 @@
-set(CMAKE_CXX_STANDARD 20)
-
 add_library(meta_openxr_preview INTERFACE)
 target_include_directories(meta_openxr_preview
                            INTERFACE ${CMAKE_CURRENT_LIST_DIR}/OpenXR)

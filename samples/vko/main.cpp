@@ -1,11 +1,11 @@
-#include <vko/vko.h>
-
 #include "main_loop.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+
+auto NAME = "vko";
 
 class Glfw {
 
@@ -49,7 +49,8 @@ int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
   std::vector<const char *> instanceExtensions;
   std::vector<const char *> deviceExtensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
 #ifndef NDEBUG
   vko::Logger::Info("[debug build]");
   validationLayers.push_back("VK_LAYER_KHRONOS_validation");
@@ -57,7 +58,7 @@ int main(int argc, char **argv) {
 #endif
 
   Glfw glfw;
-  auto hwnd = glfw.createWindow(640, 480, "vulfwk");
+  auto hwnd = glfw.createWindow(640, 480, NAME);
   uint32_t glfwExtensionCount = 0;
   const char **glfwExtensions;
   glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
   vko::Instance instance;
   instance.validationLayers = validationLayers;
   instance.instanceExtensions = instanceExtensions;
-  instance.appInfo.pApplicationName = "vulfwk";
+  instance.appInfo.pApplicationName = NAME;
   instance.appInfo.pEngineName = "No Engine";
   VKO_CHECK(instance.create());
 
@@ -76,15 +77,17 @@ int main(int argc, char **argv) {
   VKO_CHECK(
       glfwCreateWindowSurface(instance, glfw._window, nullptr, &_surface));
 
-  auto picked = instance.pickPhysicalDevice(_surface);
-  vko::Surface surface(instance, _surface, picked.physicalDevice);
+  auto physicalDevice = instance.pickPhysicalDevice(_surface);
+  vko::Surface surface(instance, _surface, physicalDevice.physicalDevice);
 
   vko::Device device;
   device.validationLayers = instance.validationLayers;
-  VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
-                          picked.presentFamilyIndex));
+  VKO_CHECK(device.create(physicalDevice.physicalDevice,
+                          physicalDevice.graphicsFamilyIndex,
+                          physicalDevice.presentFamilyIndex));
 
-  main_loop([&glfw]() { return glfw.nextFrame(); }, surface, picked, device);
+  main_loop([&glfw]() { return glfw.nextFrame(); }, surface, physicalDevice,
+            device);
 
   return 0;
 }
