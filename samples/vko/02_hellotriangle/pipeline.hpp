@@ -1,6 +1,6 @@
 #pragma once
 
-#include <android_native_app_glue.h>
+// #include <android_native_app_glue.h>
 #include <vulkan/vulkan.h>
 
 #include <memory>
@@ -21,8 +21,7 @@ class Pipeline {
 public:
   ~Pipeline();
   static std::shared_ptr<Pipeline> create(VkPhysicalDevice physicalDevice,
-                                          VkDevice device, VkFormat format,
-                                          AAssetManager *assetManager);
+                                          VkDevice device, VkFormat format);
   VkRenderPass renderPass() const { return _renderPass; }
   void render(VkCommandBuffer cmd, VkFramebuffer framebuffer, VkExtent2D size);
 

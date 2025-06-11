@@ -1,75 +1,11 @@
 #include "pipeline.hpp"
-#include <vector>
-#include <vko/vko.h>
-#include <vulkan/vulkan_core.h>
+#include "../glsl_to_spv.h"
+#include <vko/vko_pipeline.h>
 
 struct Vertex {
   float position[4];
   float color[4];
 };
-
-static std::vector<uint8_t> readRawFile(AAssetManager *assetManager,
-                                        const char *pPath) {
-  if (!assetManager) {
-    vko::Logger::Error("Asset manager does not exist.");
-    return {};
-  }
-
-  AAsset *asset = AAssetManager_open(assetManager, pPath, AASSET_MODE_BUFFER);
-  if (!asset) {
-    vko::Logger::Error("AAssetManager_open() failed to load file: %s.", pPath);
-    return {};
-  }
-
-  auto buffer = AAsset_getBuffer(asset);
-  if (!buffer) {
-    vko::Logger::Error("Failed to obtain buffer for asset: %s.", pPath);
-    AAsset_close(asset);
-    return {};
-  }
-
-  auto len = AAsset_getLength(asset);
-  std::vector<uint8_t> out(len);
-
-  memcpy(out.data(), buffer, len);
-  AAsset_close(asset);
-  return out;
-}
-
-template <typename T>
-inline std::vector<T> readBinaryFile(AAssetManager *assetManager,
-                                     const char *pPath) {
-  auto raw = readRawFile(assetManager, pPath);
-  if (raw.empty()) {
-    return {};
-  }
-
-  size_t numElements = raw.size() / sizeof(T);
-  std::vector<T> buffer(numElements);
-  memcpy(buffer.data(), raw.data(), raw.size());
-  return buffer;
-}
-
-static VkShaderModule loadShaderModule(VkDevice device,
-                                       const std::vector<uint32_t> &buffer) {
-  if (buffer.empty()) {
-    vko::Logger::Error("no data");
-    return VK_NULL_HANDLE;
-  }
-
-  VkShaderModuleCreateInfo moduleInfo = {
-      VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-  moduleInfo.codeSize = buffer.size() * sizeof(uint32_t);
-  moduleInfo.pCode = buffer.data();
-
-  VkShaderModule shaderModule;
-  if (vkCreateShaderModule(device, &moduleInfo, nullptr, &shaderModule) !=
-      VK_SUCCESS) {
-    vko::Logger::Error("vkCreateShaderModule");
-    return VK_NULL_HANDLE;
-  }
-  return shaderModule;
-}
 
 class Buffer {
   VkDevice _device;
@@ -180,8 +116,7 @@ Pipeline::~Pipeline() {
 }
 
 std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
-                                           VkDevice device, VkFormat format,
-                                           AAssetManager *assetManager) {
+                                           VkDevice device, VkFormat format) {
   //
   // RenderPass
   //
@@ -259,22 +194,31 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
   }
 
   // Load our SPIR-V shaders.
+  const char VS[] = {
+#embed "triangle.vert"
+      , 0, 0, 0, 0};
+
+  const char FS[] = {
+#embed "triangle.frag"
+      , 0, 0, 0, 0};
+
+  auto vs =
+      vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
+  auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
+                                                    "main");
+
   VkPipelineShaderStageCreateInfo shaderStages[2] = {
       {
           .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
           // We have two pipeline stages, vertex and fragment.
           .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = loadShaderModule(
-              device, readBinaryFile<uint32_t>(assetManager,
-                                               "shaders/triangle.vert.spv")),
+          .module = vs.shaderModule,
           .pName = "main",
       },
       {
           .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
           .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = loadShaderModule(
-              device, readBinaryFile<uint32_t>(assetManager,
-                                               "shaders/triangle.frag.spv")),
+          .module = fs.shaderModule,
           .pName = "main",
       },
   };

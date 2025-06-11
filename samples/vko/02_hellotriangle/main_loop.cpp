@@ -1,24 +1,14 @@
-#include "main_loop.h"
+#include "../main_loop.h"
 #include "pipeline.hpp"
-#include "vko/vko.h"
-#include <vulkan/vulkan_core.h>
-
-static double getCurrentTime() {
-  timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0) {
-    vko::Logger::Error("clock_gettime() failed.\n");
-    return 0.0;
-  }
-  return ts.tv_sec + ts.tv_nsec * 1e-9;
-}
+#include <chrono>
 
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
-               const vko::Device &device, void *p) {
+               const vko::Device &device) {
 
-  std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
-      physicalDevice.physicalDevice, device,
-      surface.chooseSwapSurfaceFormat().format, (AAssetManager *)p);
+  std::shared_ptr<class Pipeline> pipeline =
+      Pipeline::create(physicalDevice.physicalDevice, device,
+                       surface.chooseSwapSurfaceFormat().format);
 
   vko::Swapchain swapchain(device);
   VKO_CHECK(swapchain.create(
@@ -32,7 +22,7 @@ void main_loop(const std::function<bool()> &runLoop,
                                    swapchain.images.size());
 
   unsigned frameCount = 0;
-  auto startTime = getCurrentTime();
+  auto startTime = std::chrono::high_resolution_clock::now();
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
@@ -47,8 +37,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
       // All queue submissions get a fence that CPU will wait
       // on for synchronization purposes.
-      auto [cmd, flight, oldSemaphore] =
-          flightManager.blockAndReset(acquireSemaphore);
+      auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
       if (oldSemaphore != VK_NULL_HANDLE) {
         flightManager.reuseSemaphore(oldSemaphore);
       }
@@ -114,9 +103,14 @@ void main_loop(const std::function<bool()> &runLoop,
     }
 
     frameCount++;
-    if (frameCount == 100) {
-      double endTime = getCurrentTime();
-      vko::Logger::Info("FPS: %.3f\n", frameCount / (endTime - startTime));
+    if (frameCount == 1000) {
+      auto endTime = std::chrono::high_resolution_clock::now();
+      // vko::Logger::Info(
+      //     "FPS: %.3f\n",
+      //     (1000.0f * frameCount) /
+      //         std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
+      //                                                               startTime)
+      //             .count());
       frameCount = 0;
       startTime = endTime;
     }

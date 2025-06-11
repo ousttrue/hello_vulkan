@@ -1,6 +1,7 @@
 #pragma once
 #include "vko.h"
 #include <functional>
+#include <stdio.h>
 #include <vulkan/vulkan_core.h>
 
 namespace vko {
@@ -80,6 +81,12 @@ inline VkShaderModule createShaderModule(VkDevice device,
     return VK_NULL_HANDLE;
   }
   return shaderModule;
+}
+
+inline std::vector<uint32_t> strToUints(const std::string &src) {
+  std::vector<uint32_t> uints(src.size() / 4);
+  memcpy(uints.data(), src.data(), src.size());
+  return uints;
 }
 
 struct ShaderModule : not_copyable {

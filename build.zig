@@ -69,35 +69,6 @@ pub fn build(b: *std.Build) void {
         tools,
         so,
         .{
-            .package_name = "com.arm.vulkansdk.hellotriangle",
-            .apk_name = "hellotriangle",
-            .contents = .{
-                .android_manifest = b.path("samples/hellotriangle/android/AndroidManifest.xml"),
-                .resource_directory = b.path("samples/hellotriangle/android/res"),
-                .assets_directory = b.path("samples/hellotriangle/android/assets"),
-                .appends = &.{
-                    .{
-                        .path = .{
-                            .src = so.build_dir.path(b, "samples/hellotriangle/cpp/libnative.so"),
-                            .dst = "lib/arm64-v8a/libnative.so",
-                        },
-                    },
-                    .{
-                        .path = .{
-                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
-                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
-                        },
-                    },
-                },
-            },
-        },
-    );
-
-    build_apk(
-        b,
-        tools,
-        so,
-        .{
             .package_name = "ousttrue.simplehello",
             .activity_class_name = "ousttrue.simplehello.MainActivity",
             .apk_name = "SimpleHello",
@@ -148,6 +119,60 @@ pub fn build(b: *std.Build) void {
                     .{ .path = .{
                         .src = so.build_dir.path(b, "samples/vko/lib02_triangle.so"),
                         .dst = "lib/arm64-v8a/lib02_triangle.so",
+                    } },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
+    );
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "com.arm.vulkansdk.hellotriangle",
+            .apk_name = "hellotriangle",
+            .contents = .{
+                .android_manifest = b.path("samples/vko/02_hellotriangle/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/vko/02_hellotriangle/res"),
+                // .assets_directory = b.path("samples/hellotriangle/android/assets"),
+                .appends = &.{
+                    .{
+                        .path = .{
+                            .src = so.build_dir.path(b, "samples/vko/lib02_hellotriangle.so"),
+                            .dst = "lib/arm64-v8a/lib02_hellotriangle.so",
+                        },
+                    },
+                    .{
+                        .path = .{
+                            .src = validationlayers_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"),
+                            .dst = "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+                        },
+                    },
+                },
+            },
+        },
+    );
+
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "com.ousttrue.vko03_texture",
+            .apk_name = "vko03_texture",
+            .contents = .{
+                .android_manifest = b.path("samples/vko/03_texture/AndroidManifest.xml"),
+                // .assets_directory = shaders_wf.getDirectory(),
+                .appends = &.{
+                    .{ .path = .{
+                        .src = so.build_dir.path(b, "samples/vko/lib03_texture.so"),
+                        .dst = "lib/arm64-v8a/lib03_texture.so",
                     } },
                     .{
                         .path = .{

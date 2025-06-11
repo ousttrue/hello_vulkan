@@ -9,8 +9,16 @@ if(ANDROID)
       android_main.cpp ${ARGV})
     target_compile_definitions(${TARGET_NAME}
                                PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
-    target_link_libraries(${TARGET_NAME} PRIVATE android_native_app_glue
-                                                 android log vko vulkan shaderc)
+    target_link_libraries(
+      ${TARGET_NAME}
+      PRIVATE android_native_app_glue
+              android
+              log
+              vko
+              vulkan
+              shaderc
+              glm)
+
   endfunction()
 
 else()
@@ -20,16 +28,14 @@ else()
       #
       main.cpp ${ARGV})
     target_link_libraries(${TARGET_NAME} PRIVATE vko Vulkan::Vulkan glfw
-                                                 Vulkan::shaderc_combined)
+                                                 Vulkan::shaderc_combined glm)
   endfunction()
 
 endif()
 
 add_vko_sample(01_clear 01_clear/main_loop.cpp)
 add_vko_sample(02_triangle glsl_to_spv.cpp 02_triangle/main_loop.cpp)
-add_vko_sample(
-  03_texture
-  glsl_to_spv.cpp
-  03_texture/main_loop.cpp
-  03_texture/scene.cpp
-  )
+add_vko_sample(02_hellotriangle glsl_to_spv.cpp 02_hellotriangle/main_loop.cpp
+               02_hellotriangle/pipeline.cpp)
+add_vko_sample(03_texture glsl_to_spv.cpp 03_texture/main_loop.cpp
+               03_texture/scene.cpp)

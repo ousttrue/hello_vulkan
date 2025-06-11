@@ -9,6 +9,8 @@ FetchContent_Populate(
   # URL
   # https://github.com/g-truc/glm/releases/download/1.0.1/glm-1.0.1-light.zip
 )
+add_library(glm INTERFACE)
+target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
 
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
@@ -81,7 +83,7 @@ if(ANDROID_NDK)
   FetchContent_MakeAvailable(shaderc)
 
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
-  subdirs(hellotriangle/cpp ovr_openxr_mobile_sdk)
+  subdirs(ovr_openxr_mobile_sdk)
 else()
   find_package(Vulkan REQUIRED COMPONENTS glslang glslangValidator SPIRV-Tools
                                           shaderc_combined)

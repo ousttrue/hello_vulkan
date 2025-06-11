@@ -16,6 +16,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "02",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vko/02_hellotriangle.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "01",
             "type": "cppvsdbg",
             "request": "launch",
