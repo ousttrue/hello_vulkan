@@ -220,7 +220,9 @@ struct Pipeline : not_copyable {
 struct PipelineBilder {
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      // Bindings (spacing between data and if per-instance or per-vertex
       .vertexBindingDescriptionCount = 0,
+      // Attribute descriptions (what is passed to vertex shader)
       .vertexAttributeDescriptionCount = 0,
   };
 
@@ -262,7 +264,21 @@ struct PipelineBilder {
   Pipeline
   create(VkDevice device, VkRenderPass renderPass,
          VkPipelineLayout pipelineLayout,
-         const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages) {
+         const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
+         const std::vector<VkVertexInputBindingDescription>
+             &vertexInputBindingDescriptions = {},
+         const std::vector<VkVertexInputAttributeDescription>
+             &attributeDescriptions = {}) {
+
+    this->vertexInputInfo.vertexBindingDescriptionCount =
+        static_cast<uint32_t>(std::size(vertexInputBindingDescriptions)),
+    this->vertexInputInfo.pVertexBindingDescriptions =
+        vertexInputBindingDescriptions.data();
+
+    this->vertexInputInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(std::size(attributeDescriptions));
+    this->vertexInputInfo.pVertexAttributeDescriptions =
+        attributeDescriptions.data();
 
     VkPipelineColorBlendStateCreateInfo colorBlending{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -306,23 +322,6 @@ struct PipelineBilder {
     return {device, renderPass, pipelineLayout, graphicsPipeline};
   }
 };
-
-// inline Pipeline createSimpleGraphicsPipeline(VkDevice device, VkFormat
-// format,
-//                                              const ShaderModule &vs,
-//                                              const ShaderModule &fs,
-//                                              VkPipelineLayout pipelineLayout)
-//                                              {
-//
-//   auto renderPass = createSimpleRenderPass(device, format);
-//
-//   return PipelineBilder().create(device, renderPass, pipelineLayout,
-//                                  {
-//                                      vs.pipelineShaderStageCreateInfo,
-//                                      fs.pipelineShaderStageCreateInfo,
-//                                  },
-//                                  format);
-// }
 
 struct CommandBufferRecording : public not_copyable {
   VkCommandBuffer commandBuffer;

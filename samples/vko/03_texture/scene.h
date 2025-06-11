@@ -33,11 +33,12 @@ struct Scene {
   VkDevice device;
 
   std::shared_ptr<vko::Buffer> vertexBuffer;
-  VkVertexInputBindingDescription vertexInputBindingDescription = {
-      .binding = 0,
-      .stride = static_cast<uint32_t>(sizeof(Vertex)),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  };
+  std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions =
+      {{
+          .binding = 0,
+          .stride = static_cast<uint32_t>(sizeof(Vertex)),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      }};
 
   // auto bindingDescription = Vertex_getBindingDescription();
   // auto attributeDescriptions = Vertex_getAttributeDescriptions();
