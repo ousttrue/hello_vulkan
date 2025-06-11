@@ -344,7 +344,9 @@ struct CommandBufferRecording : public not_copyable {
   VkCommandBuffer commandBuffer;
   CommandBufferRecording(VkCommandBuffer _commandBuffer,
                          VkRenderPass renderPass, VkFramebuffer framebuffer,
-                         VkExtent2D extent, VkClearValue clearColor)
+                         VkExtent2D extent, VkClearValue clearColor,
+                         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
+                         VkDescriptorSet descriptorSet = VK_NULL_HANDLE)
       : commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -377,6 +379,13 @@ struct CommandBufferRecording : public not_copyable {
         .extent = extent,
     };
     vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
+
+    if (pipelineLayout != VK_NULL_HANDLE && descriptorSet != VK_NULL_HANDLE) {
+      // take the descriptor set for the corresponding swap image, and bind it
+      // to the descriptors in the shader
+      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    }
   }
   ~CommandBufferRecording() {
     vkCmdEndRenderPass(this->commandBuffer);
@@ -386,6 +395,23 @@ struct CommandBufferRecording : public not_copyable {
     vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       pipeline);
     vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
+  }
+
+  void drawIndexed(VkPipeline pipeline, uint32_t indexDrawCount,
+                   VkBuffer vertexBuffer = VK_NULL_HANDLE,
+                   VkBuffer indexBuffer = VK_NULL_HANDLE) {
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+    if (vertexBuffer != VK_NULL_HANDLE) {
+      VkBuffer vertexBuffers[] = {vertexBuffer};
+      VkDeviceSize offsets[] = {0};
+      vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    }
+    if (indexBuffer != VK_NULL_HANDLE) {
+      vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    }
+    vkCmdDrawIndexed(commandBuffer, indexDrawCount, 1, 0, 0, 0);
   }
 };
 

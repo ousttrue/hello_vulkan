@@ -2,6 +2,7 @@
 #include "../glsl_to_spv.h"
 #include "scene.h"
 #include "vko/vko.h"
+#include "vko/vko_pipeline.h"
 
 auto VS = R"(#version 450
 #extension GL_ARB_separate_shader_objects : enable
@@ -77,63 +78,6 @@ void main()
     outColor = texture(texSampler, fragTexCoord);
 }
 )";
-
-static void record(VkCommandBuffer commandBuffer,
-                   //
-                   VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
-                   VkPipeline graphicsPipeline,
-                   //
-                   VkFramebuffer framebuffer, VkExtent2D extent,
-                   VkClearValue clearColor, VkDescriptorSet descriptorSet,
-                   const Scene &scene) {
-
-  VkCommandBufferBeginInfo beginInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = 0,
-      .pInheritanceInfo = nullptr,
-  };
-  if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-    throw std::runtime_error("failed to begin recording command buffer!");
-  }
-
-  VkRenderPassBeginInfo renderPassInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = renderPass,
-      .framebuffer = framebuffer,
-      .renderArea =
-          {
-              .offset = {0, 0},
-              .extent = extent,
-          },
-      .clearValueCount = 1,
-      .pClearValues = &clearColor,
-  };
-  vkCmdBeginRenderPass(commandBuffer, &renderPassInfo,
-                       VK_SUBPASS_CONTENTS_INLINE);
-
-  vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    graphicsPipeline);
-
-  VkBuffer vertexBuffers[] = {scene.vertexBuffer->buffer};
-  VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-  vkCmdBindIndexBuffer(commandBuffer, scene.indexBuffer->buffer, 0,
-                       VK_INDEX_TYPE_UINT16);
-
-  // take the descriptor set for the corresponding swap image, and bind it
-  // to the descriptors in the shader
-  vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-  // Tell Vulkan to draw the triangle USING THE INDEX BUFFER!
-  vkCmdDrawIndexed(commandBuffer, scene.indexDrawCount, 1, 0, 0, 0);
-
-  vkCmdEndRenderPass(commandBuffer);
-
-  if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-    throw std::runtime_error("failed to record command buffer!");
-  }
-}
 
 void main_loop(const std::function<bool()> &runLoop,
                const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
@@ -234,9 +178,6 @@ void main_loop(const std::function<bool()> &runLoop,
   VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
 
   while (runLoop()) {
-    // * 0.
-    // auto flight = flightFrames->next();
-
     // * 1. Aquires an image from the swap chain
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
@@ -279,13 +220,14 @@ void main_loop(const std::function<bool()> &runLoop,
             swapchain.createInfo.imageFormat, pipeline.renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
 
-        record(cmd,
-               //
-               pipeline.pipelineLayout, pipeline.renderPass,
-               pipeline.graphicsPipeline,
-               //
-               backbuffer->framebuffer, swapchain.createInfo.imageExtent,
-               clearColor, descriptorSet, scene);
+        {
+          vko::CommandBufferRecording recording(cmd, pipeline.renderPass,
+                                                backbuffer->framebuffer, swapchain.createInfo.imageExtent, clearColor,
+                                                pipelineLayout, descriptorSet);
+          recording.drawIndexed(pipeline.graphicsPipeline, scene.indexDrawCount,
+                                scene.vertexBuffer->buffer,
+                                scene.indexBuffer->buffer);
+        }
       }
 
       {
@@ -295,7 +237,6 @@ void main_loop(const std::function<bool()> &runLoop,
         float time = std::chrono::duration<float, std::chrono::seconds::period>(
                          currentTime - startTime)
                          .count();
-        // backbuffer->updateUbo(time, swapchain.createInfo.imageExtent);
         UniformBufferObject ubo{};
         ubo.setTime(time, swapchain.createInfo.imageExtent.width,
                     swapchain.createInfo.imageExtent.height);
