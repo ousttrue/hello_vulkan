@@ -78,50 +78,14 @@ void main()
 }
 )";
 
-static vko::Pipeline
-createPipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
-                     //
-                     VkFormat swapchainFormat, VkExtent2D swapchainExtent,
-                     //
-                     VkDescriptorSetLayout descriptorSetLayout,
-                     const std::vector<VkVertexInputBindingDescription>
-                         &vertexInputBindingDescriptions,
-                     const std::vector<VkVertexInputAttributeDescription>
-                         &attributeDescriptions) {
-
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &descriptorSetLayout,
-      .pushConstantRangeCount = 0,
-      .pPushConstantRanges = nullptr,
-  };
-  VkPipelineLayout pipelineLayout;
-  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                   &pipelineLayout));
-
-  auto renderPass = vko::createSimpleRenderPass(device, swapchainFormat);
-
-  // auto vertShaderCode = readFile("shaders/vert.spv");
-  VkShaderModule vertShaderModule =
-      vko::createShaderModule(device, glsl_vs_to_spv(VS));
-  // auto fragShaderCode = readFile("shaders/frag.spv");
-  VkShaderModule fragShaderModule =
-      vko::createShaderModule(device, glsl_fs_to_spv(FS));
-  VkPipelineShaderStageCreateInfo shaderStages[] = {
-      {
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = vertShaderModule,
-          .pName = "main",
-      },
-      {
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = fragShaderModule,
-          .pName = "main",
-      },
-  };
+static vko::Pipeline createPipelineObject(
+    VkDevice device, VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
+    const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
+    VkExtent2D swapchainExtent,
+    const std::vector<VkVertexInputBindingDescription>
+        &vertexInputBindingDescriptions,
+    const std::vector<VkVertexInputAttributeDescription>
+        &attributeDescriptions) {
 
   // This struct decribes the format of the vertex data:
   //    1. Bindings (spacing between data and if per-instance or per-vertex
@@ -217,8 +181,8 @@ createPipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
 
   VkGraphicsPipelineCreateInfo pipelineInfo{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = 2,
-      .pStages = shaderStages,
+      .stageCount = static_cast<uint32_t>(std::size(shaderStages)),
+      .pStages = shaderStages.data(),
       .pVertexInputState = &vertexInputInfo,
       .pInputAssemblyState = &inputAssembly,
       .pViewportState = &viewportState,
@@ -237,8 +201,6 @@ createPipelineObject(VkPhysicalDevice physicalDevice, VkDevice device,
                                 nullptr, &graphicsPipeline) != VK_SUCCESS) {
     throw std::runtime_error("failed to create graphics pipeline!");
   }
-  vkDestroyShaderModule(device, fragShaderModule, nullptr);
-  vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
   return {device, renderPass, pipelineLayout, graphicsPipeline};
 }
@@ -369,10 +331,9 @@ void main_loop(const std::function<bool()> &runLoop,
   auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
                                                     "main");
 
-  vko::PipelineBuilder builder;
-
-  auto pipeline =
 #if 0
+  vko::PipelineBuilder builder;
+  auto pipeline =
    builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
@@ -390,10 +351,11 @@ void main_loop(const std::function<bool()> &runLoop,
           .extent = swapchain.createInfo.imageExtent,
       }});
 #else
-      createPipelineObject(
-          physicalDevice, device, surface.chooseSwapSurfaceFormat().format,
-          swapchain.createInfo.imageExtent, descriptorSets.descriptorSetLayout,
-          scene.vertexInputBindingDescriptions, scene.attributeDescriptions);
+  auto pipeline = createPipelineObject(
+      device, renderPass, pipelineLayout,
+      {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
+      swapchain.createInfo.imageExtent, scene.vertexInputBindingDescriptions,
+      scene.attributeDescriptions);
 #endif
   ;
 
