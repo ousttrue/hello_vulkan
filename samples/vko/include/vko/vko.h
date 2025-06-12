@@ -190,26 +190,47 @@ struct PhysicalDevice {
   }
 };
 
-inline const char *getValidationLayerName() {
-  uint32_t layerCount;
-  vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-  std::vector<VkLayerProperties> availableLayers(layerCount);
-  vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-  const char *validationLayerNames[] = {
-      "VK_LAYER_KHRONOS_validation",
-      "VK_LAYER_LUNARG_standard_validation",
-  };
+inline const std::vector<VkLayerProperties> &availableLayers() {
+  static std::vector<VkLayerProperties> s_availableLayers;
+  if (s_availableLayers.empty()) {
+    uint32_t layerCount;
+    VKO_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, nullptr));
+    s_availableLayers.resize(layerCount);
+    VKO_CHECK(vkEnumerateInstanceLayerProperties(&layerCount,
+                                                 s_availableLayers.data()));
+  }
+  return s_availableLayers;
+}
 
-  // Enable only one validation layer from the list above. Prefer KHRONOS.
-  for (auto &validationLayerName : validationLayerNames) {
-    for (const auto &layerProperties : availableLayers) {
-      if (0 == strcmp(validationLayerName, layerProperties.layerName)) {
-        return validationLayerName;
-      }
+inline bool layerIsSupported(const char *name) {
+  for (const auto &layerProperties : availableLayers()) {
+    if (0 == strcmp(name, layerProperties.layerName)) {
+      return true;
     }
   }
+  return false;
+}
 
-  return nullptr;
+inline const std::vector<VkExtensionProperties> availableInstanceExtensions() {
+  static std::vector<VkExtensionProperties> s_availableExtensions;
+  if (s_availableExtensions.empty()) {
+    uint32_t extensionCount = 0;
+    VKO_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
+                                                     nullptr));
+    s_availableExtensions.resize(extensionCount);
+    VKO_CHECK(vkEnumerateInstanceExtensionProperties(
+        nullptr, &extensionCount, s_availableExtensions.data()));
+  }
+  return s_availableExtensions;
+}
+
+inline bool instanceExtensionIsSupported(const char *name) {
+  for (const auto &properties : availableInstanceExtensions()) {
+    if (0 == strcmp(name, properties.extensionName)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
@@ -332,14 +353,16 @@ struct Instance : public not_copyable {
       //   app.apiVersion = VK_MAKE_VERSION(1, 0, 1);
       //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
       //   if (res == VK_SUCCESS) {
-      //     Logger::Info("Created Vulkan instance with API version 1.0.1.\n");
+      //     Logger::Info("Created Vulkan instance with API
+      //     version 1.0.1.\n");
       //   }
       // }
       // if (res == VK_ERROR_INCOMPATIBLE_DRIVER) {
       //   app.apiVersion = VK_MAKE_VERSION(1, 0, 2);
       //   res = vkCreateInstance(&instanceInfo, nullptr, &instance);
       //   if (res == VK_SUCCESS)
-      //     Logger::Info("Created Vulkan instance with API version 1.0.2.\n");
+      //     Logger::Info("Created Vulkan instance with API
+      //     version 1.0.2.\n");
       // }
       // if (res != VK_SUCCESS) {
       //   Logger::Error("Failed to create Vulkan instance (error: %d).\n",

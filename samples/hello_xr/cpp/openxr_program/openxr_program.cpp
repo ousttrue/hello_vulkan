@@ -348,6 +348,12 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
   for (auto name : layers) {
     Log::Write(Log::Level::Info, Fmt("  valiation layer: %s", name));
   }
+  for (auto name : instanceExtensions) {
+    Log::Write(Log::Level::Info, Fmt("  instance extension: %s", name));
+  }
+  for (auto name : deviceExtensions) {
+    Log::Write(Log::Level::Info, Fmt("  device extension: %s", name));
+  }
 
   VkDebugUtilsMessengerCreateInfoEXT debugInfo{
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,

@@ -3,76 +3,11 @@
 #include "openxr_program/openxr_session.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
+#include "vko/vko.h"
 #include <common/logger.h>
 #include <thread>
 #include <vkr/vulkan_debug_object_namer.hpp>
 #include <vkr/vulkan_renderer.h>
-
-// std::vector<const char *> getVulkanLayers() {
-// #ifndef NDEBUG
-//   // debug
-//   if (auto layer = vko::getValidationLayerName()) {
-//     // has layer
-//     return {layer};
-//   }
-//   Log::Write(Log::Level::Warning,
-//              "No validation layers found in the system, skipping");
-// #endif
-//
-//   // no debug layer
-//   return {};
-// }
-
-std::vector<const char *> getVulkanInstanceExtensions() {
-  std::vector<const char *> extensions;
-
-  uint32_t extensionCount = 0;
-  if (vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                             nullptr) != VK_SUCCESS) {
-    throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
-  }
-
-  std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-  if (vkEnumerateInstanceExtensionProperties(
-          nullptr, &extensionCount, availableExtensions.data()) != VK_SUCCESS) {
-    throw std::runtime_error("vkEnumerateInstanceExtensionProperties");
-  }
-  const auto b = availableExtensions.begin();
-  const auto e = availableExtensions.end();
-
-  auto isExtSupported = [&](const char *extName) -> bool {
-    auto it = std::find_if(b, e, [&](const VkExtensionProperties &properties) {
-      return (0 == strcmp(extName, properties.extensionName));
-    });
-    return (it != e);
-  };
-
-  // Debug utils is optional and not always available
-  if (isExtSupported(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
-    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-  }
-  // TODO add back VK_EXT_debug_report code for compatibility with older
-  // systems? (Android)
-
-#if defined(USE_MIRROR_WINDOW)
-  extensions.push_back("VK_KHR_surface");
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-  extensions.push_back("VK_KHR_win32_surface");
-#else
-#error CreateSurface not supported on this OS
-#endif // defined(VK_USE_PLATFORM_WIN32_KHR)
-#endif // defined(USE_MIRROR_WINDOW)
-
-  return extensions;
-}
-
-std::vector<const char *> getVulkanDeviceExtensions() {
-  std::vector<const char *> deviceExtensions;
-#if defined(USE_MIRROR_WINDOW)
-  deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-#endif
-  return deviceExtensions;
-}
 
 void ShowHelp() {
   Log::Write(
@@ -92,13 +27,43 @@ void ShowHelp() {
 int main(int argc, char *argv[]) {
   std::vector<const char *> validationLayers;
   std::vector<const char *> instanceExtensions;
-  std::vector<const char *> deviceExtensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
+  // #if defined(USE_MIRROR_WINDOW)
+  //   extensions.push_back("VK_KHR_surface");
+  // #if defined(VK_USE_PLATFORM_WIN32_KHR)
+  //   extensions.push_back("VK_KHR_win32_surface");
+  // #else
+  // #error CreateSurface not supported on this OS
+  // #endif // defined(VK_USE_PLATFORM_WIN32_KHR)
+  // #endif // defined(USE_MIRROR_WINDOW)
+  // std::vector<const char *> getVulkanDeviceExtensions() {
+  //   std::vector<const char *> deviceExtensions;
+  // #if defined(USE_MIRROR_WINDOW)
+  //   deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  // #endif
+  //   return deviceExtensions;
+  // }
+  std::vector<const char *> deviceExtensions;
 #ifndef NDEBUG
   vko::Logger::Info("[debug build]");
-  validationLayers.push_back(vko::getValidationLayerName());
-  instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+  const char *layerNames[] = {
+      "VK_LAYER_KHRONOS_validation",
+      "VK_LAYER_LUNARG_standard_validation",
+  };
+  for (auto name : layerNames) {
+    if (vko::layerIsSupported(name)) {
+      validationLayers.push_back(name);
+      break;
+    }
+  }
+  const char *instanceExtensionNames[] = {
+      VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+  };
+  for (auto name : instanceExtensionNames) {
+    if (vko::instanceExtensionIsSupported(name)) {
+      instanceExtensions.push_back(name);
+      break;
+    }
+  }
 #endif
 
   // Parse command-line arguments into Options.
@@ -129,9 +94,8 @@ int main(int argc, char *argv[]) {
   }
 
   // Create VkDevice by OpenXR.
-  auto vulkan = program->InitializeVulkan(validationLayers,
-                                          getVulkanInstanceExtensions(),
-                                          getVulkanDeviceExtensions());
+  auto vulkan = program->InitializeVulkan(validationLayers, instanceExtensions,
+                                          deviceExtensions);
   SetDebugUtilsObjectNameEXT_GetProc(vulkan.Instance);
 
   // XrSession
