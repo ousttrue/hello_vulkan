@@ -74,7 +74,7 @@
             "name": "hello_xr",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/builddir/samples/hello_xr/cpp/hello_xr.exe",
+            "program": "${workspaceFolder}/build/samples/hello_xr/cpp/hello_xr.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

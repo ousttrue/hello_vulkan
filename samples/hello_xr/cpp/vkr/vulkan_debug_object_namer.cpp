@@ -1,5 +1,6 @@
 #include "vulkan_debug_object_namer.hpp"
 #include <vulkan/vulkan_core.h>
+#include <assert.h>
 
 static PFN_vkSetDebugUtilsObjectNameEXT g_vkSetDebugUtilsObjectNameEXT{nullptr};
 
@@ -19,5 +20,6 @@ VkResult SetDebugUtilsObjectNameEXT(VkDevice device, VkObjectType objectType,
       .objectHandle = objectHandle,
       .pObjectName = pObjectName,
   };
+  assert(g_vkSetDebugUtilsObjectNameEXT);
   return g_vkSetDebugUtilsObjectNameEXT(device, &nameInfo);
 }

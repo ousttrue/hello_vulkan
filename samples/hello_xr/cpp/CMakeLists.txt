@@ -16,4 +16,4 @@ else()
 endif()
 
 target_include_directories(hello_xr PRIVATE .)
-target_link_libraries(hello_xr PRIVATE common vkr openxr_program)
+target_link_libraries(hello_xr PRIVATE common vkr openxr_program vko)

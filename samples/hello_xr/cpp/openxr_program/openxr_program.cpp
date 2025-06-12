@@ -444,8 +444,10 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     }
   }
 
-  VkPhysicalDeviceFeatures features{};
-  // features.samplerAnisotropy = VK_TRUE;
+  VkPhysicalDeviceFeatures features{
+      .shaderStorageImageMultisample = VK_TRUE,
+      // features.samplerAnisotropy = VK_TRUE;
+  };
   VkDeviceCreateInfo deviceInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 1,

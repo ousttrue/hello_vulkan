@@ -7,6 +7,7 @@
 #include <thread>
 #include <vkr/vulkan_layers.h>
 #include <vkr/vulkan_renderer.h>
+#include <vkr\vulkan_debug_object_namer.hpp>
 
 void ShowHelp() {
   Log::Write(
@@ -55,6 +56,7 @@ int main(int argc, char *argv[]) {
   auto vulkan = program->InitializeVulkan(getVulkanLayers(),
                                           getVulkanInstanceExtensions(),
                                           getVulkanDeviceExtensions());
+  SetDebugUtilsObjectNameEXT_GetProc(vulkan.Instance);
 
   // XrSession
   auto session = program->InitializeSession(vulkan);

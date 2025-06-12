@@ -99,9 +99,9 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   // XXX handle swapchainCreateInfo.sampleCount
 
   auto vertexSPIRV = CompileGlslShader(
-      "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
+      "main", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
   auto fragmentSPIRV = CompileGlslShader(
-      "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
+      "main", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
   if (vertexSPIRV.empty()) {
     throw std::runtime_error("Failed to compile vertex shader");
   }
