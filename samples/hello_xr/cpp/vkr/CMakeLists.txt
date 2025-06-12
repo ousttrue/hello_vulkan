@@ -17,10 +17,10 @@ if(ANDROID)
   target_link_libraries(
     vkr
     PRIVATE shaderc common
-    PUBLIC Vulkan::Vulkan)
+    PUBLIC Vulkan::Vulkan vko)
 else()
   target_link_libraries(
     vkr
     PRIVATE Vulkan::shaderc_combined common
-    PUBLIC Vulkan::Vulkan)
+    PUBLIC Vulkan::Vulkan vko)
 endif()

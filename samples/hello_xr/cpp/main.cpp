@@ -59,7 +59,9 @@ int main(int argc, char *argv[]) {
   SetDebugUtilsObjectNameEXT_GetProc(vulkan.Instance);
 
   // XrSession
-  auto session = program->InitializeSession(vulkan);
+  auto session =
+      program->InitializeSession(vulkan.Instance, vulkan.PhysicalDevice,
+                                 vulkan.Device, vulkan.QueueFamilyIndex);
 
   // Create resources for each view.
   auto config = session->GetSwapchainConfiguration();

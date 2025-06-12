@@ -503,7 +503,9 @@ static void LogReferenceSpaces(XrSession m_session) {
 }
 
 std::shared_ptr<OpenXrSession>
-OpenXrProgram::InitializeSession(VulkanResources vulkan) {
+OpenXrProgram::InitializeSession(VkInstance instance,
+                                 VkPhysicalDevice physicalDevice,
+                                 VkDevice device, uint32_t queueFamilyIndex) {
   CHECK(m_instance != XR_NULL_HANDLE);
 
   XrSession session;
@@ -513,10 +515,10 @@ OpenXrProgram::InitializeSession(VulkanResources vulkan) {
     XrGraphicsBindingVulkan2KHR graphicsBinding{
         .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
         .next = nullptr,
-        .instance = vulkan.Instance,
-        .physicalDevice = vulkan.PhysicalDevice,
-        .device = vulkan.Device,
-        .queueFamilyIndex = vulkan.QueueFamilyIndex,
+        .instance = instance,
+        .physicalDevice = physicalDevice,
+        .device = device,
+        .queueFamilyIndex = queueFamilyIndex,
         .queueIndex = 0,
     };
     XrSessionCreateInfo createInfo{

@@ -49,5 +49,6 @@ public:
 
   // Create a Session and other basic session-level initialization.
   std::shared_ptr<class OpenXrSession>
-  InitializeSession(VulkanResources vulkan);
+  InitializeSession(VkInstance instance, VkPhysicalDevice physicalDevice,
+                    VkDevice device, uint32_t queueFamilyIndexVulkan);
 };
