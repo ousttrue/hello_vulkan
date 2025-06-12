@@ -345,6 +345,10 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     throw std::runtime_error("GetVulkanGraphicsRequirements2KHR");
   }
 
+  for (auto name : layers) {
+    Log::Write(Log::Level::Info, Fmt("  valiation layer: %s", name));
+  }
+
   VkDebugUtilsMessengerCreateInfoEXT debugInfo{
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
       .messageSeverity = static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(

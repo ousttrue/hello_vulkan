@@ -190,6 +190,28 @@ struct PhysicalDevice {
   }
 };
 
+inline const char *getValidationLayerName() {
+  uint32_t layerCount;
+  vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+  std::vector<VkLayerProperties> availableLayers(layerCount);
+  vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+  const char *validationLayerNames[] = {
+      "VK_LAYER_KHRONOS_validation",
+      "VK_LAYER_LUNARG_standard_validation",
+  };
+
+  // Enable only one validation layer from the list above. Prefer KHRONOS.
+  for (auto &validationLayerName : validationLayerNames) {
+    for (const auto &layerProperties : availableLayers) {
+      if (0 == strcmp(validationLayerName, layerProperties.layerName)) {
+        return validationLayerName;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 struct Instance : public not_copyable {
   VkInstance instance = VK_NULL_HANDLE;
