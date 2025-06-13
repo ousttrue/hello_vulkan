@@ -274,6 +274,23 @@ struct Instance : public not_copyable {
 
   void setInstance(VkInstance _instance) {
     this->instance = _instance;
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(this->instance, &deviceCount, nullptr);
+    if (deviceCount == 0) {
+      Logger::Error("no physical device\n");
+    } else {
+      std::vector<VkPhysicalDevice> devices(deviceCount);
+      vkEnumeratePhysicalDevices(this->instance, &deviceCount, devices.data());
+      for (auto d : devices) {
+        this->physicalDevices.push_back(PhysicalDevice(d));
+      }
+    }
+
+    VKO_CHECK( CreateDebugUtilsMessengerEXT(this->instance,
+                                          &this->debug_messenger_create_info,
+                                          nullptr, &this->debugUtilsMessenger));
+
     g_vkSetDebugUtilsObjectNameEXT(this->instance);
   }
 
@@ -377,7 +394,8 @@ struct Instance : public not_copyable {
           this->instanceExtensions.data();
     }
 
-    auto result = vkCreateInstance(&this->createInfo, nullptr, &this->instance);
+    VkInstance instance;
+    auto result = vkCreateInstance(&this->createInfo, nullptr, &instance);
     if (result != VK_SUCCESS) {
       // Try to fall back to compatible Vulkan versions if the driver is using
       // older, but compatible API versions.
@@ -403,21 +421,8 @@ struct Instance : public not_copyable {
       return result;
     }
 
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(this->instance, &deviceCount, nullptr);
-    if (deviceCount == 0) {
-      Logger::Error("no physical device\n");
-    } else {
-      std::vector<VkPhysicalDevice> devices(deviceCount);
-      vkEnumeratePhysicalDevices(this->instance, &deviceCount, devices.data());
-      for (auto d : devices) {
-        this->physicalDevices.push_back(PhysicalDevice(d));
-      }
-    }
+    setInstance(instance);
 
-    result = CreateDebugUtilsMessengerEXT(this->instance,
-                                          &this->debug_messenger_create_info,
-                                          nullptr, &this->debugUtilsMessenger);
     return result;
   }
 

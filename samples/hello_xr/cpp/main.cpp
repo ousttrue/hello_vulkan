@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
   static bool quitKeyPressed = false;
   auto exitPollingThread = std::thread{[] {
-    Log::Write(Log::Level::Info, "Press any key to shutdown...");
+    Log::Write(Log::Level::Info, "Press [enter key] to shutdown...");
     (void)getchar();
     quitKeyPressed = true;
   }};
