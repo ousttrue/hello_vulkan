@@ -41,7 +41,8 @@ public:
   VulkanResources
   InitializeVulkan(const std::vector<const char *> &layers,
                    const std::vector<const char *> &instanceExtensions,
-                   const std::vector<const char *> &deviceExtensions);
+                   const std::vector<const char *> &deviceExtensions,
+                   const VkDebugUtilsMessengerCreateInfoEXT *debugInfo);
 
   // Get preferred blend mode based on the view configuration specified in the
   // Options

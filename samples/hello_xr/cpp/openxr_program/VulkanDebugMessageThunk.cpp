@@ -58,7 +58,7 @@ debugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
              const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData) {
   std::string flagNames;
   std::string objName;
-  Log::Level level = Log::Level::Error;
+  Log::Level level = Log::Level::None;
 
   if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) !=
       0u) {
@@ -83,23 +83,24 @@ debugMessage(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     level = Log::Level::Warning;
   }
 
-  uint64_t object = 0;
-  // skip loader messages about device extensions
-  if (pCallbackData->objectCount > 0) {
-    auto objectType = pCallbackData->pObjects[0].objectType;
-    if ((objectType == VK_OBJECT_TYPE_INSTANCE) &&
-        (strncmp(pCallbackData->pMessage, "Device Extension:", 17) == 0)) {
-      return VK_FALSE;
+  if (level != Log::Level::None) {
+    uint64_t object = 0;
+    // skip loader messages about device extensions
+    if (pCallbackData->objectCount > 0) {
+      auto objectType = pCallbackData->pObjects[0].objectType;
+      if ((objectType == VK_OBJECT_TYPE_INSTANCE) &&
+          (strncmp(pCallbackData->pMessage, "Device Extension:", 17) == 0)) {
+        return VK_FALSE;
+      }
+      objName = vkObjectTypeToString(objectType);
+      object = pCallbackData->pObjects[0].objectHandle;
+      if (pCallbackData->pObjects[0].pObjectName != nullptr) {
+        objName += " " + std::string(pCallbackData->pObjects[0].pObjectName);
+      }
     }
-    objName = vkObjectTypeToString(objectType);
-    object = pCallbackData->pObjects[0].objectHandle;
-    if (pCallbackData->pObjects[0].pObjectName != nullptr) {
-      objName += " " + std::string(pCallbackData->pObjects[0].pObjectName);
-    }
+    Log::Write(level, Fmt("%s (%s 0x%llx) %s", flagNames.c_str(),
+                          objName.c_str(), object, pCallbackData->pMessage));
   }
-
-  Log::Write(level, Fmt("%s (%s 0x%llx) %s", flagNames.c_str(), objName.c_str(),
-                        object, pCallbackData->pMessage));
 
   return VK_FALSE;
 }

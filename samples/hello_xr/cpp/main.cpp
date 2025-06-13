@@ -1,4 +1,5 @@
 #include "openxr_program/CubeScene.h"
+#include "openxr_program/VulkanDebugMessageThunk.h"
 #include "openxr_program/openxr_program.h"
 #include "openxr_program/openxr_session.h"
 #include "openxr_program/openxr_swapchain.h"
@@ -43,7 +44,15 @@ int main(int argc, char *argv[]) {
   //   return deviceExtensions;
   // }
   std::vector<const char *> deviceExtensions;
+
+  vko::Instance instance;
+  instance.debug_messenger_create_info.pfnUserCallback = debugMessageThunk;
+
 #ifndef NDEBUG
+  instance.debug_messenger_create_info.messageSeverity |=
+      (VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT 
+    // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+  );
   vko::Logger::Info("[debug build]");
   const char *layerNames[] = {
       "VK_LAYER_KHRONOS_validation",
@@ -94,8 +103,9 @@ int main(int argc, char *argv[]) {
   }
 
   // Create VkDevice by OpenXR.
-  auto vulkan = program->InitializeVulkan(validationLayers, instanceExtensions,
-                                          deviceExtensions);
+  auto vulkan = program->InitializeVulkan(
+      validationLayers, instanceExtensions, deviceExtensions,
+      &instance.debug_messenger_create_info);
   SetDebugUtilsObjectNameEXT_GetProc(vulkan.Instance);
 
   // XrSession

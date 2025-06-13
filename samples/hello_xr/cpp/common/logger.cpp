@@ -8,8 +8,8 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
-#include <sstream>
 #include <mutex>
+#include <sstream>
 
 #ifdef XR_USE_PLATFORM_WIN32
 #include <Windows.h>
@@ -59,18 +59,19 @@ void Write(Level severity, const std::string &msg) {
       std::chrono::duration_cast<std::chrono::milliseconds>(secondRemainder)
           .count();
 
-  static std::map<Level, const char *> severityName = {
+  static std::map<Level, const char *> severityNameMap = {
       {Level::Verbose, "Verbose"},
       {Level::Info, "Info   "},
       {Level::Warning, "Warning"},
       {Level::Error, "Error  "}};
+  auto severityName = severityNameMap[severity];
 
   std::ostringstream out;
   out.fill('0');
   out << "[" << std::setw(2) << now_tm.tm_hour << ":" << std::setw(2)
       << now_tm.tm_min << ":" << std::setw(2) << now_tm.tm_sec << "."
       << std::setw(3) << milliseconds << "]"
-      << "[" << severityName[severity] << "] " << msg << std::endl;
+      << "[" << severityName << "] " << msg << std::endl;
 
   std::lock_guard<std::mutex> lock(g_logLock); // Ensure output is serialized
   ((severity == Level::Error) ? std::clog : std::cout) << out.str();
