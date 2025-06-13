@@ -6,7 +6,7 @@
 
 auto APP_NAME = "vulfwk";
 
-static bool _main_loop(android_app *state, vko::UserData *userdata) {
+static bool _main_loop(android_app *app, vko::UserData *userdata) {
   vko::Logger::Info("## main_loop");
   vko::Instance instance;
   instance.appInfo.pApplicationName = "vulfwk";
@@ -23,7 +23,7 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
   VkAndroidSurfaceCreateInfoKHR info = {
       .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
       .flags = 0,
-      .window = state->window,
+      .window = app->window,
   };
   VkSurfaceKHR _surface;
   VKO_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
@@ -39,7 +39,7 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
                           picked.presentFamilyIndex));
 
   main_loop(
-      [userdata, state]() {
+      [userdata, app]() {
         while (true) {
           if (!userdata->_active) {
             return false;
@@ -53,9 +53,9 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
             return true;
           }
           if (source) {
-            source->process(state, source);
+            source->process(app, source);
           }
-          if (state->destroyRequested) {
+          if (app->destroyRequested) {
             return false;
           }
         }
@@ -74,7 +74,7 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
   //   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
   //       picked.physicalDevice, device,
   //       surface.chooseSwapSurfaceFormat().format,
-  //       state->activity->assetManager);
+  //       app->activity->assetManager);
   //
   //   vko::Swapchain swapchain(device);
   //   VKO_CHECK(swapchain.create(
@@ -115,9 +115,9 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
   //         break;
   //       }
   //       if (source) {
-  //         source->process(state, source);
+  //         source->process(app, source);
   //       }
-  //       if (state->destroyRequested) {
+  //       if (app->destroyRequested) {
   //         return true;
   //       }
   //     }
@@ -221,7 +221,7 @@ static bool _main_loop(android_app *state, vko::UserData *userdata) {
   //   }
 }
 
-void android_main(android_app *state) {
+void android_main(android_app *app) {
 #ifdef NDEBUG
   __android_log_print(ANDROID_LOG_INFO, APP_NAME,
                       "#### [release][android_main] ####");
@@ -231,20 +231,20 @@ void android_main(android_app *state) {
 #endif
 
   vko::UserData userdata{
-      .pApp = state,
+      .pApp = app,
       ._appName = APP_NAME,
   };
-  state->userData = &userdata;
-  state->onAppCmd = vko::UserData::on_app_cmd;
-  state->onInputEvent = [](android_app *, AInputEvent *) { return 0; };
+  app->userData = &userdata;
+  app->onAppCmd = vko::UserData::on_app_cmd;
+  app->onInputEvent = [](android_app *, AInputEvent *) { return 0; };
 
   for (;;) {
-    auto is_exit = wait_window(state, &userdata);
+    auto is_exit = wait_window(app, &userdata);
     if (is_exit) {
       break;
     }
 
-    is_exit = _main_loop(state, &userdata);
+    is_exit = _main_loop(app, &userdata);
     if (is_exit) {
       break;
     }

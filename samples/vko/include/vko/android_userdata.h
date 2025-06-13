@@ -85,7 +85,7 @@ struct UserData {
   }
 };
 
-inline bool wait_window(android_app *state, UserData *userdata) {
+inline bool wait_window(android_app *app, UserData *userdata) {
   while (true) {
     struct android_poll_source *source;
     int events;
@@ -93,9 +93,9 @@ inline bool wait_window(android_app *state, UserData *userdata) {
       continue;
     }
     if (source) {
-      source->process(state, source);
+      source->process(app, source);
     }
-    if (state->destroyRequested) {
+    if (app->destroyRequested) {
       return true;
     }
     if (userdata->_window) {

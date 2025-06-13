@@ -1,12 +1,12 @@
-#include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_program.h"
 #include "openxr_program/openxr_session.h"
-#include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
 #include <common/logger.h>
 #include <thread>
+
 #include <vkr/vulkan_layers.h>
-#include <vkr/vulkan_renderer.h>
+
+#include "xr_loop.h"
 
 void ShowHelp() {
   Log::Write(
@@ -59,88 +59,33 @@ int main(int argc, char *argv[]) {
   // XrSession
   auto session = program->InitializeSession(vulkan);
 
-  // Create resources for each view.
-  auto config = session->GetSwapchainConfiguration();
-  std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
-  std::vector<std::shared_ptr<VulkanRenderer>> renderers;
-  for (uint32_t i = 0; i < config.Views.size(); i++) {
-    // XrSwapchain
-    auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
-                                             config.Views[i], config.Format);
-    swapchains.push_back(swapchain);
-
-    // VkPipeline... etc
-    auto renderer = std::make_shared<VulkanRenderer>(
-        vulkan.PhysicalDevice, vulkan.Device, vulkan.QueueFamilyIndex,
-        VkExtent2D{swapchain->m_swapchainCreateInfo.width,
-                   swapchain->m_swapchainCreateInfo.height},
-        static_cast<VkFormat>(swapchain->m_swapchainCreateInfo.format),
-        static_cast<VkSampleCountFlagBits>(
-            swapchain->m_swapchainCreateInfo.sampleCount));
-    renderers.push_back(renderer);
-  }
-
-  // mainloop
-  while (!quitKeyPressed) {
-    bool exitRenderLoop = false;
-    bool requestRestart = false;
-    session->PollEvents(&exitRenderLoop, &requestRestart);
-    if (exitRenderLoop) {
-      break;
-    }
-
-    if (session->IsSessionRunning()) {
-      session->PollActions();
-
-      auto frameState = session->BeginFrame();
-      LayerComposition composition(options.Parsed.EnvironmentBlendMode,
-                                   session->m_appSpace);
-
-      if (frameState.shouldRender == XR_TRUE) {
-        uint32_t viewCountOutput;
-        if (session->LocateView(
-                session->m_appSpace, frameState.predictedDisplayTime,
-                options.Parsed.ViewConfigType, &viewCountOutput)) {
-          // XrCompositionLayerProjection
-
-          // update scene
-          CubeScene scene;
-          scene.addSpaceCubes(session->m_appSpace,
-                              frameState.predictedDisplayTime,
-                              session->m_visualizedSpaces);
-          scene.addHandCubes(session->m_appSpace,
-                             frameState.predictedDisplayTime, session->m_input);
-
-          for (uint32_t i = 0; i < viewCountOutput; ++i) {
-            // XrCompositionLayerProjectionView(left / right)
-            auto swapchain = swapchains[i];
-            auto info = swapchain->AcquireSwapchain(session->m_views[i]);
-            composition.pushView(info.CompositionLayer);
-
-            {
-              // render vulkan
-              auto renderer = renderers[i];
-              VkCommandBuffer cmd = renderer->BeginCommand();
-              renderer->RenderView(
-                  cmd, info.Image, options.GetBackgroundClearColor(),
-                  scene.CalcCubeMatrices(info.calcViewProjection()));
-              renderer->EndCommand(cmd);
-            }
-
-            swapchain->EndSwapchain();
+  xr_loop(
+      [pQuit = &quitKeyPressed, session]() {
+        while (true) {
+          if (*pQuit) {
+            return false;
           }
+
+          bool exitRenderLoop = false;
+          bool requestRestart = false;
+          session->PollEvents(&exitRenderLoop, &requestRestart);
+          if (exitRenderLoop) {
+            return false;
+          }
+
+          if (!session->IsSessionRunning()) {
+            // Throttle loop since xrWaitFrame won't be called.
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            continue;
+          }
+
+          session->PollActions();
+
+          return true;
         }
-      }
-
-      // std::vector<XrCompositionLayerBaseHeader *>
-      auto &layers = composition.commitLayers();
-      session->EndFrame(frameState.predictedDisplayTime, layers);
-
-    } else {
-      // Throttle loop since xrWaitFrame won't be called.
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
-  }
+      },
+      options, session, vulkan.PhysicalDevice, vulkan.QueueFamilyIndex,
+      vulkan.Device);
 
   return 0;
 }
