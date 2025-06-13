@@ -1,5 +1,5 @@
 #include "RenderPass.h"
-#include <vko/vko.h>
+#include "vulkan_debug_object_namer.hpp"
 #include <array>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>

@@ -7,7 +7,7 @@
 #include "RenderPass.h"
 #include "RenderTarget.h"
 #include "VertexBuffer.h"
-#include <vko/vko.h>
+#include "vulkan_debug_object_namer.hpp"
 #include <common/fmt.h>
 #include <common/logger.h>
 #include <shaderc/shaderc.hpp>
@@ -34,13 +34,44 @@ static std::vector<uint32_t> CompileGlslShader(const std::string &name,
   return {module.cbegin(), module.cend()};
 }
 
-constexpr char VertexShaderGlsl[] = {
-#embed "shader.vert"
+constexpr char VertexShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (std140, push_constant) uniform buf
+{
+    mat4 mvp;
+} ubuf;
+
+layout (location = 0) in vec3 Position;
+layout (location = 1) in vec4 Color;
+
+layout (location = 0) out vec4 oColor;
+out gl_PerVertex
+{
+    vec4 gl_Position;
 };
 
-constexpr char FragmentShaderGlsl[] = {
-#embed "shader.frag"
-};
+void main()
+{
+    oColor.rgba  = Color.rgba;
+    gl_Position = ubuf.mvp * vec4(Position, 1);
+}
+)_";
+
+constexpr char FragmentShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (location = 0) in vec4 oColor;
+
+layout (location = 0) out vec4 FragColor;
+
+void main()
+{
+    FragColor = oColor;
+}
+)_";
 
 // glslangValidator doesn't wrap its output in brackets if you don't have it
 // define the whole array.
@@ -68,9 +99,9 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   // XXX handle swapchainCreateInfo.sampleCount
 
   auto vertexSPIRV = CompileGlslShader(
-      "main", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
+      "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
   auto fragmentSPIRV = CompileGlslShader(
-      "main", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
+      "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
   if (vertexSPIRV.empty()) {
     throw std::runtime_error("Failed to compile vertex shader");
   }

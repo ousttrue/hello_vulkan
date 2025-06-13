@@ -1,9 +1,11 @@
+set(CMAKE_CXX_STANDARD 20)
+
 subdirs(common vkr openxr_program)
 
 if(ANDROID)
   add_library(hello_xr MODULE android_main.cpp)
 else()
-  add_executable(hello_xr main.cpp xr_loop.cpp)
+  add_executable(hello_xr main.cpp)
   if(WIN32)
     target_link_libraries(hello_xr PRIVATE ole32)
     if(MSVC)
@@ -16,4 +18,4 @@ else()
 endif()
 
 target_include_directories(hello_xr PRIVATE .)
-target_link_libraries(hello_xr PRIVATE common vkr openxr_program vko)
+target_link_libraries(hello_xr PRIVATE common vkr openxr_program)

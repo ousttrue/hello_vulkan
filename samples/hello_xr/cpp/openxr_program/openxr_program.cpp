@@ -12,12 +12,15 @@
 #include <openxr/openxr_platform.h>
 
 #include "GetXrReferenceSpaceCreateInfo.h"
+#include "VulkanDebugMessageThunk.h"
 #include "openxr/openxr.h"
 #include "openxr_program.h"
 #include "openxr_session.h"
 #include "options.h"
 // #include "common/vulkan_debug_object_namer.hpp"
 #include "xr_check.h"
+#include "../vkr/vulkan_debug_object_namer.hpp"
+
 #include <common/logger.h>
 #include <set>
 
@@ -331,8 +334,7 @@ static XrResult GetVulkanGraphicsRequirements2KHR(
 OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     const std::vector<const char *> &layers,
     const std::vector<const char *> &instanceExtensions,
-    const std::vector<const char *> &deviceExtensions,
-    const VkDebugUtilsMessengerCreateInfoEXT *debugInfo) {
+    const std::vector<const char *> &deviceExtensions) {
   LogViewConfigurations(m_instance, m_systemId, m_options);
 
   // Create the Vulkan device for the adapter associated with the system.
@@ -345,15 +347,21 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     throw std::runtime_error("GetVulkanGraphicsRequirements2KHR");
   }
 
-  for (auto name : layers) {
-    Log::Write(Log::Level::Info, Fmt("  valiation layer: %s", name));
-  }
-  for (auto name : instanceExtensions) {
-    Log::Write(Log::Level::Info, Fmt("  instance extension: %s", name));
-  }
-  for (auto name : deviceExtensions) {
-    Log::Write(Log::Level::Info, Fmt("  device extension: %s", name));
-  }
+  VkDebugUtilsMessengerCreateInfoEXT debugInfo{
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .messageSeverity = static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(
+          layers.empty() ? VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+                         : VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+                               VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT),
+      .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      .pfnUserCallback = debugMessageThunk,
+      .pUserData = this,
+  };
 
   VkApplicationInfo appInfo{
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -366,7 +374,7 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
 
   VkInstanceCreateInfo instInfo{
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      .pNext = debugInfo,
+      .pNext = &debugInfo,
       .pApplicationInfo = &appInfo,
       .enabledLayerCount = (uint32_t)layers.size(),
       .ppEnabledLayerNames = layers.empty() ? nullptr : layers.data(),
@@ -392,6 +400,19 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
   if (err != VK_SUCCESS) {
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
+
+  auto vkCreateDebugUtilsMessengerEXT =
+      (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+          vkInstance, "vkCreateDebugUtilsMessengerEXT");
+  if (vkCreateDebugUtilsMessengerEXT != nullptr) {
+    if (vkCreateDebugUtilsMessengerEXT(vkInstance, &debugInfo, nullptr,
+                                       &m_vkDebugUtilsMessenger) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("vkCreateDebugUtilsMessengerEXT");
+    }
+  }
+
+  SetDebugUtilsObjectNameEXT_GetProc(vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
@@ -425,10 +446,8 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     }
   }
 
-  VkPhysicalDeviceFeatures features{
-      .shaderStorageImageMultisample = VK_TRUE,
-      // features.samplerAnisotropy = VK_TRUE;
-  };
+  VkPhysicalDeviceFeatures features{};
+  // features.samplerAnisotropy = VK_TRUE;
   VkDeviceCreateInfo deviceInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 1,
@@ -484,9 +503,7 @@ static void LogReferenceSpaces(XrSession m_session) {
 }
 
 std::shared_ptr<OpenXrSession>
-OpenXrProgram::InitializeSession(VkInstance instance,
-                                 VkPhysicalDevice physicalDevice,
-                                 VkDevice device, uint32_t queueFamilyIndex) {
+OpenXrProgram::InitializeSession(VulkanResources vulkan) {
   CHECK(m_instance != XR_NULL_HANDLE);
 
   XrSession session;
@@ -496,10 +513,10 @@ OpenXrProgram::InitializeSession(VkInstance instance,
     XrGraphicsBindingVulkan2KHR graphicsBinding{
         .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
         .next = nullptr,
-        .instance = instance,
-        .physicalDevice = physicalDevice,
-        .device = device,
-        .queueFamilyIndex = queueFamilyIndex,
+        .instance = vulkan.Instance,
+        .physicalDevice = vulkan.PhysicalDevice,
+        .device = vulkan.Device,
+        .queueFamilyIndex = vulkan.QueueFamilyIndex,
         .queueIndex = 0,
     };
     XrSessionCreateInfo createInfo{

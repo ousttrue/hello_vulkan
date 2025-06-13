@@ -41,8 +41,7 @@ public:
   VulkanResources
   InitializeVulkan(const std::vector<const char *> &layers,
                    const std::vector<const char *> &instanceExtensions,
-                   const std::vector<const char *> &deviceExtensions,
-                   const VkDebugUtilsMessengerCreateInfoEXT *debugInfo);
+                   const std::vector<const char *> &deviceExtensions);
 
   // Get preferred blend mode based on the view configuration specified in the
   // Options
@@ -50,6 +49,5 @@ public:
 
   // Create a Session and other basic session-level initialization.
   std::shared_ptr<class OpenXrSession>
-  InitializeSession(VkInstance instance, VkPhysicalDevice physicalDevice,
-                    VkDevice device, uint32_t queueFamilyIndexVulkan);
+  InitializeSession(VulkanResources vulkan);
 };

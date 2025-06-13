@@ -4,7 +4,6 @@
 #include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
-#include <vko/vko_pipeline.h>
 
 class VulkanRenderer {
   VkPhysicalDevice m_physicalDevice;

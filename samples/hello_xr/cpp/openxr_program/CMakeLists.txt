@@ -6,4 +6,4 @@ add_library(
 target_link_libraries(
   openxr_program
   PRIVATE common
-  PUBLIC OpenXR::openxr_loader Vulkan::Vulkan vko)
+  PUBLIC OpenXR::openxr_loader Vulkan::Vulkan)
