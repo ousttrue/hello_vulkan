@@ -7,7 +7,7 @@
 #include "vko/vko.h"
 #include <common/logger.h>
 #include <thread>
-#include <vkr/vulkan_debug_object_namer.hpp>
+#include <vko/vko.h>
 #include <vkr/vulkan_renderer.h>
 
 void ShowHelp() {
@@ -26,33 +26,16 @@ void ShowHelp() {
 }
 
 int main(int argc, char *argv[]) {
-  std::vector<const char *> validationLayers;
-  std::vector<const char *> instanceExtensions;
-  // #if defined(USE_MIRROR_WINDOW)
-  //   extensions.push_back("VK_KHR_surface");
-  // #if defined(VK_USE_PLATFORM_WIN32_KHR)
-  //   extensions.push_back("VK_KHR_win32_surface");
-  // #else
-  // #error CreateSurface not supported on this OS
-  // #endif // defined(VK_USE_PLATFORM_WIN32_KHR)
-  // #endif // defined(USE_MIRROR_WINDOW)
-  // std::vector<const char *> getVulkanDeviceExtensions() {
-  //   std::vector<const char *> deviceExtensions;
-  // #if defined(USE_MIRROR_WINDOW)
-  //   deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-  // #endif
-  //   return deviceExtensions;
-  // }
-  std::vector<const char *> deviceExtensions;
-
   vko::Instance instance;
   instance.debug_messenger_create_info.pfnUserCallback = debugMessageThunk;
 
+  vko::Device device;
+
 #ifndef NDEBUG
   instance.debug_messenger_create_info.messageSeverity |=
-      (VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT 
-    // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-  );
+      (VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+       // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+      );
   vko::Logger::Info("[debug build]");
   const char *layerNames[] = {
       "VK_LAYER_KHRONOS_validation",
@@ -60,7 +43,7 @@ int main(int argc, char *argv[]) {
   };
   for (auto name : layerNames) {
     if (vko::layerIsSupported(name)) {
-      validationLayers.push_back(name);
+      instance.validationLayers.push_back(name);
       break;
     }
   }
@@ -69,7 +52,7 @@ int main(int argc, char *argv[]) {
   };
   for (auto name : instanceExtensionNames) {
     if (vko::instanceExtensionIsSupported(name)) {
-      instanceExtensions.push_back(name);
+      instance.instanceExtensions.push_back(name);
       break;
     }
   }
@@ -104,9 +87,10 @@ int main(int argc, char *argv[]) {
 
   // Create VkDevice by OpenXR.
   auto vulkan = program->InitializeVulkan(
-      validationLayers, instanceExtensions, deviceExtensions,
-      &instance.debug_messenger_create_info);
-  SetDebugUtilsObjectNameEXT_GetProc(vulkan.Instance);
+      instance.validationLayers, instance.instanceExtensions,
+      device.deviceExtensions, &instance.debug_messenger_create_info);
+  instance.setInstance(vulkan.Instance);
+  device.setDevice(vulkan.Device);
 
   // XrSession
   auto session =
@@ -195,6 +179,8 @@ int main(int argc, char *argv[]) {
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
   }
+
+  vkDeviceWaitIdle(device);
 
   return 0;
 }

@@ -35,6 +35,30 @@
 #include <stdarg.h>
 #endif
 
+inline PFN_vkSetDebugUtilsObjectNameEXT
+g_vkSetDebugUtilsObjectNameEXT(VkInstance instance = VK_NULL_HANDLE) {
+  static PFN_vkSetDebugUtilsObjectNameEXT s;
+  if (instance != VK_NULL_HANDLE) {
+    s = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(
+        instance, "vkSetDebugUtilsObjectNameEXT");
+  }
+  return s;
+}
+
+inline VkResult SetDebugUtilsObjectNameEXT(VkDevice device,
+                                           VkObjectType objectType,
+                                           uint64_t objectHandle,
+                                           const char *pObjectName) {
+  VkDebugUtilsObjectNameInfoEXT nameInfo{
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+      .pNext = nullptr,
+      .objectType = objectType,
+      .objectHandle = objectHandle,
+      .pObjectName = pObjectName,
+  };
+  return g_vkSetDebugUtilsObjectNameEXT()(device, &nameInfo);
+}
+
 namespace vko {
 
 struct Logger {
@@ -236,21 +260,21 @@ inline bool instanceExtensionIsSupported(const char *name) {
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 struct Instance : public not_copyable {
   VkInstance instance = VK_NULL_HANDLE;
+
   operator VkInstance() const { return this->instance; }
   ~Instance() {
     if (this->debugUtilsMessenger != VK_NULL_HANDLE) {
       DestroyDebugUtilsMessengerEXT(this->instance, this->debugUtilsMessenger,
                                     nullptr);
     }
-    // auto supported =
-    //     instanceExtensions.pushExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    // if (!supported) {
-    //   instanceExtensions.pushExtension("VK_EXT_debug_report");
-    // }
-
     if (this->instance != VK_NULL_HANDLE) {
       vkDestroyInstance(this->instance, nullptr);
     }
+  }
+
+  void setInstance(VkInstance _instance) {
+    this->instance = _instance;
+    g_vkSetDebugUtilsObjectNameEXT(this->instance);
   }
 
   std::vector<PhysicalDevice> physicalDevices;
@@ -426,6 +450,7 @@ struct Device : public not_copyable {
       vkDestroyDevice(this->device, nullptr);
     }
   }
+  void setDevice(VkDevice _device) { this->device = _device; }
   std::vector<const char *> validationLayers;
   std::vector<const char *> deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,

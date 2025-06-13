@@ -1,6 +1,6 @@
 #include "RenderTarget.h"
 #include "RenderPass.h"
-#include "vulkan_debug_object_namer.hpp"
+#include <vko/vko.h>
 #include <array>
 #include <stdexcept>
 

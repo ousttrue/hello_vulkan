@@ -7,7 +7,7 @@
 #include "RenderPass.h"
 #include "RenderTarget.h"
 #include "VertexBuffer.h"
-#include "vulkan_debug_object_namer.hpp"
+#include <vko/vko.h>
 #include <common/fmt.h>
 #include <common/logger.h>
 #include <shaderc/shaderc.hpp>

@@ -1,7 +1,7 @@
 #include "CmdBuffer.h"
 #include <common/logger.h>
-#include "vulkan_debug_object_namer.hpp"
 #include <stdexcept>
+#include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
 
 //
