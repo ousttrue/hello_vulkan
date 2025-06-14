@@ -19,7 +19,7 @@
 #include "options.h"
 // #include "common/vulkan_debug_object_namer.hpp"
 #include "xr_check.h"
-#include "../vkr/vulkan_debug_object_namer.hpp"
+#include <vko/vko.h>
 
 #include <common/logger.h>
 #include <set>
@@ -412,7 +412,7 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     }
   }
 
-  SetDebugUtilsObjectNameEXT_GetProc(vkInstance);
+  g_vkSetDebugUtilsObjectNameEXT(vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,

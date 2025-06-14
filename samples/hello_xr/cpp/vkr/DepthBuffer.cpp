@@ -1,7 +1,7 @@
 #include "DepthBuffer.h"
 // #include "CmdBuffer.h"
 #include "MemoryAllocator.h"
-#include "vulkan_debug_object_namer.hpp"
+#include <vko/vko.h>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
