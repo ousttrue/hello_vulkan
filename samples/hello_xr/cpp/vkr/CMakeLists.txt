@@ -2,7 +2,6 @@ add_library(
   vkr STATIC
   VulkanRenderer.cpp
   MemoryAllocator.cpp
-  CmdBuffer.cpp
   DepthBuffer.cpp
   RenderTarget.cpp
   Pipeline.cpp
