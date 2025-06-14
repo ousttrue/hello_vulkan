@@ -122,6 +122,8 @@ void android_main(struct android_app *app) {
   auto vulkan = program->InitializeVulkan(
       instance.validationLayers, instance.instanceExtensions,
       device.deviceExtensions, &instance.debugUtilsMessengerCreateInfo);
+  instance.reset(vulkan.Instance);
+  device.reset(vulkan.Device);
 
   // XrSession
   auto session = program->InitializeSession(vulkan);

@@ -1,10 +1,11 @@
+#include "openxr_program/VulkanDebugMessageThunk.h"
 #include "openxr_program/openxr_program.h"
 #include "openxr_program/openxr_session.h"
 #include "openxr_program/options.h"
 #include <common/logger.h>
 #include <thread>
 
-#include <vkr/vulkan_layers.h>
+#include <vko/vko.h>
 
 #include "xr_loop.h"
 
@@ -52,9 +53,43 @@ int main(int argc, char *argv[]) {
   }
 
   // Create VkDevice by OpenXR.
-  auto vulkan = program->InitializeVulkan(getVulkanLayers(),
-                                          getVulkanInstanceExtensions(),
-                                          getVulkanDeviceExtensions());
+  vko::Instance instance;
+  instance.appInfo.pApplicationName = "hello_xr";
+  instance.appInfo.pEngineName = "hello_xr";
+  instance.debugUtilsMessengerCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+      .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      .pfnUserCallback = debugMessageThunk,
+      .pUserData = program.get(),
+  };
+  vko::Device device;
+
+#ifdef NDEBUG
+#else
+  instance.debugUtilsMessengerCreateInfo.messageSeverity =
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+  instance.pushFirstSupportedValidationLayer({
+      "VK_LAYER_KHRONOS_validation",
+      "VK_LAYER_LUNARG_standard_validation",
+  });
+  instance.pushFirstSupportedInstanceExtension({
+      VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+      VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+  });
+#endif
+
+  auto vulkan = program->InitializeVulkan(
+      instance.validationLayers, instance.instanceExtensions,
+      device.deviceExtensions, &instance.debugUtilsMessengerCreateInfo);
+  instance.reset(vulkan.Instance);
+  device.reset(vulkan.Device);
 
   // XrSession
   auto session = program->InitializeSession(vulkan);

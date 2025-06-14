@@ -260,8 +260,8 @@ inline bool instanceExtensionIsSupported(const char *name) {
 // https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
 struct Instance : public not_copyable {
   VkInstance instance = VK_NULL_HANDLE;
-
   operator VkInstance() const { return this->instance; }
+
   ~Instance() {
     if (this->debugUtilsMessenger != VK_NULL_HANDLE) {
       DestroyDebugUtilsMessengerEXT(this->instance, this->debugUtilsMessenger,
@@ -272,7 +272,7 @@ struct Instance : public not_copyable {
     }
   }
 
-  void setInstance(VkInstance _instance) {
+  void reset(VkInstance _instance) {
     this->instance = _instance;
 
     uint32_t deviceCount = 0;
@@ -342,15 +342,6 @@ struct Instance : public not_copyable {
             return VK_FALSE;
           },
   };
-  // VkDebugUtilsMessengerCreateInfoEXT debugInfo{
-  //     .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-  //     .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
-  //                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
-  //     .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-  //                    VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-  //                    VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-  //     .pfnUserCallback = debugMessageThunk,
-  // };
 
   static VkResult CreateDebugUtilsMessengerEXT(
       VkInstance instance,
@@ -442,7 +433,7 @@ struct Instance : public not_copyable {
       return result;
     }
 
-    setInstance(instance);
+    reset(instance);
 
     return result;
   }
@@ -476,12 +467,9 @@ struct Device : public not_copyable {
       vkDestroyDevice(this->device, nullptr);
     }
   }
-  void setDevice(VkDevice _device) { this->device = _device; }
+  void reset(VkDevice _device) { this->device = _device; }
   std::vector<const char *> validationLayers;
-  std::vector<const char *> deviceExtensions ;
-  // = {
-  //     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  // };
+  std::vector<const char *> deviceExtensions;
   std::vector<float> queuePriorities = {1.0f};
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
   VkPhysicalDeviceFeatures deviceFeatures{

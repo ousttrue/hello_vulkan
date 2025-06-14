@@ -394,19 +394,6 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
     throw std::runtime_error("CreateVulkanInstanceKHR");
   }
 
-  auto vkCreateDebugUtilsMessengerEXT =
-      (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-          vkInstance, "vkCreateDebugUtilsMessengerEXT");
-  if (vkCreateDebugUtilsMessengerEXT != nullptr) {
-    if (vkCreateDebugUtilsMessengerEXT(vkInstance, debugInfo, nullptr,
-                                       &m_vkDebugUtilsMessenger) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("vkCreateDebugUtilsMessengerEXT");
-    }
-  }
-
-  g_vkSetDebugUtilsObjectNameEXT(vkInstance);
-
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
       .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
       .systemId = m_systemId,
