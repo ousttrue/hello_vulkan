@@ -3,6 +3,7 @@
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
 #include "vko/vko.h"
+#include "vkr/Pipeline.h"
 #include "vkr/VulkanRenderer.h"
 
 struct ViewRenderer {
@@ -13,9 +14,23 @@ struct ViewRenderer {
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
-  ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex)
+  std::shared_ptr<Pipeline> m_pipeline;
+
+  ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
+               uint32_t queueFamilyIndex, VkExtent2D extent,
+               VkFormat colorFormat, VkFormat depthFormat,
+               VkSampleCountFlagBits sampleCountFlagBits)
       : device(_device), execFence(_device, true) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
+
+    // VkPipeline... etc
+    this->vulkanRenderer = std::make_shared<VulkanRenderer>(
+        physicalDevice, device, queueFamilyIndex, extent, colorFormat,
+        sampleCountFlagBits);
+
+    m_pipeline =
+        Pipeline::Create(this->device, extent, colorFormat, depthFormat,
+                         this->vulkanRenderer->m_drawBuffer);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -53,7 +68,8 @@ struct ViewRenderer {
     vkDestroyCommandPool(this->device, this->commandPool, nullptr);
   }
 
-  void render(VkImage image, const Vec4 &clearColor,
+  void render(VkImage image, VkExtent2D size, VkFormat colorFormat,
+              VkFormat depthFormat, const Vec4 &clearColor,
               const std::vector<Mat4> &matrices) {
     // Waiting on a not-in-flight command buffer is a no-op
     execFence.wait();
@@ -66,8 +82,10 @@ struct ViewRenderer {
     };
     VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
-    this->vulkanRenderer->RenderView(this->commandBuffer, image, clearColor,
-                                     matrices);
+    this->vulkanRenderer->RenderView(
+        this->commandBuffer, this->m_pipeline->m_renderPass,
+        this->m_pipeline->m_pipelineLayout, this->m_pipeline->m_pipeline, image,
+        size, colorFormat, depthFormat, clearColor, matrices);
 
     vkCmdEndRenderPass(this->commandBuffer);
     VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
@@ -89,23 +107,20 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
   // Create resources for each view.
   auto config = session->GetSwapchainConfiguration();
   std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
-  // std::vector<std::shared_ptr<VulkanRenderer>> renderers;
-  // std::vector<std::shared_ptr<CmdBuffer>> cmdBuffers;
   std::vector<std::shared_ptr<ViewRenderer>> views;
 
-  for (uint32_t i = 0; i < config.Views.size(); i++) {
-    auto ptr = std::make_shared<ViewRenderer>(device, queueFamilyIndex);
-    views.push_back(ptr);
+  auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
+  for (uint32_t i = 0; i < config.Views.size(); i++) {
     // XrSwapchain
     auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
                                              config.Views[i], config.Format);
     swapchains.push_back(swapchain);
 
-    // VkPipeline... etc
-    ptr->vulkanRenderer = std::make_shared<VulkanRenderer>(
+    auto ptr = std::make_shared<ViewRenderer>(
         physicalDevice, device, queueFamilyIndex, swapchain->extent(),
-        swapchain->format(), swapchain->sampleCountFlagBits());
+        swapchain->format(), depthFormat, swapchain->sampleCountFlagBits());
+    views.push_back(ptr);
   }
 
   // mainloop
@@ -137,7 +152,8 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
           auto info = swapchain->AcquireSwapchain(session->m_views[i]);
           composition.pushView(info.CompositionLayer);
 
-          views[i]->render(info.Image, options.GetBackgroundClearColor(),
+          views[i]->render(info.Image, swapchain->extent(), swapchain->format(),
+                           depthFormat, options.GetBackgroundClearColor(),
                            scene.CalcCubeMatrices(info.calcViewProjection()));
 
           swapchain->EndSwapchain();

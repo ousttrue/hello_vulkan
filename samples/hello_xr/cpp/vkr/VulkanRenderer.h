@@ -14,20 +14,18 @@ class VulkanRenderer {
 
   std::shared_ptr<class MemoryAllocator> m_memAllocator;
 
-  VkExtent2D m_size{};
-  VkFormat m_colorFormat;
-  VkFormat m_depthFormat;
   std::shared_ptr<class DepthBuffer> m_depthBuffer;
-
-  std::shared_ptr<class Pipeline> m_pipeline;
-  std::shared_ptr<struct VertexBuffer> m_drawBuffer;
 
   std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
 
 public:
+  std::shared_ptr<struct VertexBuffer> m_drawBuffer;
   VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
-                 uint32_t queueFamilyIndex, VkExtent2D size, VkFormat format,
-                 VkSampleCountFlagBits sampleCount);
-  void RenderView(VkCommandBuffer cmd, VkImage image, const Vec4 &clearColor,
+                 uint32_t queueFamilyIndex, VkExtent2D size,
+                 VkFormat depthFormath, VkSampleCountFlagBits sampleCount);
+  void RenderView(VkCommandBuffer cmd, VkRenderPass renderPass,
+                  VkPipelineLayout pipelineLayout, VkPipeline pipeline,
+                  VkImage image, VkExtent2D size, VkFormat colorFormat,
+                  VkFormat depthFormat, const Vec4 &clearColor,
                   const std::vector<Mat4> &cubes);
 };

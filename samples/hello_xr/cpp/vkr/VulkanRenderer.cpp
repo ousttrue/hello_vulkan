@@ -1,7 +1,6 @@
 #include "VulkanRenderer.h"
 #include "DepthBuffer.h"
 #include "MemoryAllocator.h"
-#include "Pipeline.h"
 #include "RenderTarget.h"
 #include "VertexBuffer.h"
 #include <common/fmt.h>
@@ -11,11 +10,10 @@
 
 VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
                                uint32_t queueFamilyIndex, VkExtent2D size,
-                               VkFormat format,
+                               VkFormat depthFormat,
                                VkSampleCountFlagBits sampleCount)
     : m_physicalDevice(physicalDevice), m_device(device),
-      m_queueFamilyIndex(queueFamilyIndex), m_size(size), m_colorFormat(format),
-      m_depthFormat(VK_FORMAT_D32_SFLOAT) {
+      m_queueFamilyIndex(queueFamilyIndex) {
 
   m_memAllocator = MemoryAllocator::Create(m_physicalDevice, m_device);
 
@@ -28,13 +26,13 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
       std::size(c_cubeIndices));
 
   m_depthBuffer = DepthBuffer::Create(m_device, m_memAllocator, size,
-                                      m_depthFormat, sampleCount);
-
-  m_pipeline = Pipeline::Create(m_device, m_size, m_colorFormat, m_depthFormat,
-                                m_drawBuffer);
+                                      depthFormat, sampleCount);
 }
 
-void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
+void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkRenderPass renderPass,
+                                VkPipelineLayout pipelineLayout,
+                                VkPipeline pipeline, VkImage image,
+                                VkExtent2D size, VkFormat colorFormat, VkFormat depthFormat,
                                 const Vec4 &clearColor,
                                 const std::vector<Mat4> &cubes) {
 
@@ -62,20 +60,19 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
   // BindRenderTarget(image, &renderPassBeginInfo);
   auto found = m_renderTarget.find(image);
   if (found == m_renderTarget.end()) {
-    auto rt = RenderTarget::Create(m_device, image, m_depthBuffer->depthImage,
-                                   m_size, m_colorFormat, m_depthFormat,
-                                   m_pipeline->m_renderPass);
+    auto rt =
+        RenderTarget::Create(m_device, image, m_depthBuffer->depthImage, size,
+                             colorFormat, depthFormat, renderPass);
     found = m_renderTarget.insert({image, rt}).first;
   }
-  renderPassBeginInfo.renderPass = m_pipeline->m_renderPass;
+  renderPassBeginInfo.renderPass = renderPass;
   renderPassBeginInfo.framebuffer = found->second->fb;
   renderPassBeginInfo.renderArea.offset = {0, 0};
-  renderPassBeginInfo.renderArea.extent = m_size;
+  renderPassBeginInfo.renderArea.extent = size;
 
   vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    m_pipeline->m_pipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
   // Bind index and vertex buffers
   vkCmdBindIndexBuffer(cmd, m_drawBuffer->idxBuf, 0, VK_INDEX_TYPE_UINT16);
@@ -84,8 +81,8 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
 
   // Render each cube
   for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(cmd, m_pipeline->m_pipelineLayout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
     vkCmdDrawIndexed(cmd, m_drawBuffer->count.idx, 1, 0, 0, 0);
