@@ -10,12 +10,13 @@ struct ViewRenderer {
   VkQueue queue;
   std::shared_ptr<VulkanRenderer> vulkanRenderer;
   vko::Fence execFence;
-
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
   ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex)
       : device(_device), execFence(_device, true) {
+    vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
+
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -42,8 +43,6 @@ struct ViewRenderer {
                                    "hello_xr command buffer") != VK_SUCCESS) {
       throw std::runtime_error("SetDebugUtilsObjectNameEXT");
     }
-
-    vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
   }
 
   ~ViewRenderer() {

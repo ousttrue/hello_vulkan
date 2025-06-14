@@ -12,7 +12,6 @@ class VulkanRenderer {
   VkDevice m_device;
   uint32_t m_queueFamilyIndex;
 
-  VkSemaphore m_vkDrawDone{VK_NULL_HANDLE};
   std::shared_ptr<class MemoryAllocator> m_memAllocator;
 
   VkExtent2D m_size{};

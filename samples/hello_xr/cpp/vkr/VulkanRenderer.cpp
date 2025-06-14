@@ -19,18 +19,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
 
   m_memAllocator = MemoryAllocator::Create(m_physicalDevice, m_device);
 
-  // Semaphore to block on draw complete
-  VkSemaphoreCreateInfo semInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-  if (vkCreateSemaphore(m_device, &semInfo, nullptr, &m_vkDrawDone) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("vkCreateSemaphore");
-  }
-  if (SetDebugUtilsObjectNameEXT(
-          m_device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)m_vkDrawDone,
-          "hello_xr draw done semaphore") != VK_SUCCESS) {
-    throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  }
-
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   m_drawBuffer = VertexBuffer::Create(
       m_device, m_memAllocator,
