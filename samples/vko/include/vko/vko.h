@@ -307,7 +307,18 @@ struct Instance : public not_copyable {
     }
     return {};
   }
+
   std::vector<const char *> instanceExtensions;
+  const char *
+  pushFirstSupportedInstanceExtension(const std::vector<const char *> &names) {
+    for (auto name : names) {
+      if (instanceExtensionIsSupported(name)) {
+        this->instanceExtensions.push_back(name);
+        return name;
+      }
+    }
+    return {};
+  }
 
   // VK_EXT_DEBUG_UTILS_EXTENSION_NAME
   VkDebugUtilsMessengerEXT debugUtilsMessenger = VK_NULL_HANDLE;
@@ -467,9 +478,10 @@ struct Device : public not_copyable {
   }
   void setDevice(VkDevice _device) { this->device = _device; }
   std::vector<const char *> validationLayers;
-  std::vector<const char *> deviceExtensions = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
+  std::vector<const char *> deviceExtensions ;
+  // = {
+  //     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  // };
   std::vector<float> queuePriorities = {1.0f};
   std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
   VkPhysicalDeviceFeatures deviceFeatures{

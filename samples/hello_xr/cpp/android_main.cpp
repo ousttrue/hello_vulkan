@@ -9,7 +9,6 @@
 #include "openxr_program/options.h"
 
 #include <common/logger.h>
-#include <vkr/vulkan_layers.h>
 #include <vkr/vulkan_renderer.h>
 
 #include <vko/android_userdata.h>
@@ -101,6 +100,7 @@ void android_main(struct android_app *app) {
       .pfnUserCallback = debugMessageThunk,
       .pUserData = program.get(),
   };
+  vko::Device device;
 
 #ifdef NDEBUG
 #else
@@ -113,13 +113,15 @@ void android_main(struct android_app *app) {
       "VK_LAYER_KHRONOS_validation",
       "VK_LAYER_LUNARG_standard_validation",
   });
-  instance.instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-  instance.instanceExtensions.push_back("VK_EXT_debug_report");
+  instance.pushFirstSupportedInstanceExtension({
+      VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+      VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+  });
 #endif
 
   auto vulkan = program->InitializeVulkan(
-      instance.validationLayers, getVulkanInstanceExtensions(),
-      getVulkanDeviceExtensions(), &instance.debugUtilsMessengerCreateInfo);
+      instance.validationLayers, instance.instanceExtensions,
+      device.deviceExtensions, &instance.debugUtilsMessengerCreateInfo);
 
   // XrSession
   auto session = program->InitializeSession(vulkan);

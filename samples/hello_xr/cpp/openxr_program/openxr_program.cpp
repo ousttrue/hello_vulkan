@@ -16,7 +16,6 @@
 #include "openxr_program.h"
 #include "openxr_session.h"
 #include "options.h"
-// #include "common/vulkan_debug_object_namer.hpp"
 #include "xr_check.h"
 #include <vko/vko.h>
 
@@ -349,6 +348,12 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
 
   for (auto name : layers) {
     Log::Write(Log::Level::Info, Fmt("  vulkan layer: %s", name));
+  }
+  for (auto name : instanceExtensions) {
+    Log::Write(Log::Level::Info, Fmt("  vulkan instance extensions: %s", name));
+  }
+  for (auto name : deviceExtensions) {
+    Log::Write(Log::Level::Info, Fmt("  vulkan device extensions: %s", name));
   }
 
   VkApplicationInfo appInfo{

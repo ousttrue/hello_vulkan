@@ -8,7 +8,6 @@ add_library(
   Pipeline.cpp
   RenderPass.cpp
   VertexBuffer.cpp
-  vulkan_layers.cpp
 )
 
 target_include_directories(vkr PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
