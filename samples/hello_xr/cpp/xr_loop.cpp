@@ -5,6 +5,21 @@
 #include "vkr/CmdBuffer.h"
 #include "vkr/VulkanRenderer.h"
 
+static void render_view(const std::shared_ptr<CmdBuffer> &cmdBuffer,
+                        VkImage image, const Vec4 &clearColor,
+                        const std::shared_ptr<VulkanRenderer> &renderer,
+                        const std::vector<Mat4> &matrices) {
+  cmdBuffer->Wait();
+  cmdBuffer->Reset();
+  cmdBuffer->Begin();
+
+  renderer->RenderView(cmdBuffer->buf, image, clearColor, matrices);
+
+  vkCmdEndRenderPass(cmdBuffer->buf);
+  cmdBuffer->End();
+  cmdBuffer->Exec();
+}
+
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
              const std::shared_ptr<OpenXrSession> &session,
              VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
@@ -60,27 +75,15 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
                            session->m_input);
 
         for (uint32_t i = 0; i < viewCountOutput; ++i) {
+
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
           auto info = swapchain->AcquireSwapchain(session->m_views[i]);
           composition.pushView(info.CompositionLayer);
 
-          {
-            auto cmdBuffer = cmdBuffers[i];
-            cmdBuffer->Wait();
-            cmdBuffer->Reset();
-            cmdBuffer->Begin();
-
-            // render vulkan
-            auto renderer = renderers[i];
-            renderer->RenderView(
-                cmdBuffer->buf, info.Image, options.GetBackgroundClearColor(),
-                scene.CalcCubeMatrices(info.calcViewProjection()));
-
-            vkCmdEndRenderPass(cmdBuffer->buf);
-            cmdBuffer->End();
-            cmdBuffer->Exec();
-          }
+          render_view(cmdBuffers[i], info.Image,
+                      options.GetBackgroundClearColor(), renderers[i],
+                      scene.CalcCubeMatrices(info.calcViewProjection()));
 
           swapchain->EndSwapchain();
         }
