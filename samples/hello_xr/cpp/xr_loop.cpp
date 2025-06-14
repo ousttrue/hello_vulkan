@@ -3,18 +3,27 @@
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
 #include "vko/vko.h"
+#include "vkr/DepthBuffer.h"
+#include "vkr/MemoryAllocator.h"
 #include "vkr/Pipeline.h"
-#include "vkr/VulkanRenderer.h"
+#include "vkr/RenderTarget.h"
+#include "vkr/VertexBuffer.h"
+#include <map>
 
 struct ViewRenderer {
   VkDevice device;
   VkQueue queue;
-  std::shared_ptr<VulkanRenderer> vulkanRenderer;
+  // std::shared_ptr<VulkanRenderer> vulkanRenderer;
   vko::Fence execFence;
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
   std::shared_ptr<Pipeline> m_pipeline;
+
+  // std::shared_ptr<class MemoryAllocator> m_memAllocator;
+  std::shared_ptr<struct VertexBuffer> m_drawBuffer;
+  std::shared_ptr<class DepthBuffer> m_depthBuffer;
+  std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
 
   ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
                uint32_t queueFamilyIndex, VkExtent2D extent,
@@ -23,14 +32,26 @@ struct ViewRenderer {
       : device(_device), execFence(_device, true) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
-    // VkPipeline... etc
-    this->vulkanRenderer = std::make_shared<VulkanRenderer>(
-        physicalDevice, device, queueFamilyIndex, extent, colorFormat,
-        sampleCountFlagBits);
+    auto m_memAllocator = MemoryAllocator::Create(physicalDevice, this->device);
 
-    m_pipeline =
-        Pipeline::Create(this->device, extent, colorFormat, depthFormat,
-                         this->vulkanRenderer->m_drawBuffer);
+    static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
+    m_drawBuffer = VertexBuffer::Create(
+        this->device, m_memAllocator,
+        {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
+         {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
+        c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
+        std::size(c_cubeIndices));
+
+    m_depthBuffer = DepthBuffer::Create(this->device, m_memAllocator, extent,
+                                        depthFormat, sampleCountFlagBits);
+
+    // VkPipeline... etc
+    // this->vulkanRenderer = std::make_shared<VulkanRenderer>(
+    //     physicalDevice, device, queueFamilyIndex, extent, colorFormat,
+    //     sampleCountFlagBits);
+
+    m_pipeline = Pipeline::Create(this->device, extent, colorFormat,
+                                  depthFormat, this->m_drawBuffer);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -82,10 +103,67 @@ struct ViewRenderer {
     };
     VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
-    this->vulkanRenderer->RenderView(
-        this->commandBuffer, this->m_pipeline->m_renderPass,
-        this->m_pipeline->m_pipelineLayout, this->m_pipeline->m_pipeline, image,
-        size, colorFormat, depthFormat, clearColor, matrices);
+    // this->vulkanRenderer->RenderView(
+    //     this->commandBuffer, this->m_pipeline->m_renderPass,
+    //     this->m_pipeline->m_pipelineLayout, this->m_pipeline->m_pipeline,
+    //     image, size, colorFormat, depthFormat, clearColor, matrices);
+    // Ensure depth is in the right layout
+    m_depthBuffer->TransitionLayout(
+        this->commandBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    // Bind and clear eye render target
+    static std::array<VkClearValue, 2> clearValues;
+    clearValues[0].color.float32[0] = clearColor.x;
+    clearValues[0].color.float32[1] = clearColor.y;
+    clearValues[0].color.float32[2] = clearColor.z;
+    clearValues[0].color.float32[3] = clearColor.w;
+    clearValues[1].depthStencil.depth = 1.0f;
+    clearValues[1].depthStencil.stencil = 0;
+    VkRenderPassBeginInfo renderPassBeginInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+        .pClearValues = clearValues.data(),
+    };
+
+    // void VulkanRenderer::BindRenderTarget(
+    //     VkImage image, VkRenderPassBeginInfo *renderPassBeginInfo) {
+    // }
+    // BindRenderTarget(image, &renderPassBeginInfo);
+    auto found = m_renderTarget.find(image);
+    if (found == m_renderTarget.end()) {
+      auto rt = RenderTarget::Create(
+          this->device, image, m_depthBuffer->depthImage, size, colorFormat,
+          depthFormat, m_pipeline->m_renderPass);
+      found = m_renderTarget.insert({image, rt}).first;
+    }
+    renderPassBeginInfo.renderPass = m_pipeline->m_renderPass;
+    renderPassBeginInfo.framebuffer = found->second->fb;
+    renderPassBeginInfo.renderArea.offset = {0, 0};
+    renderPassBeginInfo.renderArea.extent = size;
+
+    vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      this->m_pipeline->m_pipeline);
+
+    // Bind index and vertex buffers
+    vkCmdBindIndexBuffer(this->commandBuffer, m_drawBuffer->idxBuf, 0,
+                         VK_INDEX_TYPE_UINT16);
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &m_drawBuffer->vtxBuf,
+                           &offset);
+
+    // Render each cube
+    for (const Mat4 &mat : matrices) {
+      vkCmdPushConstants(
+          this->commandBuffer, this->m_pipeline->m_pipelineLayout,
+          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat), &mat.m[0]);
+
+      // Draw the cube.
+      vkCmdDrawIndexed(this->commandBuffer, m_drawBuffer->count.idx, 1, 0, 0,
+                       0);
+    }
 
     vkCmdEndRenderPass(this->commandBuffer);
     VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));

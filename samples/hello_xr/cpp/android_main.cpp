@@ -9,8 +9,9 @@
 #include "openxr_program/options.h"
 
 #include <common/logger.h>
-// #include 
+// #include
 
+#include "vkr/VertexBuffer.h"
 #include <vko/android_userdata.h>
 #include <vko/vko.h>
 
