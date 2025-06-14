@@ -2,16 +2,25 @@
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
+#include "vko/vko.h"
 #include "vkr/CmdBuffer.h"
 #include "vkr/VulkanRenderer.h"
 
 struct ViewRenderer {
+  VkDevice device;
   std::shared_ptr<VulkanRenderer> vulkanRenderer;
   std::shared_ptr<CmdBuffer> cmdBuffer;
+  vko::Fence execFence;
+
+  ViewRenderer(VkDevice _device) : device(_device), execFence(_device, true) {}
+
+  ~ViewRenderer() { vkDestroyFence(this->device, execFence, nullptr); }
 
   void render(VkImage image, const Vec4 &clearColor,
               const std::vector<Mat4> &matrices) {
-    this->cmdBuffer->Wait();
+    // Waiting on a not-in-flight command buffer is a no-op
+    execFence.wait();
+    execFence.reset();
     this->cmdBuffer->Reset();
     this->cmdBuffer->Begin();
 
@@ -20,7 +29,7 @@ struct ViewRenderer {
 
     vkCmdEndRenderPass(this->cmdBuffer->buf);
     this->cmdBuffer->End();
-    this->cmdBuffer->Exec();
+    this->cmdBuffer->Exec(this->execFence);
   }
 };
 
@@ -37,7 +46,7 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
   std::vector<std::shared_ptr<ViewRenderer>> views;
 
   for (uint32_t i = 0; i < config.Views.size(); i++) {
-    auto ptr = std::make_shared<ViewRenderer>();
+    auto ptr = std::make_shared<ViewRenderer>(device);
     views.push_back(ptr);
 
     // XrSwapchain

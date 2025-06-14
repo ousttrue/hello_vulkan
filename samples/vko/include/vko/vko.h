@@ -565,7 +565,7 @@ struct Fence : public not_copyable {
   }
   void reset() { vkResetFences(this->device, 1, &this->fence); }
 
-  void block() {
+  void wait() {
     VKO_CHECK(
         vkWaitForFences(this->device, 1, &this->fence, VK_TRUE, UINT64_MAX));
   }
