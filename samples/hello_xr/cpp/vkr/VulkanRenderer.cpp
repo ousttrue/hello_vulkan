@@ -38,17 +38,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
     throw std::runtime_error("Failed to create command buffer");
   }
 
-#if defined(USE_MIRROR_WINDOW)
-  m_swapchain.Create(m_vkInstance, m_vkPhysicalDevice, m_vkDevice,
-                     m_queueFamilyIndex);
-  m_cmdBuffer.Reset();
-  m_cmdBuffer.Begin();
-  m_swapchain.Prepare(m_cmdBuffer.buf);
-  m_cmdBuffer.End();
-  m_cmdBuffer.Exec(m_vkQueue);
-  m_cmdBuffer.Wait();
-#endif
-
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   m_drawBuffer = VertexBuffer::Create(
       m_device, m_memAllocator,
@@ -136,13 +125,4 @@ void VulkanRenderer::EndCommand(VkCommandBuffer cmd) {
   vkCmdEndRenderPass(cmd);
   m_cmdBuffer->End();
   m_cmdBuffer->Exec(m_queue);
-
-#if defined(USE_MIRROR_WINDOW)
-  // Cycle the window's swapchain on the last view rendered
-  if (swapchainContext == &m_swapchainImageContexts.back()) {
-    m_swapchain.Acquire();
-    m_swapchain.Wait();
-    m_swapchain.Present(m_vkQueue);
-  }
-#endif
 }
