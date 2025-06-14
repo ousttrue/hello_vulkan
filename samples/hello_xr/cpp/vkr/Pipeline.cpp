@@ -2,8 +2,81 @@
 #include "VertexBuffer.h"
 #include <common/fmt.h>
 #include <common/logger.h>
+#include <shaderc/shaderc.hpp>
 #include <stdexcept>
+#include <vko/vko_pipeline.h>
 #include <vulkan/vulkan_core.h>
+
+// Compile a shader to a SPIR-V binary.
+static std::vector<uint32_t> CompileGlslShader(const std::string &name,
+                                               shaderc_shader_kind kind,
+                                               const std::string &source) {
+  shaderc::Compiler compiler;
+  shaderc::CompileOptions options;
+
+  options.SetOptimizationLevel(shaderc_optimization_level_size);
+
+  shaderc::SpvCompilationResult module =
+      compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
+
+  if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
+    Log::Write(Log::Level::Error,
+               Fmt("Shader %s compilation failed: %s", name.c_str(),
+                   module.GetErrorMessage().c_str()));
+    return std::vector<uint32_t>();
+  }
+
+  return {module.cbegin(), module.cend()};
+}
+
+constexpr char VertexShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (std140, push_constant) uniform buf
+{
+    mat4 mvp;
+} ubuf;
+
+layout (location = 0) in vec3 Position;
+layout (location = 1) in vec4 Color;
+
+layout (location = 0) out vec4 oColor;
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+void main()
+{
+    oColor.rgba  = Color.rgba;
+    gl_Position = ubuf.mvp * vec4(Position, 1);
+}
+)_";
+
+constexpr char FragmentShaderGlsl[] = R"_(
+#version 430
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (location = 0) in vec4 oColor;
+
+layout (location = 0) out vec4 FragColor;
+
+void main()
+{
+    FragColor = oColor;
+}
+)_";
+
+// glslangValidator doesn't wrap its output in brackets if you don't have it
+// define the whole array.
+#if defined(USE_GLSLANGVALIDATOR)
+#define SPV_PREFIX {
+#define SPV_SUFFIX }
+#else
+#define SPV_PREFIX
+#define SPV_SUFFIX
+#endif
 
 //
 // ShaderProgram to hold a pair of vertex & fragment shaders
@@ -63,12 +136,16 @@ void Pipeline::Dynamic(VkDynamicState state) {
 }
 
 std::shared_ptr<Pipeline>
-Pipeline::Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
-                 VkRenderPass renderPass,
-                 const std::shared_ptr<ShaderProgram> &sp,
+Pipeline::Create(VkDevice device, VkExtent2D size, VkFormat colorFormat,
+                 VkFormat depthFormat,
                  const std::shared_ptr<VertexBuffer> &vb) {
 
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline);
+
+  ptr->m_pipelineLayout =
+      vko::createPipelineLayoutWithConstantSize(device, sizeof(float) * 16);
+  ptr->m_renderPass =
+      vko::createColorDepthRenderPass(device, colorFormat, depthFormat);
 
   ptr->m_vkDevice = device;
 
@@ -163,10 +240,25 @@ Pipeline::Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
   ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
+  auto vertexSPIRV = CompileGlslShader(
+      "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
+  auto fragmentSPIRV = CompileGlslShader(
+      "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
+  if (vertexSPIRV.empty()) {
+    throw std::runtime_error("Failed to compile vertex shader");
+  }
+  if (fragmentSPIRV.empty()) {
+    throw std::runtime_error("Failed to compile fragment shader");
+  }
+
+  auto shaderProgram = ShaderProgram::Create(device);
+  shaderProgram->LoadVertexShader(vertexSPIRV);
+  shaderProgram->LoadFragmentShader(fragmentSPIRV);
+
   VkGraphicsPipelineCreateInfo pipeInfo{
       VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  pipeInfo.stageCount = (uint32_t)sp->shaderInfo.size();
-  pipeInfo.pStages = sp->shaderInfo.data();
+  pipeInfo.stageCount = (uint32_t)shaderProgram->shaderInfo.size();
+  pipeInfo.pStages = shaderProgram->shaderInfo.data();
   pipeInfo.pVertexInputState = &vi;
   pipeInfo.pInputAssemblyState = &ia;
   pipeInfo.pTessellationState = nullptr;
@@ -178,11 +270,11 @@ Pipeline::Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
   if (dynamicState.dynamicStateCount > 0) {
     pipeInfo.pDynamicState = &dynamicState;
   }
-  pipeInfo.layout = layout;
-  pipeInfo.renderPass = renderPass;
+  pipeInfo.layout = ptr->m_pipelineLayout;
+  pipeInfo.renderPass = ptr->m_renderPass;
   pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,
-                                nullptr, &ptr->pipe) != VK_SUCCESS) {
+                                nullptr, &ptr->m_pipeline) != VK_SUCCESS) {
     throw std::runtime_error("vkCreateGraphicsPipelines");
   }
 
@@ -191,10 +283,18 @@ Pipeline::Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
 
 void Pipeline::Release() {
   if (m_vkDevice != nullptr) {
-    if (pipe != VK_NULL_HANDLE) {
-      vkDestroyPipeline(m_vkDevice, pipe, nullptr);
+    if (m_pipeline != VK_NULL_HANDLE) {
+      vkDestroyPipeline(m_vkDevice, m_pipeline, nullptr);
+    }
+    if (m_pipelineLayout != VK_NULL_HANDLE) {
+      vkDestroyPipelineLayout(m_vkDevice, m_pipelineLayout, nullptr);
+    }
+    if (m_renderPass != VK_NULL_HANDLE) {
+      vkDestroyRenderPass(m_vkDevice, m_renderPass, nullptr);
     }
   }
-  pipe = VK_NULL_HANDLE;
+  m_pipeline = VK_NULL_HANDLE;
+  m_renderPass = VK_NULL_HANDLE;
+  m_pipelineLayout = VK_NULL_HANDLE;
   m_vkDevice = nullptr;
 }

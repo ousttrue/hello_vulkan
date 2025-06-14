@@ -15,7 +15,6 @@ class VulkanRenderer {
   VkQueue m_queue{VK_NULL_HANDLE};
   VkSemaphore m_vkDrawDone{VK_NULL_HANDLE};
   std::shared_ptr<class MemoryAllocator> m_memAllocator;
-  std::shared_ptr<class ShaderProgram> m_shaderProgram{};
   std::shared_ptr<class CmdBuffer> m_cmdBuffer;
 
   VkExtent2D m_size{};
@@ -23,9 +22,7 @@ class VulkanRenderer {
   VkFormat m_depthFormat;
   std::shared_ptr<class DepthBuffer> m_depthBuffer;
 
-  VkRenderPass m_renderPass = VK_NULL_HANDLE;
-  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-  std::shared_ptr<class Pipeline> m_pipe;
+  std::shared_ptr<class Pipeline> m_pipeline;
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
 
   std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
@@ -34,8 +31,6 @@ public:
   VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
                  uint32_t queueFamilyIndex, VkExtent2D size, VkFormat format,
                  VkSampleCountFlagBits sampleCount);
-  ~VulkanRenderer();
-
   // Render to a swapchain image for a projection view.
   VkCommandBuffer BeginCommand();
   void EndCommand(VkCommandBuffer cmd);

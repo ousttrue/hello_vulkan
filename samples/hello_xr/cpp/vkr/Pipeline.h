@@ -38,12 +38,12 @@ class Pipeline {
   Pipeline() {}
 
 public:
-  VkPipeline pipe{VK_NULL_HANDLE};
+  VkRenderPass m_renderPass = VK_NULL_HANDLE;
+  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline m_pipeline = VK_NULL_HANDLE;
   static std::shared_ptr<Pipeline>
-  Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
-         VkRenderPass renderPass,
-         const std::shared_ptr<class ShaderProgram> &sp,
-         const std::shared_ptr<struct VertexBuffer> &vb);
+  Create(VkDevice device, VkExtent2D size, VkFormat colorFormat,
+         VkFormat depthFormat, const std::shared_ptr<struct VertexBuffer> &vb);
 
   void Dynamic(VkDynamicState state);
   void Release();

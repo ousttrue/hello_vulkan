@@ -5,83 +5,10 @@
 #include "Pipeline.h"
 #include "RenderTarget.h"
 #include "VertexBuffer.h"
-#include "vko/vko_pipeline.h"
 #include <common/fmt.h>
 #include <common/logger.h>
-#include <shaderc/shaderc.hpp>
 #include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
-
-// Compile a shader to a SPIR-V binary.
-static std::vector<uint32_t> CompileGlslShader(const std::string &name,
-                                               shaderc_shader_kind kind,
-                                               const std::string &source) {
-  shaderc::Compiler compiler;
-  shaderc::CompileOptions options;
-
-  options.SetOptimizationLevel(shaderc_optimization_level_size);
-
-  shaderc::SpvCompilationResult module =
-      compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
-
-  if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
-    Log::Write(Log::Level::Error,
-               Fmt("Shader %s compilation failed: %s", name.c_str(),
-                   module.GetErrorMessage().c_str()));
-    return std::vector<uint32_t>();
-  }
-
-  return {module.cbegin(), module.cend()};
-}
-
-constexpr char VertexShaderGlsl[] = R"_(
-#version 430
-#extension GL_ARB_separate_shader_objects : enable
-
-layout (std140, push_constant) uniform buf
-{
-    mat4 mvp;
-} ubuf;
-
-layout (location = 0) in vec3 Position;
-layout (location = 1) in vec4 Color;
-
-layout (location = 0) out vec4 oColor;
-out gl_PerVertex
-{
-    vec4 gl_Position;
-};
-
-void main()
-{
-    oColor.rgba  = Color.rgba;
-    gl_Position = ubuf.mvp * vec4(Position, 1);
-}
-)_";
-
-constexpr char FragmentShaderGlsl[] = R"_(
-#version 430
-#extension GL_ARB_separate_shader_objects : enable
-
-layout (location = 0) in vec4 oColor;
-
-layout (location = 0) out vec4 FragColor;
-
-void main()
-{
-    FragColor = oColor;
-}
-)_";
-
-// glslangValidator doesn't wrap its output in brackets if you don't have it
-// define the whole array.
-#if defined(USE_GLSLANGVALIDATOR)
-#define SPV_PREFIX {
-#define SPV_SUFFIX }
-#else
-#define SPV_PREFIX
-#define SPV_SUFFIX
-#endif
 
 VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
                                uint32_t queueFamilyIndex, VkExtent2D size,
@@ -93,21 +20,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   vkGetDeviceQueue(m_device, m_queueFamilyIndex, 0, &m_queue);
 
   m_memAllocator = MemoryAllocator::Create(m_physicalDevice, m_device);
-
-  auto vertexSPIRV = CompileGlslShader(
-      "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
-  auto fragmentSPIRV = CompileGlslShader(
-      "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
-  if (vertexSPIRV.empty()) {
-    throw std::runtime_error("Failed to compile vertex shader");
-  }
-  if (fragmentSPIRV.empty()) {
-    throw std::runtime_error("Failed to compile fragment shader");
-  }
-
-  m_shaderProgram = ShaderProgram::Create(m_device);
-  m_shaderProgram->LoadVertexShader(vertexSPIRV);
-  m_shaderProgram->LoadFragmentShader(fragmentSPIRV);
 
   // Semaphore to block on draw complete
   VkSemaphoreCreateInfo semInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -137,8 +49,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   m_cmdBuffer.Wait();
 #endif
 
-  m_pipelineLayout =
-      vko::createPipelineLayoutWithConstantSize(m_device, sizeof(float) * 16);
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   m_drawBuffer = VertexBuffer::Create(
       m_device, m_memAllocator,
@@ -150,20 +60,8 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   m_depthBuffer = DepthBuffer::Create(m_device, m_memAllocator, size,
                                       m_depthFormat, sampleCount);
 
-  m_renderPass =
-      vko::createColorDepthRenderPass(m_device, m_colorFormat, m_depthFormat);
-  // RenderPass::Create(m_device, colorFormat, depthFormat);
-  m_pipe = Pipeline::Create(m_device, m_size, m_pipelineLayout, m_renderPass,
-                            m_shaderProgram, m_drawBuffer);
-}
-
-VulkanRenderer::~VulkanRenderer() {
-  if (m_pipelineLayout != VK_NULL_HANDLE) {
-    vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
-  }
-  if (m_renderPass != VK_NULL_HANDLE) {
-    vkDestroyRenderPass(m_device, m_renderPass, nullptr);
-  }
+  m_pipeline = Pipeline::Create(m_device, m_size, m_colorFormat, m_depthFormat,
+                                m_drawBuffer);
 }
 
 void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
@@ -194,19 +92,19 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
   // BindRenderTarget(image, &renderPassBeginInfo);
   auto found = m_renderTarget.find(image);
   if (found == m_renderTarget.end()) {
-    auto rt =
-        RenderTarget::Create(m_device, image, m_depthBuffer->depthImage, m_size,
-                             m_colorFormat, m_depthFormat, m_renderPass);
+    auto rt = RenderTarget::Create(m_device, image, m_depthBuffer->depthImage,
+                                   m_size, m_colorFormat, m_depthFormat,
+                                   m_pipeline->m_renderPass);
     found = m_renderTarget.insert({image, rt}).first;
   }
-  renderPassBeginInfo.renderPass = m_renderPass;
+  renderPassBeginInfo.renderPass = m_pipeline->m_renderPass;
   renderPassBeginInfo.framebuffer = found->second->fb;
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = m_size;
 
   vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipe->pipe);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
 
   // Bind index and vertex buffers
   vkCmdBindIndexBuffer(cmd, m_drawBuffer->idxBuf, 0, VK_INDEX_TYPE_UINT16);
@@ -215,7 +113,7 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
 
   // Render each cube
   for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+    vkCmdPushConstants(cmd, m_pipeline->m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
