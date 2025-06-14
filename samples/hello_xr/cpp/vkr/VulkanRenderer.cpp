@@ -1,5 +1,4 @@
 #include "VulkanRenderer.h"
-#include "CmdBuffer.h"
 #include "DepthBuffer.h"
 #include "MemoryAllocator.h"
 #include "Pipeline.h"
@@ -17,7 +16,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
     : m_physicalDevice(physicalDevice), m_device(device),
       m_queueFamilyIndex(queueFamilyIndex), m_size(size), m_colorFormat(format),
       m_depthFormat(VK_FORMAT_D32_SFLOAT) {
-  vkGetDeviceQueue(m_device, m_queueFamilyIndex, 0, &m_queue);
 
   m_memAllocator = MemoryAllocator::Create(m_physicalDevice, m_device);
 
@@ -31,11 +29,6 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
           m_device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)m_vkDrawDone,
           "hello_xr draw done semaphore") != VK_SUCCESS) {
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  }
-
-  m_cmdBuffer = CmdBuffer::Create(m_device, m_queueFamilyIndex);
-  if (!m_cmdBuffer) {
-    throw std::runtime_error("Failed to create command buffer");
   }
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
@@ -93,7 +86,8 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
 
   vkCmdBeginRenderPass(cmd, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline->m_pipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    m_pipeline->m_pipeline);
 
   // Bind index and vertex buffers
   vkCmdBindIndexBuffer(cmd, m_drawBuffer->idxBuf, 0, VK_INDEX_TYPE_UINT16);
@@ -102,27 +96,10 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
 
   // Render each cube
   for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(cmd, m_pipeline->m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(cube), &cube.m[0]);
+    vkCmdPushConstants(cmd, m_pipeline->m_pipelineLayout,
+                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
     vkCmdDrawIndexed(cmd, m_drawBuffer->count.idx, 1, 0, 0, 0);
   }
-}
-
-VkCommandBuffer VulkanRenderer::BeginCommand() {
-  // CHECK(layerView.subImage.imageArrayIndex ==
-  //       0); // Texture arrays not supported.
-
-  // XXX Should double-buffer the command buffers, for now just flush
-  m_cmdBuffer->Wait();
-  m_cmdBuffer->Reset();
-  m_cmdBuffer->Begin();
-  return m_cmdBuffer->buf;
-}
-
-void VulkanRenderer::EndCommand(VkCommandBuffer cmd) {
-  vkCmdEndRenderPass(cmd);
-  m_cmdBuffer->End();
-  m_cmdBuffer->Exec(m_queue);
 }

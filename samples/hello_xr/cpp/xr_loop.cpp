@@ -2,6 +2,7 @@
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
+#include "vkr/CmdBuffer.h"
 #include "vkr/VulkanRenderer.h"
 
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
@@ -13,6 +14,8 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
   auto config = session->GetSwapchainConfiguration();
   std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
   std::vector<std::shared_ptr<VulkanRenderer>> renderers;
+  std::vector<std::shared_ptr<CmdBuffer>> cmdBuffers;
+
   for (uint32_t i = 0; i < config.Views.size(); i++) {
     // XrSwapchain
     auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
@@ -28,6 +31,10 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
         static_cast<VkSampleCountFlagBits>(
             swapchain->m_swapchainCreateInfo.sampleCount));
     renderers.push_back(renderer);
+
+    auto cmdBuffer = CmdBuffer::Create(device, queueFamilyIndex);
+    assert(cmdBuffer);
+    cmdBuffers.push_back(cmdBuffer);
   }
 
   // mainloop
@@ -59,13 +66,20 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
           composition.pushView(info.CompositionLayer);
 
           {
+            auto cmdBuffer = cmdBuffers[i];
+            cmdBuffer->Wait();
+            cmdBuffer->Reset();
+            cmdBuffer->Begin();
+
             // render vulkan
             auto renderer = renderers[i];
-            VkCommandBuffer cmd = renderer->BeginCommand();
             renderer->RenderView(
-                cmd, info.Image, options.GetBackgroundClearColor(),
+                cmdBuffer->buf, info.Image, options.GetBackgroundClearColor(),
                 scene.CalcCubeMatrices(info.calcViewProjection()));
-            renderer->EndCommand(cmd);
+
+            vkCmdEndRenderPass(cmdBuffer->buf);
+            cmdBuffer->End();
+            cmdBuffer->Exec();
           }
 
           swapchain->EndSwapchain();

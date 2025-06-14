@@ -12,10 +12,8 @@ class VulkanRenderer {
   VkDevice m_device;
   uint32_t m_queueFamilyIndex;
 
-  VkQueue m_queue{VK_NULL_HANDLE};
   VkSemaphore m_vkDrawDone{VK_NULL_HANDLE};
   std::shared_ptr<class MemoryAllocator> m_memAllocator;
-  std::shared_ptr<class CmdBuffer> m_cmdBuffer;
 
   VkExtent2D m_size{};
   VkFormat m_colorFormat;
@@ -31,10 +29,6 @@ public:
   VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
                  uint32_t queueFamilyIndex, VkExtent2D size, VkFormat format,
                  VkSampleCountFlagBits sampleCount);
-  // Render to a swapchain image for a projection view.
-  VkCommandBuffer BeginCommand();
-  void EndCommand(VkCommandBuffer cmd);
-
   void RenderView(VkCommandBuffer cmd, VkImage image, const Vec4 &clearColor,
                   const std::vector<Mat4> &cubes);
 };

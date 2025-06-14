@@ -6,6 +6,7 @@
 // CmdBuffer - manage VkCommandBuffer state
 class CmdBuffer {
   VkDevice m_vkDevice{VK_NULL_HANDLE};
+  VkQueue m_queue;
 
 #define LIST_CMDBUFFER_STATES(_)                                               \
   _(Undefined)                                                                 \
@@ -40,7 +41,7 @@ public:
 
   bool Begin();
   bool End();
-  bool Exec(VkQueue queue);
+  bool Exec();
   bool Wait();
   bool Reset();
 };

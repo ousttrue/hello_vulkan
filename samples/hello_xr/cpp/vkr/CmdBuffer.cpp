@@ -1,7 +1,7 @@
 #include "CmdBuffer.h"
 #include <common/logger.h>
-#include <vko/vko.h>
 #include <stdexcept>
+#include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
 
 //
@@ -53,6 +53,7 @@ std::shared_ptr<CmdBuffer> CmdBuffer::Create(VkDevice device,
   auto ptr = std::shared_ptr<CmdBuffer>(new CmdBuffer());
 
   ptr->m_vkDevice = device;
+  vkGetDeviceQueue(device, queueFamilyIndex, 0, &ptr->m_queue);
 
   // Create a command pool to allocate our command buffer from
   VkCommandPoolCreateInfo cmdPoolInfo{
@@ -124,13 +125,13 @@ bool CmdBuffer::End() {
   return true;
 }
 
-bool CmdBuffer::Exec(VkQueue queue) {
+bool CmdBuffer::Exec() {
   CHECK_CBSTATE(CmdBufferState::Executable);
 
   VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
   submitInfo.commandBufferCount = 1;
   submitInfo.pCommandBuffers = &buf;
-  if (vkQueueSubmit(queue, 1, &submitInfo, execFence) != VK_SUCCESS) {
+  if (vkQueueSubmit(m_queue, 1, &submitInfo, execFence) != VK_SUCCESS) {
     throw std::runtime_error("vkQueueSubmit");
   }
 
