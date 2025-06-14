@@ -287,9 +287,9 @@ struct Instance : public not_copyable {
       }
     }
 
-    VKO_CHECK( CreateDebugUtilsMessengerEXT(this->instance,
-                                          &this->debug_messenger_create_info,
-                                          nullptr, &this->debugUtilsMessenger));
+    VKO_CHECK(CreateDebugUtilsMessengerEXT(
+        this->instance, &this->debugUtilsMessengerCreateInfo, nullptr,
+        &this->debugUtilsMessenger));
 
     g_vkSetDebugUtilsObjectNameEXT(this->instance);
   }
@@ -297,11 +297,21 @@ struct Instance : public not_copyable {
   std::vector<PhysicalDevice> physicalDevices;
 
   std::vector<const char *> validationLayers;
+  const char *
+  pushFirstSupportedValidationLayer(const std::vector<const char *> &names) {
+    for (auto name : names) {
+      if (layerIsSupported(name)) {
+        this->validationLayers.push_back(name);
+        return name;
+      }
+    }
+    return {};
+  }
   std::vector<const char *> instanceExtensions;
 
   // VK_EXT_DEBUG_UTILS_EXTENSION_NAME
   VkDebugUtilsMessengerEXT debugUtilsMessenger = VK_NULL_HANDLE;
-  VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = {
+  VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
       .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
@@ -386,7 +396,7 @@ struct Instance : public not_copyable {
       for (auto name : this->instanceExtensions) {
         Logger::Info("instance extension: %s\n", name);
         if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
-          this->createInfo.pNext = &this->debug_messenger_create_info;
+          this->createInfo.pNext = &this->debugUtilsMessengerCreateInfo;
         }
       }
       this->createInfo.enabledExtensionCount = this->instanceExtensions.size();
