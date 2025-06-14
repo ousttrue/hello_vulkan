@@ -137,7 +137,8 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
   m_cmdBuffer.Wait();
 #endif
 
-  m_pipelineLayout = PipelineLayout::Create(m_device);
+  m_pipelineLayout =
+      vko::createPipelineLayoutWithConstantSize(m_device, sizeof(float) * 16);
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   m_drawBuffer = VertexBuffer::Create(
       m_device, m_memAllocator,
@@ -157,6 +158,9 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
 }
 
 VulkanRenderer::~VulkanRenderer() {
+  if (m_pipelineLayout != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+  }
   if (m_renderPass != VK_NULL_HANDLE) {
     vkDestroyRenderPass(m_device, m_renderPass, nullptr);
   }
@@ -211,8 +215,8 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
 
   // Render each cube
   for (const Mat4 &cube : cubes) {
-    vkCmdPushConstants(cmd, m_pipelineLayout->layout,
-                       VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m[0]);
+    vkCmdPushConstants(cmd, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(cube), &cube.m[0]);
 
     // Draw the cube.
     vkCmdDrawIndexed(cmd, m_drawBuffer->count.idx, 1, 0, 0, 0);

@@ -137,6 +137,27 @@ inline VkRenderPass createColorDepthRenderPass(VkDevice device,
   return renderPass;
 }
 
+inline VkPipelineLayout createPipelineLayoutWithConstantSize(VkDevice device,
+                                             uint32_t constantSize) {
+  VkPushConstantRange pushConstantRanges[] = {
+      {
+          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+          .offset = 0,
+          .size = constantSize,
+      },
+  };
+  VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pushConstantRangeCount =
+          static_cast<uint32_t>(std::size(pushConstantRanges)),
+      .pPushConstantRanges = pushConstantRanges,
+  };
+  VkPipelineLayout layout;
+  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr,
+                                   &layout));
+  return layout;
+}
+
 inline VkShaderModule createShaderModule(VkDevice device,
                                          const std::vector<uint32_t> &spv) {
   VkShaderModuleCreateInfo createInfo{

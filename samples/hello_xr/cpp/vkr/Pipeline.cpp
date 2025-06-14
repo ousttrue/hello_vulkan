@@ -1,7 +1,7 @@
 #include "Pipeline.h"
 #include "VertexBuffer.h"
-#include <common/logger.h>
 #include <common/fmt.h>
+#include <common/logger.h>
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 
@@ -56,41 +56,6 @@ void ShaderProgram::Load(uint32_t index, const std::vector<uint32_t> &code) {
 }
 
 //
-// Simple vertex MVP xform & color fragment shader layout
-//
-PipelineLayout::~PipelineLayout() {
-  if (m_vkDevice != nullptr) {
-    if (layout != VK_NULL_HANDLE) {
-      vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
-    }
-  }
-  layout = VK_NULL_HANDLE;
-  m_vkDevice = nullptr;
-}
-
-std::shared_ptr<PipelineLayout> PipelineLayout::Create(VkDevice device) {
-  auto ptr = std::shared_ptr<PipelineLayout>(new PipelineLayout);
-  ptr->m_vkDevice = device;
-
-  // MVP matrix is a push_constant
-  VkPushConstantRange pcr = {};
-  pcr.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  pcr.offset = 0;
-  pcr.size = 4 * 4 * sizeof(float);
-
-  VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &pcr,
-  };
-  if (vkCreatePipelineLayout(ptr->m_vkDevice, &pipelineLayoutCreateInfo,
-                             nullptr, &ptr->layout) != VK_SUCCESS) {
-    throw std::runtime_error("vkCreatePipelineLayout");
-  }
-  return ptr;
-}
-
-//
 // Pipeline wrapper for rendering pipeline state
 //
 void Pipeline::Dynamic(VkDynamicState state) {
@@ -98,8 +63,7 @@ void Pipeline::Dynamic(VkDynamicState state) {
 }
 
 std::shared_ptr<Pipeline>
-Pipeline::Create(VkDevice device, VkExtent2D size,
-                 const std::shared_ptr<PipelineLayout> &layout,
+Pipeline::Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
                  VkRenderPass renderPass,
                  const std::shared_ptr<ShaderProgram> &sp,
                  const std::shared_ptr<VertexBuffer> &vb) {
@@ -214,7 +178,7 @@ Pipeline::Create(VkDevice device, VkExtent2D size,
   if (dynamicState.dynamicStateCount > 0) {
     pipeInfo.pDynamicState = &dynamicState;
   }
-  pipeInfo.layout = layout->layout;
+  pipeInfo.layout = layout;
   pipeInfo.renderPass = renderPass;
   pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,

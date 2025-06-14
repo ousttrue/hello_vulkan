@@ -29,22 +29,6 @@ public:
   void LoadFragmentShader(const std::vector<uint32_t> &code) { Load(1, code); }
 };
 
-// Simple vertex MVP xform & color fragment shader layout
-class PipelineLayout {
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-
-  PipelineLayout() = default;
-
-public:
-  VkPipelineLayout layout{VK_NULL_HANDLE};
-  ~PipelineLayout();
-  static std::shared_ptr<PipelineLayout> Create(VkDevice device);
-  PipelineLayout(const PipelineLayout &) = delete;
-  PipelineLayout &operator=(const PipelineLayout &) = delete;
-  PipelineLayout(PipelineLayout &&) = delete;
-  PipelineLayout &operator=(PipelineLayout &&) = delete;
-};
-
 // Pipeline wrapper for rendering pipeline state
 class Pipeline {
   VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
@@ -56,8 +40,7 @@ class Pipeline {
 public:
   VkPipeline pipe{VK_NULL_HANDLE};
   static std::shared_ptr<Pipeline>
-  Create(VkDevice device, VkExtent2D size,
-         const std::shared_ptr<PipelineLayout> &layout,
+  Create(VkDevice device, VkExtent2D size, VkPipelineLayout layout,
          VkRenderPass renderPass,
          const std::shared_ptr<class ShaderProgram> &sp,
          const std::shared_ptr<struct VertexBuffer> &vb);

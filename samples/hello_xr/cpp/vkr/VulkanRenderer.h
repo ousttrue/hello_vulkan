@@ -3,8 +3,9 @@
 #include <map>
 #include <memory>
 #include <vector>
-#include <vulkan/vulkan.h>
 #include <vko/vko_pipeline.h>
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_core.h>
 
 class VulkanRenderer {
   VkPhysicalDevice m_physicalDevice;
@@ -20,10 +21,10 @@ class VulkanRenderer {
   VkExtent2D m_size{};
   VkFormat m_colorFormat;
   VkFormat m_depthFormat;
-  std::shared_ptr<class PipelineLayout> m_pipelineLayout{};
   std::shared_ptr<class DepthBuffer> m_depthBuffer;
 
-  VkRenderPass m_renderPass;
+  VkRenderPass m_renderPass = VK_NULL_HANDLE;
+  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
   std::shared_ptr<class Pipeline> m_pipe;
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
 
