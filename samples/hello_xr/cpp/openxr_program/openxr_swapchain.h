@@ -45,6 +45,20 @@ public:
 
   ViewSwapchainInfo AcquireSwapchain(const XrView &view);
   void EndSwapchain();
+
+  VkExtent2D extent() const {
+    return {this->m_swapchainCreateInfo.width,
+            this->m_swapchainCreateInfo.height};
+  }
+
+  VkFormat format() const {
+    return static_cast<VkFormat>(this->m_swapchainCreateInfo.format);
+  }
+
+  VkSampleCountFlagBits sampleCountFlagBits() const {
+    return static_cast<VkSampleCountFlagBits>(
+        this->m_swapchainCreateInfo.sampleCount);
+  }
 };
 
 class LayerComposition {

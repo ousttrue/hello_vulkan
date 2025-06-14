@@ -5,20 +5,24 @@
 #include "vkr/CmdBuffer.h"
 #include "vkr/VulkanRenderer.h"
 
-static void render_view(const std::shared_ptr<CmdBuffer> &cmdBuffer,
-                        VkImage image, const Vec4 &clearColor,
-                        const std::shared_ptr<VulkanRenderer> &renderer,
-                        const std::vector<Mat4> &matrices) {
-  cmdBuffer->Wait();
-  cmdBuffer->Reset();
-  cmdBuffer->Begin();
+struct ViewRenderer {
+  std::shared_ptr<VulkanRenderer> vulkanRenderer;
+  std::shared_ptr<CmdBuffer> cmdBuffer;
 
-  renderer->RenderView(cmdBuffer->buf, image, clearColor, matrices);
+  void render(VkImage image, const Vec4 &clearColor,
+              const std::vector<Mat4> &matrices) {
+    this->cmdBuffer->Wait();
+    this->cmdBuffer->Reset();
+    this->cmdBuffer->Begin();
 
-  vkCmdEndRenderPass(cmdBuffer->buf);
-  cmdBuffer->End();
-  cmdBuffer->Exec();
-}
+    this->vulkanRenderer->RenderView(this->cmdBuffer->buf, image, clearColor,
+                                     matrices);
+
+    vkCmdEndRenderPass(this->cmdBuffer->buf);
+    this->cmdBuffer->End();
+    this->cmdBuffer->Exec();
+  }
+};
 
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
              const std::shared_ptr<OpenXrSession> &session,
@@ -28,28 +32,25 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
   // Create resources for each view.
   auto config = session->GetSwapchainConfiguration();
   std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
-  std::vector<std::shared_ptr<VulkanRenderer>> renderers;
-  std::vector<std::shared_ptr<CmdBuffer>> cmdBuffers;
+  // std::vector<std::shared_ptr<VulkanRenderer>> renderers;
+  // std::vector<std::shared_ptr<CmdBuffer>> cmdBuffers;
+  std::vector<std::shared_ptr<ViewRenderer>> views;
 
   for (uint32_t i = 0; i < config.Views.size(); i++) {
+    auto ptr = std::make_shared<ViewRenderer>();
+    views.push_back(ptr);
+
     // XrSwapchain
     auto swapchain = OpenXrSwapchain::Create(session->m_session, i,
                                              config.Views[i], config.Format);
     swapchains.push_back(swapchain);
 
     // VkPipeline... etc
-    auto renderer = std::make_shared<VulkanRenderer>(
-        physicalDevice, device, queueFamilyIndex,
-        VkExtent2D{swapchain->m_swapchainCreateInfo.width,
-                   swapchain->m_swapchainCreateInfo.height},
-        static_cast<VkFormat>(swapchain->m_swapchainCreateInfo.format),
-        static_cast<VkSampleCountFlagBits>(
-            swapchain->m_swapchainCreateInfo.sampleCount));
-    renderers.push_back(renderer);
+    ptr->vulkanRenderer = std::make_shared<VulkanRenderer>(
+        physicalDevice, device, queueFamilyIndex, swapchain->extent(),
+        swapchain->format(), swapchain->sampleCountFlagBits());
 
-    auto cmdBuffer = CmdBuffer::Create(device, queueFamilyIndex);
-    assert(cmdBuffer);
-    cmdBuffers.push_back(cmdBuffer);
+    ptr->cmdBuffer = CmdBuffer::Create(device, queueFamilyIndex);
   }
 
   // mainloop
@@ -81,9 +82,8 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
           auto info = swapchain->AcquireSwapchain(session->m_views[i]);
           composition.pushView(info.CompositionLayer);
 
-          render_view(cmdBuffers[i], info.Image,
-                      options.GetBackgroundClearColor(), renderers[i],
-                      scene.CalcCubeMatrices(info.calcViewProjection()));
+          views[i]->render(info.Image, options.GetBackgroundClearColor(),
+                           scene.CalcCubeMatrices(info.calcViewProjection()));
 
           swapchain->EndSwapchain();
         }

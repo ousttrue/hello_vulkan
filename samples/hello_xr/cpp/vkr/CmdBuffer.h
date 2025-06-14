@@ -8,20 +8,15 @@ class CmdBuffer {
   VkDevice m_vkDevice{VK_NULL_HANDLE};
   VkQueue m_queue;
 
-#define LIST_CMDBUFFER_STATES(_)                                               \
-  _(Undefined)                                                                 \
-  _(Initialized)                                                               \
-  _(Recording)                                                                 \
-  _(Executable)                                                                \
-  _(Executing)
-  enum class CmdBufferState {
-#define MK_ENUM(name) name,
-    LIST_CMDBUFFER_STATES(MK_ENUM)
-#undef MK_ENUM
-  };
-  CmdBufferState state{CmdBufferState::Undefined};
-  void SetState(CmdBufferState newState) { state = newState; }
-  // #undef LIST_CMDBUFFER_STATES
+  // enum class CmdBufferState {
+  //   Undefined,
+  //   Initialized,
+  //   Recording,
+  //   Executable,
+  //   Executing,
+  // };
+  // CmdBufferState state{CmdBufferState::Undefined};
+  // void SetState(CmdBufferState newState) { state = newState; }
 
   VkCommandPool pool{VK_NULL_HANDLE};
   VkFence execFence{VK_NULL_HANDLE};
@@ -35,7 +30,22 @@ class CmdBuffer {
 public:
   VkCommandBuffer buf{VK_NULL_HANDLE};
   ~CmdBuffer();
-  std::string StateString(CmdBufferState s);
+  // std::string StateString(CmdBufferState s) {
+  //   switch (s) {
+  //   case CmdBufferState::Undefined:
+  //     return "Undefined";
+  //   case CmdBufferState::Initialized:
+  //     return "Initialized";
+  //   case CmdBufferState::Recording:
+  //     return "Recording";
+  //   case CmdBufferState::Executable:
+  //     return "Executable";
+  //   case CmdBufferState::Executing:
+  //     return "Executing";
+  //   }
+  //   return "(Unknown)";
+  // }
+
   static std::shared_ptr<CmdBuffer> Create(VkDevice device,
                                            uint32_t queueFamilyIndex);
 

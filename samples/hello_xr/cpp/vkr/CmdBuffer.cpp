@@ -8,7 +8,7 @@
 // CmdBuffer - manage VkCommandBuffer state
 //
 CmdBuffer::~CmdBuffer() {
-  SetState(CmdBufferState::Undefined);
+  // SetState(CmdBufferState::Undefined);
   if (m_vkDevice != nullptr) {
     if (buf != VK_NULL_HANDLE) {
       vkFreeCommandBuffers(m_vkDevice, pool, 1, &buf);
@@ -26,26 +26,15 @@ CmdBuffer::~CmdBuffer() {
   m_vkDevice = nullptr;
 }
 
-std::string CmdBuffer::StateString(CmdBufferState s) {
-  switch (s) {
-#define MK_CASE(name)                                                          \
-  case CmdBufferState::name:                                                   \
-    return #name;
-    LIST_CMDBUFFER_STATES(MK_CASE)
-#undef MK_CASE
-  }
-  return "(Unknown)";
-}
-
-#define CHECK_CBSTATE(s)                                                       \
-  do                                                                           \
-    if (state != (s)) {                                                        \
-      Log::Write(Log::Level::Error,                                            \
-                 std::string("Expecting state " #s " from ") + __FUNCTION__ +  \
-                     ", in " + StateString(state));                            \
-      return false;                                                            \
-    }                                                                          \
-  while (0)
+// #define CHECK_CBSTATE(s)                                                       \
+//   do                                                                           \
+//     if (state != (s)) {                                                        \
+//       Log::Write(Log::Level::Error,                                            \
+//                  std::string("Expecting state " #s " from ") + __FUNCTION__ +  \
+//                      ", in " + StateString(state));                            \
+//       return false;                                                            \
+//     }                                                                          \
+//   while (0)
 
 std::shared_ptr<CmdBuffer> CmdBuffer::Create(VkDevice device,
                                              uint32_t queueFamilyIndex) {
@@ -101,32 +90,32 @@ std::shared_ptr<CmdBuffer> CmdBuffer::Create(VkDevice device,
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
-  ptr->SetState(CmdBufferState::Initialized);
+  // ptr->SetState(CmdBufferState::Initialized);
   return ptr;
 }
 
 bool CmdBuffer::Begin() {
-  CHECK_CBSTATE(CmdBufferState::Initialized);
+  // CHECK_CBSTATE(CmdBufferState::Initialized);
   VkCommandBufferBeginInfo cmdBeginInfo{
       VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   if (vkBeginCommandBuffer(buf, &cmdBeginInfo) != VK_SUCCESS) {
     throw std::runtime_error("vkBeginCommandBuffer");
   }
-  SetState(CmdBufferState::Recording);
+  // SetState(CmdBufferState::Recording);
   return true;
 }
 
 bool CmdBuffer::End() {
-  CHECK_CBSTATE(CmdBufferState::Recording);
+  // CHECK_CBSTATE(CmdBufferState::Recording);
   if (vkEndCommandBuffer(buf) != VK_SUCCESS) {
     throw std::runtime_error("vkEndCommandBuffer");
   }
-  SetState(CmdBufferState::Executable);
+  // SetState(CmdBufferState::Executable);
   return true;
 }
 
 bool CmdBuffer::Exec() {
-  CHECK_CBSTATE(CmdBufferState::Executable);
+  // CHECK_CBSTATE(CmdBufferState::Executable);
 
   VkSubmitInfo submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO};
   submitInfo.commandBufferCount = 1;
@@ -135,24 +124,24 @@ bool CmdBuffer::Exec() {
     throw std::runtime_error("vkQueueSubmit");
   }
 
-  SetState(CmdBufferState::Executing);
+  // SetState(CmdBufferState::Executing);
   return true;
 }
 
 bool CmdBuffer::Wait() {
   // Waiting on a not-in-flight command buffer is a no-op
-  if (state == CmdBufferState::Initialized) {
-    return true;
-  }
+  // if (state == CmdBufferState::Initialized) {
+  //   return true;
+  // }
 
-  CHECK_CBSTATE(CmdBufferState::Executing);
+  // CHECK_CBSTATE(CmdBufferState::Executing);
 
   const uint32_t timeoutNs = 1 * 1000 * 1000 * 1000;
   for (int i = 0; i < 5; ++i) {
     auto res = vkWaitForFences(m_vkDevice, 1, &execFence, VK_TRUE, timeoutNs);
     if (res == VK_SUCCESS) {
       // Buffer can be executed multiple times...
-      SetState(CmdBufferState::Executable);
+      // SetState(CmdBufferState::Executable);
       return true;
     }
     Log::Write(Log::Level::Info,
@@ -163,8 +152,8 @@ bool CmdBuffer::Wait() {
 }
 
 bool CmdBuffer::Reset() {
-  if (state != CmdBufferState::Initialized) {
-    CHECK_CBSTATE(CmdBufferState::Executable);
+  // if (state != CmdBufferState::Initialized) {
+    // CHECK_CBSTATE(CmdBufferState::Executable);
 
     if (vkResetFences(m_vkDevice, 1, &execFence) != VK_SUCCESS) {
       throw std::runtime_error("vkResetFences");
@@ -173,8 +162,8 @@ bool CmdBuffer::Reset() {
       throw std::runtime_error("vkResetCommandBuffer");
     }
 
-    SetState(CmdBufferState::Initialized);
-  }
+    // SetState(CmdBufferState::Initialized);
+  // }
 
   return true;
 }
