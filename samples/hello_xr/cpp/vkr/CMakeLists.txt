@@ -6,7 +6,6 @@ add_library(
   DepthBuffer.cpp
   RenderTarget.cpp
   Pipeline.cpp
-  RenderPass.cpp
   VertexBuffer.cpp
 )
 

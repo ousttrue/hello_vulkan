@@ -9,7 +9,7 @@
 #include "openxr_program/options.h"
 
 #include <common/logger.h>
-#include <vkr/vulkan_renderer.h>
+// #include 
 
 #include <vko/android_userdata.h>
 #include <vko/vko.h>

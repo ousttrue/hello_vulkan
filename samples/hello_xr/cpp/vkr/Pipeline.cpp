@@ -1,5 +1,4 @@
 #include "Pipeline.h"
-#include "RenderPass.h"
 #include "VertexBuffer.h"
 #include <common/logger.h>
 #include <common/fmt.h>
@@ -101,7 +100,7 @@ void Pipeline::Dynamic(VkDynamicState state) {
 std::shared_ptr<Pipeline>
 Pipeline::Create(VkDevice device, VkExtent2D size,
                  const std::shared_ptr<PipelineLayout> &layout,
-                 const std::shared_ptr<RenderPass> &rp,
+                 VkRenderPass renderPass,
                  const std::shared_ptr<ShaderProgram> &sp,
                  const std::shared_ptr<VertexBuffer> &vb) {
 
@@ -216,7 +215,7 @@ Pipeline::Create(VkDevice device, VkExtent2D size,
     pipeInfo.pDynamicState = &dynamicState;
   }
   pipeInfo.layout = layout->layout;
-  pipeInfo.renderPass = rp->pass;
+  pipeInfo.renderPass = renderPass;
   pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,
                                 nullptr, &ptr->pipe) != VK_SUCCESS) {

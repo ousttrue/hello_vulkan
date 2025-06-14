@@ -2,7 +2,7 @@
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
-#include <vkr/vulkan_renderer.h>
+#include "vkr/VulkanRenderer.h"
 
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
              const std::shared_ptr<OpenXrSession> &session,

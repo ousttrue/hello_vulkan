@@ -58,7 +58,7 @@ public:
   static std::shared_ptr<Pipeline>
   Create(VkDevice device, VkExtent2D size,
          const std::shared_ptr<PipelineLayout> &layout,
-         const std::shared_ptr<class RenderPass> &rp,
+         VkRenderPass renderPass,
          const std::shared_ptr<class ShaderProgram> &sp,
          const std::shared_ptr<struct VertexBuffer> &vb);
 

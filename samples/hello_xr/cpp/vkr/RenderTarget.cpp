@@ -1,8 +1,7 @@
 #include "RenderTarget.h"
-#include "RenderPass.h"
-#include <vko/vko.h>
 #include <array>
 #include <stdexcept>
+#include <vko/vko.h>
 
 //
 // VkImage + framebuffer wrapper
@@ -58,8 +57,8 @@ RenderTarget &RenderTarget::operator=(RenderTarget &&other) noexcept {
 
 std::shared_ptr<RenderTarget>
 RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
-                     VkExtent2D size,
-                     const std::shared_ptr<RenderPass> &renderPass) {
+                     VkExtent2D size, VkFormat colorFormat,
+                     VkFormat depthFormat, VkRenderPass renderPass) {
 
   auto ptr = std::shared_ptr<RenderTarget>(new RenderTarget);
 
@@ -77,7 +76,7 @@ RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     colorViewInfo.image = ptr->colorImage;
     colorViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    colorViewInfo.format = renderPass->colorFmt;
+    colorViewInfo.format = colorFormat;
     colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
     colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
     colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -105,7 +104,7 @@ RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
         VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
     depthViewInfo.image = ptr->depthImage;
     depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    depthViewInfo.format = renderPass->depthFmt;
+    depthViewInfo.format = depthFormat;
     depthViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
     depthViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
     depthViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -128,7 +127,7 @@ RenderTarget::Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
   }
 
   VkFramebufferCreateInfo fbInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-  fbInfo.renderPass = renderPass->pass;
+  fbInfo.renderPass = renderPass;
   fbInfo.attachmentCount = attachmentCount;
   fbInfo.pAttachments = attachments.data();
   fbInfo.width = size.width;

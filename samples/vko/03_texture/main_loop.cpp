@@ -128,7 +128,7 @@ void main_loop(const std::function<bool()> &runLoop,
                       },
                   });
 
-  auto renderPass = vko::createSimpleRenderPass(
+  auto renderPass = vko::createColorRenderPass(
       device, surface.chooseSwapSurfaceFormat().format);
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -221,9 +221,10 @@ void main_loop(const std::function<bool()> &runLoop,
         backbuffers[acquired.imageIndex] = backbuffer;
 
         {
-          vko::CommandBufferRecording recording(cmd, pipeline.renderPass,
-                                                backbuffer->framebuffer, swapchain.createInfo.imageExtent, clearColor,
-                                                pipelineLayout, descriptorSet);
+          vko::CommandBufferRecording recording(
+              cmd, pipeline.renderPass, backbuffer->framebuffer,
+              swapchain.createInfo.imageExtent, clearColor, pipelineLayout,
+              descriptorSet);
           recording.drawIndexed(pipeline.graphicsPipeline, scene.indexDrawCount,
                                 scene.vertexBuffer->buffer,
                                 scene.indexBuffer->buffer);

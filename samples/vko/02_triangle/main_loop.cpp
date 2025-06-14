@@ -34,8 +34,8 @@ void main_loop(const std::function<bool()> &runLoop,
   VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
                                    &pipelineLayout));
 
-  auto renderPass =
-      createSimpleRenderPass(device, surface.chooseSwapSurfaceFormat().format);
+  auto renderPass = vko::createColorRenderPass(
+      device, surface.chooseSwapSurfaceFormat().format);
 
   auto pipeline = vko::PipelineBuilder().create(
       device, renderPass, pipelineLayout,

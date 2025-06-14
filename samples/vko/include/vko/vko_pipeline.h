@@ -6,7 +6,7 @@
 
 namespace vko {
 
-inline VkRenderPass createSimpleRenderPass(VkDevice device, VkFormat format) {
+inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
   VkAttachmentDescription colorAttachments[] = {
       {
           .format = format,
@@ -64,6 +64,76 @@ inline VkRenderPass createSimpleRenderPass(VkDevice device, VkFormat format) {
       VK_SUCCESS) {
     return VK_NULL_HANDLE;
   }
+  return renderPass;
+}
+
+inline VkRenderPass createColorDepthRenderPass(VkDevice device,
+                                               VkFormat colorFormat,
+                                               VkFormat depthFormat) {
+
+  VkAttachmentDescription attachments[] = {
+      {
+          .format = colorFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      },
+      {
+          .format = depthFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+      },
+  };
+
+  VkAttachmentReference colorRef = {0,
+                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthRef = {
+      1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpasses[] = {
+      {
+          .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+          .colorAttachmentCount = 1,
+          .pColorAttachments = &colorRef,
+          .pDepthStencilAttachment = &depthRef,
+      },
+  };
+
+  VkRenderPassCreateInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      //
+      .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
+      .pAttachments = attachments,
+      //
+      .subpassCount = static_cast<uint32_t>(std::size(subpasses)),
+      .pSubpasses = subpasses,
+      //
+      .dependencyCount = 0, // static_cast<uint32_t>(std::size(dependencies)),
+      .pDependencies = nullptr, // dependencies,
+  };
+
+  VkRenderPass renderPass;
+  if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
+      VK_SUCCESS) {
+    return VK_NULL_HANDLE;
+  }
+
+  //   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
+  //                                  (uint64_t)ptr->pass,
+  //                                  "hello_xr render pass") != VK_SUCCESS) {
+  //     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+  //   }
+
   return renderPass;
 }
 

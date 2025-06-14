@@ -20,7 +20,8 @@ public:
   RenderTarget &operator=(RenderTarget &&other) noexcept;
   static std::shared_ptr<RenderTarget>
   Create(VkDevice device, VkImage aColorImage, VkImage aDepthImage,
-         VkExtent2D size, const std::shared_ptr<class RenderPass> &renderPass);
+         VkExtent2D size, VkFormat colorFormat, VkFormat depthFormat,
+         VkRenderPass renderPass);
 
   RenderTarget(const RenderTarget &) = delete;
   RenderTarget &operator=(const RenderTarget &) = delete;

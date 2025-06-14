@@ -1,17 +1,17 @@
-#include <vkr/vulkan_renderer.h>
-
+#include "VulkanRenderer.h"
 #include "CmdBuffer.h"
 #include "DepthBuffer.h"
 #include "MemoryAllocator.h"
 #include "Pipeline.h"
-#include "RenderPass.h"
 #include "RenderTarget.h"
 #include "VertexBuffer.h"
-#include <vko/vko.h>
+#include "vko/vko_pipeline.h"
 #include <common/fmt.h>
 #include <common/logger.h>
 #include <shaderc/shaderc.hpp>
+#include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
+
 // Compile a shader to a SPIR-V binary.
 static std::vector<uint32_t> CompileGlslShader(const std::string &name,
                                                shaderc_shader_kind kind,
@@ -88,15 +88,11 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
                                VkFormat format,
                                VkSampleCountFlagBits sampleCount)
     : m_physicalDevice(physicalDevice), m_device(device),
-      m_queueFamilyIndex(queueFamilyIndex) {
+      m_queueFamilyIndex(queueFamilyIndex), m_size(size), m_colorFormat(format),
+      m_depthFormat(VK_FORMAT_D32_SFLOAT) {
   vkGetDeviceQueue(m_device, m_queueFamilyIndex, 0, &m_queue);
 
   m_memAllocator = MemoryAllocator::Create(m_physicalDevice, m_device);
-
-  m_size = size;
-  VkFormat colorFormat = format;
-  VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
-  // XXX handle swapchainCreateInfo.sampleCount
 
   auto vertexSPIRV = CompileGlslShader(
       "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
@@ -151,10 +147,19 @@ VulkanRenderer::VulkanRenderer(VkPhysicalDevice physicalDevice, VkDevice device,
       std::size(c_cubeIndices));
 
   m_depthBuffer = DepthBuffer::Create(m_device, m_memAllocator, size,
-                                      depthFormat, sampleCount);
-  m_rp = RenderPass::Create(m_device, colorFormat, depthFormat);
-  m_pipe = Pipeline::Create(m_device, m_size, m_pipelineLayout, m_rp,
+                                      m_depthFormat, sampleCount);
+
+  m_renderPass =
+      vko::createColorDepthRenderPass(m_device, m_colorFormat, m_depthFormat);
+  // RenderPass::Create(m_device, colorFormat, depthFormat);
+  m_pipe = Pipeline::Create(m_device, m_size, m_pipelineLayout, m_renderPass,
                             m_shaderProgram, m_drawBuffer);
+}
+
+VulkanRenderer::~VulkanRenderer() {
+  if (m_renderPass != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(m_device, m_renderPass, nullptr);
+  }
 }
 
 void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
@@ -185,11 +190,12 @@ void VulkanRenderer::RenderView(VkCommandBuffer cmd, VkImage image,
   // BindRenderTarget(image, &renderPassBeginInfo);
   auto found = m_renderTarget.find(image);
   if (found == m_renderTarget.end()) {
-    auto rt = RenderTarget::Create(m_device, image, m_depthBuffer->depthImage,
-                                   m_size, m_rp);
+    auto rt =
+        RenderTarget::Create(m_device, image, m_depthBuffer->depthImage, m_size,
+                             m_colorFormat, m_depthFormat, m_renderPass);
     found = m_renderTarget.insert({image, rt}).first;
   }
-  renderPassBeginInfo.renderPass = m_rp->pass;
+  renderPassBeginInfo.renderPass = m_renderPass;
   renderPassBeginInfo.framebuffer = found->second->fb;
   renderPassBeginInfo.renderArea.offset = {0, 0};
   renderPassBeginInfo.renderArea.extent = m_size;
