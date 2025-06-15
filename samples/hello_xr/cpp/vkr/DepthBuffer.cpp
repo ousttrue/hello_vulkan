@@ -1,8 +1,8 @@
 #include "DepthBuffer.h"
 // #include "CmdBuffer.h"
 #include "MemoryAllocator.h"
-#include <vko/vko.h>
 #include <stdexcept>
+#include <vko/vko.h>
 #include <vulkan/vulkan_core.h>
 
 DepthBuffer::~DepthBuffer() {
@@ -41,9 +41,10 @@ DepthBuffer::~DepthBuffer() {
 //   return *this;
 // }
 
-std::shared_ptr<DepthBuffer> DepthBuffer::Create(
-    VkDevice device, const std::shared_ptr<MemoryAllocator> &memAllocator,
-    VkExtent2D size, VkFormat depthFormat, VkSampleCountFlagBits sampleCount) {
+std::shared_ptr<DepthBuffer>
+DepthBuffer::Create(VkDevice device, VkPhysicalDevice physicalDevice,
+                    VkExtent2D size, VkFormat depthFormat,
+                    VkSampleCountFlagBits sampleCount) {
   auto ptr = std::shared_ptr<DepthBuffer>(new DepthBuffer());
   ptr->m_vkDevice = device;
 
@@ -76,10 +77,9 @@ std::shared_ptr<DepthBuffer> DepthBuffer::Create(
     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   }
 
-  VkMemoryRequirements memRequirements;
-  vkGetImageMemoryRequirements(device, ptr->depthImage, &memRequirements);
-  memAllocator->Allocate(memRequirements, &ptr->depthMemory,
-                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  auto memAllocator = MemoryAllocator::Create(physicalDevice, device);
+  ptr->depthMemory = memAllocator->Allocate(
+      ptr->depthImage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   if (SetDebugUtilsObjectNameEXT(
           device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
           "hello_xr fallback depth image memory") != VK_SUCCESS) {

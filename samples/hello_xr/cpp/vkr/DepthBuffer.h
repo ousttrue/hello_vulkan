@@ -16,10 +16,8 @@ public:
   // DepthBuffer(DepthBuffer &&other) noexcept;
   // DepthBuffer &operator=(DepthBuffer &&other) noexcept;
   static std::shared_ptr<DepthBuffer>
-  Create(VkDevice device,
-         const std::shared_ptr<class MemoryAllocator> &memAllocator,
-         VkExtent2D size, VkFormat depthFormat,
-         VkSampleCountFlagBits sampleCount);
+  Create(VkDevice device, VkPhysicalDevice physicalDevice, VkExtent2D size,
+         VkFormat depthFormat, VkSampleCountFlagBits sampleCount);
 
   void TransitionLayout(VkCommandBuffer cmd, VkImageLayout newLayout);
   DepthBuffer(const DepthBuffer &) = delete;

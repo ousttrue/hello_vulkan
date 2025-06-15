@@ -28,15 +28,15 @@ VertexBuffer::~VertexBuffer() {
 }
 
 std::shared_ptr<VertexBuffer>
-VertexBuffer::Create(VkDevice device,
-                     const std::shared_ptr<MemoryAllocator> &memAllocator,
+VertexBuffer::Create(VkDevice device, VkPhysicalDevice physicalDevice,
                      const std::vector<VkVertexInputAttributeDescription> &attr,
                      const Vertex *vertices, uint32_t vtxCount,
                      const uint16_t *indices, uint32_t idxCount) {
   auto ptr = std::shared_ptr<VertexBuffer>(new VertexBuffer);
   ptr->m_vkDevice = device;
-  ptr->m_memAllocator = memAllocator;
   ptr->attrDesc = attr;
+
+  auto memAllocator = MemoryAllocator::Create(physicalDevice, device);
 
   VkBufferCreateInfo bufInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
   bufInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -45,7 +45,7 @@ VertexBuffer::Create(VkDevice device,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateBuffer");
   }
-  ptr->AllocateBufferMemory(ptr->idxBuf, &ptr->idxMem);
+  ptr->idxMem = memAllocator->AllocateBufferMemory(ptr->idxBuf);
   if (vkBindBufferMemory(ptr->m_vkDevice, ptr->idxBuf, ptr->idxMem, 0) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkBindBufferMemory");
@@ -57,7 +57,7 @@ VertexBuffer::Create(VkDevice device,
       VK_SUCCESS) {
     throw std::runtime_error("vkCreateBuffer");
   }
-  ptr->AllocateBufferMemory(ptr->vtxBuf, &ptr->vtxMem);
+  ptr->vtxMem = memAllocator->AllocateBufferMemory(ptr->vtxBuf);
   if (vkBindBufferMemory(ptr->m_vkDevice, ptr->vtxBuf, ptr->vtxMem, 0) !=
       VK_SUCCESS) {
     throw std::runtime_error("vkBindBufferMemory");
@@ -95,11 +95,4 @@ VertexBuffer::Create(VkDevice device,
   }
 
   return ptr;
-}
-
-void VertexBuffer::AllocateBufferMemory(VkBuffer buf,
-                                        VkDeviceMemory *mem) const {
-  VkMemoryRequirements memReq = {};
-  vkGetBufferMemoryRequirements(m_vkDevice, buf, &memReq);
-  m_memAllocator->Allocate(memReq, mem);
 }

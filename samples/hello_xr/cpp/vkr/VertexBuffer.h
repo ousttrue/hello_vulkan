@@ -49,10 +49,7 @@ constexpr unsigned short c_cubeIndices[] = {
 
 // VertexBuffer base class
 struct VertexBuffer {
-  std::shared_ptr<class MemoryAllocator> m_memAllocator;
-
   VkDevice m_vkDevice{VK_NULL_HANDLE};
-  void AllocateBufferMemory(VkBuffer buf, VkDeviceMemory *mem) const;
 
   VkBuffer idxBuf{VK_NULL_HANDLE};
   VkDeviceMemory idxMem{VK_NULL_HANDLE};
@@ -73,8 +70,7 @@ struct VertexBuffer {
   VertexBuffer &operator=(VertexBuffer &&) = delete;
 
   static std::shared_ptr<VertexBuffer>
-  Create(VkDevice device,
-         const std::shared_ptr<class MemoryAllocator> &memAllocator,
+  Create(VkDevice device, VkPhysicalDevice physicalDevice,
          const std::vector<VkVertexInputAttributeDescription> &attr,
          const Vertex *vertices, uint32_t vertexCount, const uint16_t *indices,
          uint32_t indexCount);

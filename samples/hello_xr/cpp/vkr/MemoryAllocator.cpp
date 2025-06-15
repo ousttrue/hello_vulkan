@@ -11,9 +11,9 @@ MemoryAllocator::Create(VkPhysicalDevice physicalDevice, VkDevice device) {
   return ptr;
 }
 
-void MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,
-                               VkDeviceMemory *mem, VkFlags flags,
-                               const void *pNext) const {
+VkDeviceMemory MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,
+                                         VkFlags flags,
+                                         const void *pNext) const {
   // Search memtypes to find first index with those properties
   for (uint32_t i = 0; i < m_memProps.memoryTypeCount; ++i) {
     if ((memReqs.memoryTypeBits & (1 << i)) != 0u) {
@@ -25,13 +25,26 @@ void MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,
             .allocationSize = memReqs.size,
             .memoryTypeIndex = i,
         };
-        if (vkAllocateMemory(m_vkDevice, &memAlloc, nullptr, mem) !=
+        VkDeviceMemory mem;
+        if (vkAllocateMemory(m_vkDevice, &memAlloc, nullptr, &mem) !=
             VK_SUCCESS) {
           throw std::runtime_error("vkAllocateMemory");
         }
-        return;
+        return mem;
       }
     }
   }
   throw std::runtime_error("Memory format not supported");
+}
+
+VkDeviceMemory MemoryAllocator::Allocate(VkImage image, VkFlags flags) const {
+  VkMemoryRequirements memRequirements;
+  vkGetImageMemoryRequirements(m_vkDevice, image, &memRequirements);
+  return Allocate(memRequirements, flags);
+}
+
+VkDeviceMemory MemoryAllocator::AllocateBufferMemory(VkBuffer buf) const {
+  VkMemoryRequirements memReq = {};
+  vkGetBufferMemoryRequirements(m_vkDevice, buf, &memReq);
+  return Allocate(memReq);
 }

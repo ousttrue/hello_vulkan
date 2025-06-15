@@ -4,7 +4,6 @@
 #include "openxr_program/options.h"
 #include "vko/vko.h"
 #include "vkr/DepthBuffer.h"
-#include "vkr/MemoryAllocator.h"
 #include "vkr/Pipeline.h"
 #include "vkr/RenderTarget.h"
 #include "vkr/VertexBuffer.h"
@@ -13,14 +12,12 @@
 struct ViewRenderer {
   VkDevice device;
   VkQueue queue;
-  // std::shared_ptr<VulkanRenderer> vulkanRenderer;
   vko::Fence execFence;
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
   std::shared_ptr<Pipeline> m_pipeline;
 
-  // std::shared_ptr<class MemoryAllocator> m_memAllocator;
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
   std::shared_ptr<class DepthBuffer> m_depthBuffer;
   std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
@@ -32,23 +29,16 @@ struct ViewRenderer {
       : device(_device), execFence(_device, true) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
-    auto m_memAllocator = MemoryAllocator::Create(physicalDevice, this->device);
-
     static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
     m_drawBuffer = VertexBuffer::Create(
-        this->device, m_memAllocator,
+        this->device, physicalDevice,
         {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
          {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
         c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
         std::size(c_cubeIndices));
 
-    m_depthBuffer = DepthBuffer::Create(this->device, m_memAllocator, extent,
+    m_depthBuffer = DepthBuffer::Create(this->device, physicalDevice, extent,
                                         depthFormat, sampleCountFlagBits);
-
-    // VkPipeline... etc
-    // this->vulkanRenderer = std::make_shared<VulkanRenderer>(
-    //     physicalDevice, device, queueFamilyIndex, extent, colorFormat,
-    //     sampleCountFlagBits);
 
     m_pipeline = Pipeline::Create(this->device, extent, colorFormat,
                                   depthFormat, this->m_drawBuffer);
@@ -103,10 +93,6 @@ struct ViewRenderer {
     };
     VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
-    // this->vulkanRenderer->RenderView(
-    //     this->commandBuffer, this->m_pipeline->m_renderPass,
-    //     this->m_pipeline->m_pipelineLayout, this->m_pipeline->m_pipeline,
-    //     image, size, colorFormat, depthFormat, clearColor, matrices);
     // Ensure depth is in the right layout
     m_depthBuffer->TransitionLayout(
         this->commandBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
@@ -125,9 +111,6 @@ struct ViewRenderer {
         .pClearValues = clearValues.data(),
     };
 
-    // void VulkanRenderer::BindRenderTarget(
-    //     VkImage image, VkRenderPassBeginInfo *renderPassBeginInfo) {
-    // }
     // BindRenderTarget(image, &renderPassBeginInfo);
     auto found = m_renderTarget.find(image);
     if (found == m_renderTarget.end()) {
@@ -156,9 +139,9 @@ struct ViewRenderer {
 
     // Render each cube
     for (const Mat4 &mat : matrices) {
-      vkCmdPushConstants(
-          this->commandBuffer, this->m_pipeline->m_pipelineLayout,
-          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat), &mat.m[0]);
+      vkCmdPushConstants(this->commandBuffer,
+                         this->m_pipeline->m_pipelineLayout,
+                         VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat), &mat.m[0]);
 
       // Draw the cube.
       vkCmdDrawIndexed(this->commandBuffer, m_drawBuffer->count.idx, 1, 0, 0,
