@@ -488,6 +488,52 @@ struct DeviceMemory : not_copyable {
   }
   template <typename T> void assign(const T &src) { assign(&src, sizeof(src)); }
 };
+// std::shared_ptr<MemoryAllocator>
+// MemoryAllocator::Create(VkPhysicalDevice physicalDevice, VkDevice device) {
+//   auto ptr = std::shared_ptr<MemoryAllocator>(new MemoryAllocator);
+//   ptr->m_vkDevice = device;
+//   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &ptr->m_memProps);
+//   return ptr;
+// }
+//
+// VkDeviceMemory MemoryAllocator::Allocate(VkMemoryRequirements const &memReqs,
+//                                          VkFlags flags,
+//                                          const void *pNext) const {
+//   // Search memtypes to find first index with those properties
+//   for (uint32_t i = 0; i < m_memProps.memoryTypeCount; ++i) {
+//     if ((memReqs.memoryTypeBits & (1 << i)) != 0u) {
+//       // Type is available, does it match user properties?
+//       if ((m_memProps.memoryTypes[i].propertyFlags & flags) == flags) {
+//         VkMemoryAllocateInfo memAlloc{
+//             .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+//             .pNext = pNext,
+//             .allocationSize = memReqs.size,
+//             .memoryTypeIndex = i,
+//         };
+//         VkDeviceMemory mem;
+//         if (vkAllocateMemory(m_vkDevice, &memAlloc, nullptr, &mem) !=
+//             VK_SUCCESS) {
+//           throw std::runtime_error("vkAllocateMemory");
+//         }
+//         return mem;
+//       }
+//     }
+//   }
+//   throw std::runtime_error("Memory format not supported");
+// }
+//
+// VkDeviceMemory MemoryAllocator::Allocate(VkImage image, VkFlags flags) const
+// {
+//   VkMemoryRequirements memRequirements;
+//   vkGetImageMemoryRequirements(m_vkDevice, image, &memRequirements);
+//   return Allocate(memRequirements, flags);
+// }
+//
+// VkDeviceMemory MemoryAllocator::AllocateBufferMemory(VkBuffer buf) const {
+//   VkMemoryRequirements memReq = {};
+//   vkGetBufferMemoryRequirements(m_vkDevice, buf, &memReq);
+//   return Allocate(memReq);
+// }
 
 struct Buffer : not_copyable {
   VkDevice device;
@@ -530,6 +576,28 @@ struct IndexedMesh {
   std::shared_ptr<vko::Buffer> vertexBuffer;
   std::vector<VkVertexInputBindingDescription> inputBindingDescriptions;
   std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+  // describes position
+  // {
+  //     .location = 0,
+  //     .binding = 0,
+  //     .format = VK_FORMAT_R32G32_SFLOAT,
+  //     .offset = offsetof(Vertex, pos),
+  // },
+  // // describes color
+  // {
+  //     .location = 1,
+  //     .binding = 0,
+  //     .format = VK_FORMAT_R32G32B32_SFLOAT,
+  //     .offset = offsetof(Vertex, color),
+  // },
+  // // uv
+  // {
+  //     .location = 2,
+  //     .binding = 0,
+  //     .format = VK_FORMAT_R32G32_SFLOAT,
+  //     .offset = offsetof(Vertex, texCoord),
+  // },
+
   std::shared_ptr<vko::Buffer> indexBuffer;
   uint32_t indexDrawCount = 0;
 };
@@ -784,5 +852,23 @@ struct CommandBufferRecording : public not_copyable {
     vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
   }
 };
+
+inline void copyBytesToBufferCommand(VkPhysicalDevice physicalDevice,
+                                     VkDevice device,
+                                     uint32_t graphicsQueueFamilyIndex,
+                                     const void *pSrc, uint32_t copySize,
+                                     VkBuffer dst) {
+  auto stagingBuffer = std::make_shared<vko::Buffer>(
+      physicalDevice, device, copySize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  stagingBuffer->memory->assign(pSrc, copySize);
+  vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
+  vko::executeCommandSync(device, commandPool.queue, commandPool,
+                          [stagingBuffer, dst, copySize](auto commandBuffer) {
+                            stagingBuffer->copyCommand(commandBuffer, dst,
+                                                       copySize);
+                          });
+}
 
 } // namespace vko
