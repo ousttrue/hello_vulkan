@@ -33,7 +33,7 @@ static void ShowHelp() {
  * android_native_app_glue.  It runs in its own thread, with its own
  * event loop for receiving input events and doing other things.
  */
-void android_main(struct android_app *app) {
+void _android_main(struct android_app *app) {
 #ifdef NDEBUG
   __android_log_print(ANDROID_LOG_INFO, APP_NAME,
                       "#### [release][android_main] ####");
@@ -181,4 +181,14 @@ void android_main(struct android_app *app) {
       vulkan.Device);
 
   app->activity->vm->DetachCurrentThread();
+}
+
+void android_main(struct android_app *app) {
+  try {
+    _android_main(app);
+  } catch (const std::exception &ex) {
+    Log::Write(Log::Level::Error, ex.what());
+  } catch (...) {
+    Log::Write(Log::Level::Error, "Unknown Error");
+  }
 }

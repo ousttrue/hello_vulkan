@@ -427,8 +427,11 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
   }
 
   VkPhysicalDeviceFeatures features{
-      // features.samplerAnisotropy = VK_TRUE;
+  // features.samplerAnisotropy = VK_TRUE;
+#ifndef ANDROID
+      // quest3 not work
       .shaderStorageImageMultisample = VK_TRUE,
+#endif
   };
   VkDeviceCreateInfo deviceInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,

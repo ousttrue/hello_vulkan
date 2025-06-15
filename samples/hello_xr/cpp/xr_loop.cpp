@@ -1,18 +1,21 @@
 #include "xr_loop.h"
-#include "glsl_to_spv.h"
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
-#include "vko/vko_pipeline.h"
 #include <map>
+#include <vko/vko_pipeline.h>
+#include <vko/vko_shaderc.h>
 
-constexpr char VertexShaderGlsl[] = {
+char VertexShaderGlsl[] = {
 #embed "shader.vert"
-};
+    , 0};
 
-constexpr char FragmentShaderGlsl[] = {
+char FragmentShaderGlsl[] = {
 #embed "shader.frag"
-};
+    , 0};
+
+static_assert(sizeof(VertexShaderGlsl), "VertexShaderGlsl");
+static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
 
 constexpr Vec3 Red{1, 0, 0};
 constexpr Vec3 DarkRed{0.25f, 0, 0};
@@ -88,7 +91,6 @@ struct ViewRenderer {
         vko::createPipelineLayoutWithConstantSize(device, sizeof(float) * 16);
     this->renderPass =
         vko::createColorDepthRenderPass(device, colorFormat, depthFormat);
-
     VkPipelineDynamicStateCreateInfo dynamicState{
         VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
     dynamicState.dynamicStateCount = (uint32_t)this->dynamicStateEnables.size();
@@ -180,11 +182,13 @@ struct ViewRenderer {
         VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
     ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    auto vertexSPIRV = glsl_vs_to_spv(VertexShaderGlsl);
+    auto vertexSPIRV = vko::glsl_vs_to_spv(VertexShaderGlsl);
+    assert(vertexSPIRV.size());
     auto vs =
         vko::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
 
-    auto fragmentSPIRV = glsl_fs_to_spv(FragmentShaderGlsl);
+    auto fragmentSPIRV = vko::glsl_fs_to_spv(FragmentShaderGlsl);
+    assert(fragmentSPIRV.size());
     auto fs =
         vko::ShaderModule::createFragmentShader(device, fragmentSPIRV, "main");
 
