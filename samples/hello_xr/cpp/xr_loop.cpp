@@ -62,13 +62,12 @@ struct ViewRenderer {
 
   VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   std::vector<VkDynamicState> dynamicStateEnables;
-  VkDevice m_vkDevice = VK_NULL_HANDLE;
-  VkRenderPass m_renderPass = VK_NULL_HANDLE;
-  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-  VkPipeline m_pipeline = VK_NULL_HANDLE;
+  VkRenderPass renderPass = VK_NULL_HANDLE;
+  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline pipeline = VK_NULL_HANDLE;
 
-  std::shared_ptr<vko::DepthImage> m_depthBuffer;
-  std::map<VkImage, std::shared_ptr<vko::SwapchainFramebuffer>> m_renderTarget;
+  std::shared_ptr<vko::DepthImage> depthBuffer;
+  std::map<VkImage, std::shared_ptr<vko::SwapchainFramebuffer>> framebufferMap;
 
   ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
                uint32_t queueFamilyIndex, VkExtent2D extent,
@@ -81,16 +80,14 @@ struct ViewRenderer {
       : device(_device), execFence(_device, true) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
-    m_depthBuffer = std::make_shared<vko::DepthImage>(
+    this->depthBuffer = std::make_shared<vko::DepthImage>(
         this->device, physicalDevice, extent, depthFormat, sampleCountFlagBits,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    this->m_pipelineLayout =
+    this->pipelineLayout =
         vko::createPipelineLayoutWithConstantSize(device, sizeof(float) * 16);
-    this->m_renderPass =
+    this->renderPass =
         vko::createColorDepthRenderPass(device, colorFormat, depthFormat);
-
-    this->m_vkDevice = device;
 
     VkPipelineDynamicStateCreateInfo dynamicState{
         VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
@@ -208,16 +205,15 @@ struct ViewRenderer {
         .pMultisampleState = &ms,
         .pDepthStencilState = &ds,
         .pColorBlendState = &cb,
-        .layout = this->m_pipelineLayout,
-        .renderPass = this->m_renderPass,
+        .layout = this->pipelineLayout,
+        .renderPass = this->renderPass,
         .subpass = 0,
     };
     if (dynamicState.dynamicStateCount > 0) {
       pipeInfo.pDynamicState = &dynamicState;
     }
-    if (vkCreateGraphicsPipelines(this->m_vkDevice, VK_NULL_HANDLE, 1,
-                                  &pipeInfo, nullptr,
-                                  &this->m_pipeline) != VK_SUCCESS) {
+    if (vkCreateGraphicsPipelines(this->device, VK_NULL_HANDLE, 1, &pipeInfo,
+                                  nullptr, &this->pipeline) != VK_SUCCESS) {
       throw std::runtime_error("vkCreateGraphicsPipelines");
     }
 
@@ -254,14 +250,14 @@ struct ViewRenderer {
                          &this->commandBuffer);
     vkDestroyCommandPool(this->device, this->commandPool, nullptr);
 
-    if (m_pipeline != VK_NULL_HANDLE) {
-      vkDestroyPipeline(m_vkDevice, m_pipeline, nullptr);
+    if (this->pipeline != VK_NULL_HANDLE) {
+      vkDestroyPipeline(this->device, this->pipeline, nullptr);
     }
-    if (m_pipelineLayout != VK_NULL_HANDLE) {
-      vkDestroyPipelineLayout(m_vkDevice, m_pipelineLayout, nullptr);
+    if (this->pipelineLayout != VK_NULL_HANDLE) {
+      vkDestroyPipelineLayout(this->device, this->pipelineLayout, nullptr);
     }
-    if (m_renderPass != VK_NULL_HANDLE) {
-      vkDestroyRenderPass(m_vkDevice, m_renderPass, nullptr);
+    if (this->renderPass != VK_NULL_HANDLE) {
+      vkDestroyRenderPass(this->device, this->renderPass, nullptr);
     }
   }
 
@@ -281,7 +277,7 @@ struct ViewRenderer {
     VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
     // Ensure depth is in the right layout
-    m_depthBuffer->TransitionLayout(
+    this->depthBuffer->TransitionLayout(
         this->commandBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // Bind and clear eye render target
@@ -298,15 +294,14 @@ struct ViewRenderer {
         .pClearValues = clearValues.data(),
     };
 
-    // BindRenderTarget(image, &renderPassBeginInfo);
-    auto found = m_renderTarget.find(image);
-    if (found == m_renderTarget.end()) {
+    auto found = this->framebufferMap.find(image);
+    if (found == this->framebufferMap.end()) {
       auto rt = std::make_shared<vko::SwapchainFramebuffer>(
-          this->device, image, size, colorFormat, m_renderPass,
-          m_depthBuffer->image, depthFormat);
-      found = m_renderTarget.insert({image, rt}).first;
+          this->device, image, size, colorFormat, this->renderPass,
+          this->depthBuffer->image, depthFormat);
+      found = this->framebufferMap.insert({image, rt}).first;
     }
-    renderPassBeginInfo.renderPass = m_renderPass;
+    renderPassBeginInfo.renderPass = this->renderPass;
     renderPassBeginInfo.framebuffer = found->second->framebuffer;
     renderPassBeginInfo.renderArea.offset = {0, 0};
     renderPassBeginInfo.renderArea.extent = size;
@@ -315,7 +310,7 @@ struct ViewRenderer {
                          VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      this->m_pipeline);
+                      this->pipeline);
 
     // Bind index and vertex buffers
     vkCmdBindIndexBuffer(this->commandBuffer, indices, 0, VK_INDEX_TYPE_UINT16);
@@ -324,7 +319,7 @@ struct ViewRenderer {
 
     // Render each cube
     for (const Mat4 &mat : matrices) {
-      vkCmdPushConstants(this->commandBuffer, this->m_pipelineLayout,
+      vkCmdPushConstants(this->commandBuffer, this->pipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat), &mat.m[0]);
 
       // Draw the cube.
