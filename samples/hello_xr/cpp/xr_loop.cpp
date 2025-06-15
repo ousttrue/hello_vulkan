@@ -228,7 +228,7 @@ struct ViewRenderer {
     };
     vko::VKO_CHECK(vkCreateCommandPool(this->device, &cmdPoolInfo, nullptr,
                                   &this->commandPool));
-    if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_POOL,
+    if (vko::SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_POOL,
                                    (uint64_t)this->commandPool,
                                    "hello_xr command pool") != VK_SUCCESS) {
       throw std::runtime_error("SetDebugUtilsObjectNameEXT");
@@ -242,7 +242,7 @@ struct ViewRenderer {
     };
     vko::VKO_CHECK(
         vkAllocateCommandBuffers(this->device, &cmd, &this->commandBuffer));
-    if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
+    if (vko::SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
                                    (uint64_t)this->commandBuffer,
                                    "hello_xr command buffer") != VK_SUCCESS) {
       throw std::runtime_error("SetDebugUtilsObjectNameEXT");

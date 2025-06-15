@@ -18,6 +18,12 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
+#ifdef ANDROID
+#include <android/log.h>
+#else
+#include <stdarg.h>
+#endif
+
 #define CHK_STRINGIFY(x) #x
 #define TOSTRING(x) CHK_STRINGIFY(x)
 #define FILE_AND_LINE __FILE__ ":" TOSTRING(__LINE__)
@@ -36,11 +42,7 @@
     }                                                                          \
   }
 
-#ifdef ANDROID
-#include <android/log.h>
-#else
-#include <stdarg.h>
-#endif
+namespace vko {
 
 inline PFN_vkSetDebugUtilsObjectNameEXT
 g_vkSetDebugUtilsObjectNameEXT(VkInstance instance = VK_NULL_HANDLE) {
@@ -65,8 +67,6 @@ inline VkResult SetDebugUtilsObjectNameEXT(VkDevice device,
   };
   return g_vkSetDebugUtilsObjectNameEXT()(device, &nameInfo);
 }
-
-namespace vko {
 
 inline std::string fmt(const char *fmt, ...) {
   va_list vl;
