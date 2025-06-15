@@ -11,7 +11,7 @@ void main_loop(const std::function<bool()> &runLoop,
                        surface.chooseSwapSurfaceFormat().format);
 
   vko::Swapchain swapchain(device);
-  VKO_CHECK(swapchain.create(
+  vko::VKO_CHECK(swapchain.create(
       physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex));
@@ -71,7 +71,7 @@ void main_loop(const std::function<bool()> &runLoop,
           .signalSemaphoreCount = 1,
           .pSignalSemaphores = &flight.submitSemaphore,
       };
-      VKO_CHECK(
+      vko::VKO_CHECK(
           vkQueueSubmit(device.graphicsQueue, 1, &info, flight.submitFence));
 
       VkPresentInfoKHR present = {
@@ -83,7 +83,7 @@ void main_loop(const std::function<bool()> &runLoop,
           .pImageIndices = &acquired.imageIndex,
           .pResults = nullptr,
       };
-      VKO_CHECK(vkQueuePresentKHR(device.presentQueue, &present));
+      vko::VKO_CHECK(vkQueuePresentKHR(device.presentQueue, &present));
 
     } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
                acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {

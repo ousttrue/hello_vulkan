@@ -8,26 +8,33 @@
 #include <chrono>
 #include <climits>
 #include <list>
+#include <memory>
 #include <optional>
 #include <set>
+#include <stdarg.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
 
-/// @brief Helper macro to test the result of Vulkan calls which can return an
-/// error.
-#ifndef VKO_CHECK
-#define VKO_CHECK(x)                                                           \
-  do {                                                                         \
-    VkResult err = x;                                                          \
-    if (err) {                                                                 \
-      vko::Logger::Error("Detected Vulkan error %d at %s:%d.\n", int(err),     \
-                         __FILE__, __LINE__);                                  \
-      abort();                                                                 \
+#define CHK_STRINGIFY(x) #x
+#define TOSTRING(x) CHK_STRINGIFY(x)
+#define FILE_AND_LINE __FILE__ ":" TOSTRING(__LINE__)
+
+#define THROW(msg) Throw(msg, nullptr, FILE_AND_LINE);
+#define CHECK(exp)                                                             \
+  {                                                                            \
+    if (!(exp)) {                                                              \
+      Throw("Check failed", #exp, FILE_AND_LINE);                              \
     }                                                                          \
-  } while (0)
-#endif
+  }
+#define CHECK_MSG(exp, msg)                                                    \
+  {                                                                            \
+    if (!(exp)) {                                                              \
+      Throw(msg, #exp, FILE_AND_LINE);                                         \
+    }                                                                          \
+  }
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -60,6 +67,54 @@ inline VkResult SetDebugUtilsObjectNameEXT(VkDevice device,
 }
 
 namespace vko {
+
+inline std::string fmt(const char *fmt, ...) {
+  va_list vl;
+  va_start(vl, fmt);
+  int size = std::vsnprintf(nullptr, 0, fmt, vl);
+  va_end(vl);
+
+  if (size != -1) {
+    std::unique_ptr<char[]> buffer(new char[size + 1]);
+
+    va_start(vl, fmt);
+    size = std::vsnprintf(buffer.get(), size + 1, fmt, vl);
+    va_end(vl);
+    if (size != -1) {
+      return std::string(buffer.get(), size);
+    }
+  }
+
+  throw std::runtime_error("Unexpected vsnprintf failure");
+}
+
+[[noreturn]] inline void Throw(std::string failureMessage,
+                               const char *originator = nullptr,
+                               const char *sourceLocation = nullptr) {
+  if (originator != nullptr) {
+    failureMessage += fmt("\n    Origin: %s", originator);
+  }
+  if (sourceLocation != nullptr) {
+    failureMessage += fmt("\n    Source: %s", sourceLocation);
+  }
+
+  throw std::logic_error(failureMessage);
+}
+
+[[noreturn]] inline void ThrowVkResult(VkResult res,
+                                       const char *originator = nullptr,
+                                       const char *sourceLocation = nullptr) {
+  Throw(fmt("VrResult failure [%d]", res), originator, sourceLocation);
+}
+
+inline VkResult VKO_CHECK(VkResult res, const char *originator = nullptr,
+                          const char *sourceLocation = nullptr) {
+  if (VK_SUCCESS != res) {
+    ThrowVkResult(res, originator, sourceLocation);
+  }
+
+  return res;
+}
 
 struct Logger {
 #ifdef ANDROID

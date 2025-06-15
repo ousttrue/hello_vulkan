@@ -131,7 +131,7 @@ Texture::Texture(VkPhysicalDevice physicalDevice, VkDevice _device,
                              .baseArrayLayer = 0,
                              .layerCount = 1},
     };
-    VKO_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &this->imageView));
+    vko::VKO_CHECK(vkCreateImageView(device, &viewInfo, nullptr, &this->imageView));
   }
   {
     VkSamplerCreateInfo samplerInfo{
@@ -156,7 +156,7 @@ Texture::Texture(VkPhysicalDevice physicalDevice, VkDevice _device,
         .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
         .unnormalizedCoordinates = VK_FALSE,
     };
-    VKO_CHECK(vkCreateSampler(device, &samplerInfo, nullptr, &this->sampler));
+    vko::VKO_CHECK(vkCreateSampler(device, &samplerInfo, nullptr, &this->sampler));
   }
 }
 

@@ -140,7 +140,7 @@ void main_loop(const std::function<bool()> &runLoop,
       .pPushConstantRanges = nullptr,
   };
   VkPipelineLayout pipelineLayout;
-  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+  vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
                                    &pipelineLayout));
 
   auto vs =

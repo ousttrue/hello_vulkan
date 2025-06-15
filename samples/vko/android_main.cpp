@@ -18,7 +18,7 @@ static bool _main_loop(android_app *app, vko::UserData *userdata) {
   instance.instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   instance.instanceExtensions.push_back("VK_EXT_debug_report");
 #endif
-  VKO_CHECK(instance.create());
+  vko::VKO_CHECK(instance.create());
 
   VkAndroidSurfaceCreateInfoKHR info = {
       .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
@@ -26,7 +26,8 @@ static bool _main_loop(android_app *app, vko::UserData *userdata) {
       .window = app->window,
   };
   VkSurfaceKHR _surface;
-  VKO_CHECK(vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
+  vko::VKO_CHECK(
+      vkCreateAndroidSurfaceKHR(instance, &info, nullptr, &_surface));
 
   vko::PhysicalDevice picked = instance.pickPhysicalDevice(_surface);
   assert(picked.physicalDevice);
@@ -35,8 +36,9 @@ static bool _main_loop(android_app *app, vko::UserData *userdata) {
 
   vko::Device device;
   device.validationLayers = instance.validationLayers;
-  VKO_CHECK(device.create(picked.physicalDevice, picked.graphicsFamilyIndex,
-                          picked.presentFamilyIndex));
+  vko::VKO_CHECK(device.create(picked.physicalDevice,
+                               picked.graphicsFamilyIndex,
+                               picked.presentFamilyIndex));
 
   main_loop(
       [userdata, app]() {

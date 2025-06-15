@@ -226,7 +226,7 @@ struct ViewRenderer {
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = queueFamilyIndex,
     };
-    VKO_CHECK(vkCreateCommandPool(this->device, &cmdPoolInfo, nullptr,
+    vko::VKO_CHECK(vkCreateCommandPool(this->device, &cmdPoolInfo, nullptr,
                                   &this->commandPool));
     if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_POOL,
                                    (uint64_t)this->commandPool,
@@ -240,7 +240,7 @@ struct ViewRenderer {
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    VKO_CHECK(
+    vko::VKO_CHECK(
         vkAllocateCommandBuffers(this->device, &cmd, &this->commandBuffer));
     if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
                                    (uint64_t)this->commandBuffer,
@@ -273,12 +273,12 @@ struct ViewRenderer {
     execFence.wait();
     execFence.reset();
 
-    VKO_CHECK(vkResetCommandBuffer(this->commandBuffer, 0));
+    vko::VKO_CHECK(vkResetCommandBuffer(this->commandBuffer, 0));
 
     VkCommandBufferBeginInfo cmdBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
-    VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
+    vko::VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
     // Ensure depth is in the right layout
     this->depthBuffer->TransitionLayout(
@@ -331,14 +331,14 @@ struct ViewRenderer {
     }
 
     vkCmdEndRenderPass(this->commandBuffer);
-    VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
+    vko::VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
 
     VkSubmitInfo submitInfo{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &this->commandBuffer,
     };
-    VKO_CHECK(vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
+    vko::VKO_CHECK(vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
   }
 };
 

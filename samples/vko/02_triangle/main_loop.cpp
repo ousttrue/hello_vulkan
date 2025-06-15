@@ -31,8 +31,8 @@ void main_loop(const std::function<bool()> &runLoop,
       .pushConstantRangeCount = 0,
   };
   VkPipelineLayout pipelineLayout;
-  VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                   &pipelineLayout));
+  vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                        &pipelineLayout));
 
   auto renderPass = vko::createColorRenderPass(
       device, surface.chooseSwapSurfaceFormat().format);
@@ -88,9 +88,10 @@ void main_loop(const std::function<bool()> &runLoop,
       recording.draw(3);
     }
 
-    VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
-                            flight.submitFence));
-    VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
+    vko::VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
+                                 flight.submitFence));
+    vko::VKO_CHECK(
+        swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 
   vkDeviceWaitIdle(device);

@@ -14,7 +14,7 @@ static void clearImage(VkCommandBuffer commandBuffer,
       .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
       .pInheritanceInfo = nullptr,
   };
-  VKO_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
+  vko::VKO_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
 
   VkImageSubresourceRange subResourceRange = {
       .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -65,7 +65,7 @@ static void clearImage(VkCommandBuffer commandBuffer,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &clearToPresentBarrier);
 
-  VKO_CHECK(vkEndCommandBuffer(commandBuffer));
+  vko::VKO_CHECK(vkEndCommandBuffer(commandBuffer));
 }
 
 VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
@@ -94,7 +94,7 @@ void main_loop(const std::function<bool()> &runLoop,
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-    VKO_CHECK(acquired.result);
+    vko::VKO_CHECK(acquired.result);
 
     auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
     if (oldSemaphore != VK_NULL_HANDLE) {
@@ -108,11 +108,12 @@ void main_loop(const std::function<bool()> &runLoop,
       clearImage(cmd, color, acquired.image,
                  physicalDevice.graphicsFamilyIndex);
 
-      VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
-                              flight.submitFence));
+      vko::VKO_CHECK(device.submit(cmd, acquireSemaphore,
+                                   flight.submitSemaphore, flight.submitFence));
     }
 
-    VKO_CHECK(swapchain.present(acquired.imageIndex, flight.submitSemaphore));
+    vko::VKO_CHECK(
+        swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 
   vkDeviceWaitIdle(device);
