@@ -137,8 +137,8 @@ inline VkRenderPass createColorDepthRenderPass(VkDevice device,
   return renderPass;
 }
 
-inline VkPipelineLayout createPipelineLayoutWithConstantSize(VkDevice device,
-                                             uint32_t constantSize) {
+inline VkPipelineLayout
+createPipelineLayoutWithConstantSize(VkDevice device, uint32_t constantSize) {
   VkPushConstantRange pushConstantRanges[] = {
       {
           .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
@@ -635,6 +635,84 @@ struct Image : not_copyable {
     vkBindImageMemory(this->device, this->image, *this->memory, 0);
   }
   ~Image() { vkDestroyImage(this->device, this->image, nullptr); }
+};
+
+struct DepthImage : not_copyable {
+  VkDevice device;
+  VkImage image = VK_NULL_HANDLE;
+  std::shared_ptr<DeviceMemory> memory;
+  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  // VkDeviceMemory depthMemory{VK_NULL_HANDLE};
+  // VkDevice m_vkDevice{VK_NULL_HANDLE};
+  // VkImage depthImage{VK_NULL_HANDLE};
+
+  DepthImage(VkDevice _device, VkPhysicalDevice physicalDevice,
+              VkExtent2D size, VkFormat depthFormat,
+              VkSampleCountFlagBits sampleCount,
+              VkMemoryPropertyFlags properties)
+      // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+      : device(_device) {
+
+    // Create a D32 depthbuffer
+    VkImageCreateInfo imageInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = depthFormat,
+        .extent =
+            {
+                .width = size.width,
+                .height = size.height,
+                .depth = 1,
+            },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = sampleCount,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    VKO_CHECK(vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
+    // if (SetDebugUtilsObjectNameEXT(
+    //         device, VK_OBJECT_TYPE_IMAGE, (uint64_t)ptr->depthImage,
+    //         "hello_xr fallback depth image") != VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(_device, image, &memRequirements);
+    this->memory = std::make_shared<DeviceMemory>(this->device, physicalDevice,
+                                                  memRequirements, properties);
+
+    // auto memAllocator = MemoryAllocator::Create(physicalDevice, device);
+    // ptr->depthMemory = memAllocator->Allocate( ptr->depthImage,
+    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); if (SetDebugUtilsObjectNameEXT(
+    //         device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
+    //         "hello_xr fallback depth image memory") != VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
+    VKO_CHECK(vkBindImageMemory(this->device, this->image, *this->memory, 0));
+  }
+  ~DepthImage() { vkDestroyImage(this->device, this->image, nullptr); }
+
+  void TransitionLayout(VkCommandBuffer cmd, VkImageLayout newLayout) {
+    if (newLayout != this->layout) {
+      VkImageMemoryBarrier depthBarrier{
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+          .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+          .oldLayout = this->layout,
+          .newLayout = newLayout,
+          .image = this->image,
+          .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+      };
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                           VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
+                           nullptr, 1, &depthBarrier);
+      this->layout = newLayout;
+    }
+  }
 };
 
 struct CommandPool : not_copyable {

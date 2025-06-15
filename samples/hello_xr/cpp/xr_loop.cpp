@@ -2,8 +2,7 @@
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
-#include "vko/vko.h"
-#include "vkr/DepthBuffer.h"
+#include "vko/vko_pipeline.h"
 #include "vkr/Pipeline.h"
 #include "vkr/RenderTarget.h"
 #include "vkr/VertexBuffer.h"
@@ -19,7 +18,7 @@ struct ViewRenderer {
   std::shared_ptr<Pipeline> m_pipeline;
 
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
-  std::shared_ptr<class DepthBuffer> m_depthBuffer;
+  std::shared_ptr<vko::DepthImage> m_depthBuffer;
   std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
 
   ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
@@ -37,8 +36,9 @@ struct ViewRenderer {
         c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
         std::size(c_cubeIndices));
 
-    m_depthBuffer = DepthBuffer::Create(this->device, physicalDevice, extent,
-                                        depthFormat, sampleCountFlagBits);
+    m_depthBuffer = std::make_shared<vko::DepthImage>(
+        this->device, physicalDevice, extent, depthFormat, sampleCountFlagBits,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     m_pipeline = Pipeline::Create(this->device, extent, colorFormat,
                                   depthFormat, this->m_drawBuffer);
@@ -113,7 +113,7 @@ struct ViewRenderer {
     auto found = m_renderTarget.find(image);
     if (found == m_renderTarget.end()) {
       auto rt = RenderTarget::Create(
-          this->device, image, m_depthBuffer->depthImage, size, colorFormat,
+          this->device, image, m_depthBuffer->image, size, colorFormat,
           depthFormat, m_pipeline->m_renderPass);
       found = m_renderTarget.insert({image, rt}).first;
     }
