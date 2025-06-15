@@ -11,7 +11,6 @@
 #include <common/logger.h>
 // #include
 
-#include "vkr/VertexBuffer.h"
 #include <vko/android_userdata.h>
 #include <vko/vko.h>
 
