@@ -63,9 +63,11 @@ VertexBuffer::Create(VkDevice device, VkPhysicalDevice physicalDevice,
     throw std::runtime_error("vkBindBufferMemory");
   }
 
-  ptr->bindDesc.binding = 0;
-  ptr->bindDesc.stride = sizeof(Vertex);
-  ptr->bindDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  ptr->bindDesc = {{
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  }};
 
   ptr->count = {idxCount, vtxCount};
 

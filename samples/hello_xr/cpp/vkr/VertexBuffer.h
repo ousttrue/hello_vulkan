@@ -55,7 +55,7 @@ struct VertexBuffer {
   VkDeviceMemory idxMem{VK_NULL_HANDLE};
   VkBuffer vtxBuf{VK_NULL_HANDLE};
   VkDeviceMemory vtxMem{VK_NULL_HANDLE};
-  VkVertexInputBindingDescription bindDesc{};
+  std::vector<VkVertexInputBindingDescription> bindDesc{};
   std::vector<VkVertexInputAttributeDescription> attrDesc{};
   struct {
     uint32_t idx;
