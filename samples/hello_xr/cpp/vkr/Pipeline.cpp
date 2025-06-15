@@ -1,11 +1,37 @@
 #include "Pipeline.h"
 #include "VertexBuffer.h"
+#include <array>
 #include <common/fmt.h>
 #include <common/logger.h>
 #include <shaderc/shaderc.hpp>
 #include <stdexcept>
 #include <vko/vko_pipeline.h>
 #include <vulkan/vulkan_core.h>
+
+// ShaderProgram to hold a pair of vertex & fragment shaders
+class ShaderProgram {
+  VkDevice m_vkDevice{VK_NULL_HANDLE};
+  void Load(uint32_t index, const std::vector<uint32_t> &code);
+
+  ShaderProgram() = default;
+
+public:
+  std::array<VkPipelineShaderStageCreateInfo, 2> shaderInfo{
+      {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
+       {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}}};
+  ~ShaderProgram();
+  ShaderProgram(const ShaderProgram &) = delete;
+  ShaderProgram &operator=(const ShaderProgram &) = delete;
+  ShaderProgram(ShaderProgram &&) = delete;
+  ShaderProgram &operator=(ShaderProgram &&) = delete;
+  static std::shared_ptr<ShaderProgram> Create(VkDevice device) {
+    auto ptr = std::shared_ptr<ShaderProgram>(new ShaderProgram);
+    ptr->m_vkDevice = device;
+    return ptr;
+  }
+  void LoadVertexShader(const std::vector<uint32_t> &code) { Load(0, code); }
+  void LoadFragmentShader(const std::vector<uint32_t> &code) { Load(1, code); }
+};
 
 // Compile a shader to a SPIR-V binary.
 static std::vector<uint32_t> CompileGlslShader(const std::string &name,
@@ -82,16 +108,12 @@ void main()
 // ShaderProgram to hold a pair of vertex & fragment shaders
 //
 ShaderProgram::~ShaderProgram() {
-  if (m_vkDevice != nullptr) {
-    for (auto &si : shaderInfo) {
-      if (si.module != VK_NULL_HANDLE) {
-        vkDestroyShaderModule(m_vkDevice, shaderInfo[0].module, nullptr);
-      }
-      si.module = VK_NULL_HANDLE;
+  for (auto &si : shaderInfo) {
+    if (si.module != VK_NULL_HANDLE) {
+      vkDestroyShaderModule(m_vkDevice, si.module, nullptr);
     }
+    si.module = VK_NULL_HANDLE;
   }
-  shaderInfo = {};
-  m_vkDevice = nullptr;
 }
 
 void ShaderProgram::Load(uint32_t index, const std::vector<uint32_t> &code) {
@@ -131,8 +153,22 @@ void ShaderProgram::Load(uint32_t index, const std::vector<uint32_t> &code) {
 //
 // Pipeline wrapper for rendering pipeline state
 //
-void Pipeline::Dynamic(VkDynamicState state) {
-  dynamicStateEnables.emplace_back(state);
+Pipeline::~Pipeline() {
+  if (m_vkDevice != nullptr) {
+    if (m_pipeline != VK_NULL_HANDLE) {
+      vkDestroyPipeline(m_vkDevice, m_pipeline, nullptr);
+    }
+    if (m_pipelineLayout != VK_NULL_HANDLE) {
+      vkDestroyPipelineLayout(m_vkDevice, m_pipelineLayout, nullptr);
+    }
+    if (m_renderPass != VK_NULL_HANDLE) {
+      vkDestroyRenderPass(m_vkDevice, m_renderPass, nullptr);
+    }
+  }
+  m_pipeline = VK_NULL_HANDLE;
+  m_renderPass = VK_NULL_HANDLE;
+  m_pipelineLayout = VK_NULL_HANDLE;
+  m_vkDevice = nullptr;
 }
 
 std::shared_ptr<Pipeline>
@@ -279,22 +315,4 @@ Pipeline::Create(VkDevice device, VkExtent2D size, VkFormat colorFormat,
   }
 
   return ptr;
-}
-
-void Pipeline::Release() {
-  if (m_vkDevice != nullptr) {
-    if (m_pipeline != VK_NULL_HANDLE) {
-      vkDestroyPipeline(m_vkDevice, m_pipeline, nullptr);
-    }
-    if (m_pipelineLayout != VK_NULL_HANDLE) {
-      vkDestroyPipelineLayout(m_vkDevice, m_pipelineLayout, nullptr);
-    }
-    if (m_renderPass != VK_NULL_HANDLE) {
-      vkDestroyRenderPass(m_vkDevice, m_renderPass, nullptr);
-    }
-  }
-  m_pipeline = VK_NULL_HANDLE;
-  m_renderPass = VK_NULL_HANDLE;
-  m_pipelineLayout = VK_NULL_HANDLE;
-  m_vkDevice = nullptr;
 }

@@ -72,8 +72,6 @@ struct ViewRenderer {
   }
 
   ~ViewRenderer() {
-    vkDestroyFence(this->device, execFence, nullptr);
-
     vkFreeCommandBuffers(this->device, this->commandPool, 1,
                          &this->commandBuffer);
     vkDestroyCommandPool(this->device, this->commandPool, nullptr);
