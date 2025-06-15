@@ -32,42 +32,38 @@ struct Vertex {
 struct Scene {
   VkDevice device;
 
-  std::shared_ptr<vko::Buffer> vertexBuffer;
-  std::vector<VkVertexInputBindingDescription> vertexInputBindingDescriptions =
-      {{
-          .binding = 0,
-          .stride = static_cast<uint32_t>(sizeof(Vertex)),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  vko::IndexedMesh mesh = {
+      .inputBindingDescriptions =
+          {
+              {
+                  .binding = 0,
+                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
+                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              },
+          },
+      .attributeDescriptions = {
+          // describes position
+          {
+              .location = 0,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32_SFLOAT,
+              .offset = offsetof(Vertex, pos),
+          },
+          // describes color
+          {
+              .location = 1,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32_SFLOAT,
+              .offset = offsetof(Vertex, color),
+          },
+          // uv
+          {
+              .location = 2,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32_SFLOAT,
+              .offset = offsetof(Vertex, texCoord),
+          },
       }};
-
-  // auto bindingDescription = Vertex_getBindingDescription();
-  // auto attributeDescriptions = Vertex_getAttributeDescriptions();
-  std::vector<VkVertexInputAttributeDescription> attributeDescriptions = {
-      // describes position
-      {
-          .location = 0,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = offsetof(Vertex, pos),
-      },
-      // describes color
-      {
-          .location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32_SFLOAT,
-          .offset = offsetof(Vertex, color),
-      },
-      // uv
-      {
-          .location = 2,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32_SFLOAT,
-          .offset = offsetof(Vertex, texCoord),
-      },
-  };
-
-  std::shared_ptr<vko::Buffer> indexBuffer;
-  uint32_t indexDrawCount = 0;
 
   std::shared_ptr<Texture> texture;
 

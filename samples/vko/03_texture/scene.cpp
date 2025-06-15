@@ -202,24 +202,24 @@ Scene::Scene(VkPhysicalDevice physicalDevice, VkDevice _device,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBuffer->memory->assign(vertices.data(), bufferSize);
-    this->vertexBuffer = std::make_shared<vko::Buffer>(
+    this->mesh.vertexBuffer = std::make_shared<vko::Buffer>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, vertexBuffer = this->vertexBuffer,
-                             bufferSize](auto commandBuffer) {
-                              stagingBuffer->copyCommand(commandBuffer,
-                                                         vertexBuffer->buffer,
-                                                         bufferSize);
-                            });
+    vko::executeCommandSync(
+        device, commandPool.queue, commandPool,
+        [stagingBuffer, vertexBuffer = this->mesh.vertexBuffer,
+         bufferSize](auto commandBuffer) {
+          stagingBuffer->copyCommand(commandBuffer, vertexBuffer->buffer,
+                                     bufferSize);
+        });
   }
 
   {
     const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-    this->indexDrawCount = indices.size();
+    this->mesh.indexDrawCount = indices.size();
     VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
     auto stagingBuffer = std::make_shared<vko::Buffer>(
@@ -228,19 +228,19 @@ Scene::Scene(VkPhysicalDevice physicalDevice, VkDevice _device,
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     stagingBuffer->memory->assign(indices.data(), bufferSize);
 
-    this->indexBuffer = std::make_shared<vko::Buffer>(
+    this->mesh.indexBuffer = std::make_shared<vko::Buffer>(
         physicalDevice, device, bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [stagingBuffer, indexBuffer = this->indexBuffer,
-                             bufferSize](auto commandBuffer) {
-                              stagingBuffer->copyCommand(commandBuffer,
-                                                         indexBuffer->buffer,
-                                                         bufferSize);
-                            });
+    vko::executeCommandSync(
+        device, commandPool.queue, commandPool,
+        [stagingBuffer, indexBuffer = this->mesh.indexBuffer,
+         bufferSize](auto commandBuffer) {
+          stagingBuffer->copyCommand(commandBuffer, indexBuffer->buffer,
+                                     bufferSize);
+        });
   }
 }
 

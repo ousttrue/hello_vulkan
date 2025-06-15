@@ -153,7 +153,7 @@ void main_loop(const std::function<bool()> &runLoop,
   auto pipeline = builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
-      scene.vertexInputBindingDescriptions, scene.attributeDescriptions,
+      scene.mesh.inputBindingDescriptions, scene.mesh.attributeDescriptions,
       {{
           .x = 0.0f,
           .y = 0.0f,
@@ -222,12 +222,10 @@ void main_loop(const std::function<bool()> &runLoop,
 
         {
           vko::CommandBufferRecording recording(
-              cmd, pipeline.renderPass, backbuffer->framebuffer,
-              swapchain.createInfo.imageExtent, clearColor, pipelineLayout,
-              descriptorSet);
-          recording.drawIndexed(pipeline.graphicsPipeline, scene.indexDrawCount,
-                                scene.vertexBuffer->buffer,
-                                scene.indexBuffer->buffer);
+              cmd, pipeline.renderPass, pipeline.graphicsPipeline,
+              backbuffer->framebuffer, swapchain.createInfo.imageExtent,
+              clearColor, pipelineLayout, descriptorSet);
+          recording.drawIndexed(scene.mesh);
         }
       }
 

@@ -438,81 +438,6 @@ struct PipelineBuilder {
   }
 };
 
-struct CommandBufferRecording : public not_copyable {
-  VkCommandBuffer commandBuffer;
-  CommandBufferRecording(VkCommandBuffer _commandBuffer,
-                         VkRenderPass renderPass, VkFramebuffer framebuffer,
-                         VkExtent2D extent, VkClearValue clearColor,
-                         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
-                         VkDescriptorSet descriptorSet = VK_NULL_HANDLE)
-      : commandBuffer(_commandBuffer) {
-    VkCommandBufferBeginInfo beginInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-    VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
-
-    VkRenderPassBeginInfo renderPassInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = renderPass,
-        .framebuffer = framebuffer,
-        .renderArea = {.offset = {0, 0}, .extent = extent},
-        .clearValueCount = 1,
-        .pClearValues = &clearColor,
-    };
-    vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
-                         VK_SUBPASS_CONTENTS_INLINE);
-
-    VkViewport viewport{
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (float)extent.width,
-        .height = (float)extent.height,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    vkCmdSetViewport(this->commandBuffer, 0, 1, &viewport);
-
-    VkRect2D scissor{
-        .offset = {0, 0},
-        .extent = extent,
-    };
-    vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
-
-    if (pipelineLayout != VK_NULL_HANDLE && descriptorSet != VK_NULL_HANDLE) {
-      // take the descriptor set for the corresponding swap image, and bind it
-      // to the descriptors in the shader
-      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-    }
-  }
-  ~CommandBufferRecording() {
-    vkCmdEndRenderPass(this->commandBuffer);
-    VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
-  }
-  void draw(VkPipeline pipeline, uint32_t vertexCount) {
-    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline);
-    vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
-  }
-
-  void drawIndexed(VkPipeline pipeline, uint32_t indexDrawCount,
-                   VkBuffer vertexBuffer = VK_NULL_HANDLE,
-                   VkBuffer indexBuffer = VK_NULL_HANDLE) {
-
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-    if (vertexBuffer != VK_NULL_HANDLE) {
-      VkBuffer vertexBuffers[] = {vertexBuffer};
-      VkDeviceSize offsets[] = {0};
-      vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    }
-    if (indexBuffer != VK_NULL_HANDLE) {
-      vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
-    }
-    vkCmdDrawIndexed(commandBuffer, indexDrawCount, 1, 0, 0, 0);
-  }
-};
-
 struct DeviceMemory : not_copyable {
   VkDevice device;
   VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -601,6 +526,14 @@ struct Buffer : not_copyable {
   }
 };
 
+struct IndexedMesh {
+  std::shared_ptr<vko::Buffer> vertexBuffer;
+  std::vector<VkVertexInputBindingDescription> inputBindingDescriptions;
+  std::vector<VkVertexInputAttributeDescription> attributeDescriptions;
+  std::shared_ptr<vko::Buffer> indexBuffer;
+  uint32_t indexDrawCount = 0;
+};
+
 struct Image : not_copyable {
   VkDevice device;
   VkImage image;
@@ -647,10 +580,9 @@ struct DepthImage : not_copyable {
   // VkDevice m_vkDevice{VK_NULL_HANDLE};
   // VkImage depthImage{VK_NULL_HANDLE};
 
-  DepthImage(VkDevice _device, VkPhysicalDevice physicalDevice,
-              VkExtent2D size, VkFormat depthFormat,
-              VkSampleCountFlagBits sampleCount,
-              VkMemoryPropertyFlags properties)
+  DepthImage(VkDevice _device, VkPhysicalDevice physicalDevice, VkExtent2D size,
+             VkFormat depthFormat, VkSampleCountFlagBits sampleCount,
+             VkMemoryPropertyFlags properties)
       // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
       : device(_device) {
 
@@ -779,5 +711,78 @@ inline void executeCommandSync(
   commandRecorder(command);
   endSingleTimeCommands(device, commandPool, graphicsQueue, command);
 }
+
+struct CommandBufferRecording : public not_copyable {
+  VkCommandBuffer commandBuffer;
+  CommandBufferRecording(VkCommandBuffer _commandBuffer,
+                         VkRenderPass renderPass, VkPipeline pipeline,
+                         VkFramebuffer framebuffer, VkExtent2D extent,
+                         VkClearValue clearColor,
+                         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
+                         VkDescriptorSet descriptorSet = VK_NULL_HANDLE)
+      : commandBuffer(_commandBuffer) {
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+    VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
+
+    VkRenderPassBeginInfo renderPassInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = renderPass,
+        .framebuffer = framebuffer,
+        .renderArea = {.offset = {0, 0}, .extent = extent},
+        .clearValueCount = 1,
+        .pClearValues = &clearColor,
+    };
+    vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      pipeline);
+
+    VkViewport viewport{
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (float)extent.width,
+        .height = (float)extent.height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(this->commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor{
+        .offset = {0, 0},
+        .extent = extent,
+    };
+    vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
+
+    if (pipelineLayout != VK_NULL_HANDLE && descriptorSet != VK_NULL_HANDLE) {
+      // take the descriptor set for the corresponding swap image, and bind it
+      // to the descriptors in the shader
+      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    }
+  }
+  ~CommandBufferRecording() {
+    vkCmdEndRenderPass(this->commandBuffer);
+    VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
+  }
+  void draw(uint32_t vertexCount) {
+    vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
+  }
+
+  void drawIndexed(const IndexedMesh &mesh) {
+    if (mesh.vertexBuffer->buffer != VK_NULL_HANDLE) {
+      VkBuffer vertexBuffers[] = {mesh.vertexBuffer->buffer};
+      VkDeviceSize offsets[] = {0};
+      vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    }
+    if (mesh.indexBuffer->buffer != VK_NULL_HANDLE) {
+      vkCmdBindIndexBuffer(commandBuffer, mesh.indexBuffer->buffer, 0,
+                           VK_INDEX_TYPE_UINT16);
+    }
+    vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
+  }
+};
 
 } // namespace vko

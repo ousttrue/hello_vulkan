@@ -83,9 +83,9 @@ void main_loop(const std::function<bool()> &runLoop,
           .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
       };
       vko::CommandBufferRecording recording(
-          cmd, pipeline.renderPass, image->framebuffer,
-          swapchain.createInfo.imageExtent, clearColor);
-      recording.draw(pipeline.graphicsPipeline, 3);
+          cmd, pipeline.renderPass, pipeline.graphicsPipeline,
+          image->framebuffer, swapchain.createInfo.imageExtent, clearColor);
+      recording.draw(3);
     }
 
     VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,

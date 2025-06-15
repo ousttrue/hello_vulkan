@@ -82,6 +82,7 @@ int main(int argc, char **argv) {
 
   vko::Device device;
   device.validationLayers = instance.validationLayers;
+  device.deviceExtensions = deviceExtensions;
   VKO_CHECK(device.create(physicalDevice.physicalDevice,
                           physicalDevice.graphicsFamilyIndex,
                           physicalDevice.presentFamilyIndex));
