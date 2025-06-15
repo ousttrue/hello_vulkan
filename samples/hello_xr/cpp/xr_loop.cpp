@@ -4,7 +4,6 @@
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
 #include "vko/vko_pipeline.h"
-#include "vkr/VertexBuffer.h"
 #include <map>
 
 constexpr char VertexShaderGlsl[] = {
@@ -13,6 +12,45 @@ constexpr char VertexShaderGlsl[] = {
 
 constexpr char FragmentShaderGlsl[] = {
 #embed "shader.frag"
+};
+
+constexpr Vec3 Red{1, 0, 0};
+constexpr Vec3 DarkRed{0.25f, 0, 0};
+constexpr Vec3 Green{0, 1, 0};
+constexpr Vec3 DarkGreen{0, 0.25f, 0};
+constexpr Vec3 Blue{0, 0, 1};
+constexpr Vec3 DarkBlue{0, 0, 0.25f};
+
+// Vertices for a 1x1x1 meter cube. (Left/Right, Top/Bottom, Front/Back)
+constexpr Vec3 LBB{-0.5f, -0.5f, -0.5f};
+constexpr Vec3 LBF{-0.5f, -0.5f, 0.5f};
+constexpr Vec3 LTB{-0.5f, 0.5f, -0.5f};
+constexpr Vec3 LTF{-0.5f, 0.5f, 0.5f};
+constexpr Vec3 RBB{0.5f, -0.5f, -0.5f};
+constexpr Vec3 RBF{0.5f, -0.5f, 0.5f};
+constexpr Vec3 RTB{0.5f, 0.5f, -0.5f};
+constexpr Vec3 RTF{0.5f, 0.5f, 0.5f};
+
+#define CUBE_SIDE(V1, V2, V3, V4, V5, V6, COLOR)                               \
+  {V1, COLOR}, {V2, COLOR}, {V3, COLOR}, {V4, COLOR}, {V5, COLOR}, {V6, COLOR},
+
+constexpr Vertex c_cubeVertices[] = {
+    CUBE_SIDE(LTB, LBF, LBB, LTB, LTF, LBF, DarkRed)   // -X
+    CUBE_SIDE(RTB, RBB, RBF, RTB, RBF, RTF, Red)       // +X
+    CUBE_SIDE(LBB, LBF, RBF, LBB, RBF, RBB, DarkGreen) // -Y
+    CUBE_SIDE(LTB, RTB, RTF, LTB, RTF, LTF, Green)     // +Y
+    CUBE_SIDE(LBB, RBB, RTB, LBB, RTB, LTB, DarkBlue)  // -Z
+    CUBE_SIDE(LBF, LTF, RTF, LBF, RTF, RBF, Blue)      // +Z
+};
+
+// Winding order is clockwise. Each side uses a different color.
+constexpr unsigned short c_cubeIndices[] = {
+    0,  1,  2,  3,  4,  5,  // -X
+    6,  7,  8,  9,  10, 11, // +X
+    12, 13, 14, 15, 16, 17, // -Y
+    18, 19, 20, 21, 22, 23, // +Y
+    24, 25, 26, 27, 28, 29, // -Z
+    30, 31, 32, 33, 34, 35, // +Z
 };
 
 struct ViewRenderer {
@@ -311,12 +349,54 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
              VkDevice device) {
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
-  auto drawBuffer = VertexBuffer::Create(
-      device, physicalDevice,
-      {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Position)},
-       {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, Color)}},
-      c_cubeVertices, std::size(c_cubeVertices), c_cubeIndices,
-      std::size(c_cubeIndices));
+  vko::IndexedMesh mesh = {
+      .inputBindingDescriptions =
+          {
+              {
+                  .binding = 0,
+                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
+                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              },
+          },
+      .attributeDescriptions =
+          {
+              {
+                  .location = 0,
+                  .binding = 0,
+                  .format = VK_FORMAT_R32G32B32_SFLOAT,
+                  .offset = offsetof(Vertex, Position),
+              },
+              {
+                  .location = 1,
+                  .binding = 0,
+                  .format = VK_FORMAT_R32G32B32_SFLOAT,
+                  .offset = offsetof(Vertex, Color),
+              },
+          },
+  };
+  {
+    VkDeviceSize bufferSize = sizeof(c_cubeVertices);
+    mesh.vertexBuffer = std::make_shared<vko::Buffer>(
+        physicalDevice, device, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
+                                  c_cubeVertices, bufferSize,
+                                  mesh.vertexBuffer->buffer);
+  }
+  {
+    mesh.indexDrawCount = std::size(c_cubeIndices);
+    VkDeviceSize bufferSize = sizeof(c_cubeIndices);
+    mesh.indexBuffer = std::make_shared<vko::Buffer>(
+        physicalDevice, device, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
+                                  c_cubeIndices, bufferSize,
+                                  mesh.indexBuffer->buffer);
+  }
 
   // Create resources for each view.
   auto config = session->GetSwapchainConfiguration();
@@ -334,7 +414,7 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
     auto ptr = std::make_shared<ViewRenderer>(
         physicalDevice, device, queueFamilyIndex, swapchain->extent(),
         swapchain->format(), depthFormat, swapchain->sampleCountFlagBits(),
-        drawBuffer->bindDesc, drawBuffer->attrDesc);
+        mesh.inputBindingDescriptions, mesh.attributeDescriptions);
     views.push_back(ptr);
   }
 
@@ -370,8 +450,8 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
           views[i]->render(info.Image, swapchain->extent(), swapchain->format(),
                            depthFormat, options.GetBackgroundClearColor(),
                            scene.CalcCubeMatrices(info.calcViewProjection()),
-                           drawBuffer->vtxBuf, drawBuffer->idxBuf,
-                           drawBuffer->count.idx);
+                           mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
+                           mesh.indexDrawCount);
 
           swapchain->EndSwapchain();
         }
