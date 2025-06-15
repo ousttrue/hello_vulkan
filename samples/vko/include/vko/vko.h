@@ -848,47 +848,98 @@ struct Swapchain : public not_copyable {
 
 struct SwapchainFramebuffer {
   VkDevice device;
-  VkImageView imageView;
-  VkFramebuffer framebuffer;
 
-  VkImageViewCreateInfo _createInfo{
+  VkImageViewCreateInfo imageViewCreateInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
       .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
                      .g = VK_COMPONENT_SWIZZLE_IDENTITY,
                      .b = VK_COMPONENT_SWIZZLE_IDENTITY,
                      .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+      //     colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+      //     colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+      //     colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+      //     colorViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
       .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                            .baseMipLevel = 0,
                            .levelCount = 1,
                            .baseArrayLayer = 0,
                            .layerCount = 1},
   };
-  VkFramebufferCreateInfo _framebufferInfo{
-      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .layers = 1,
+  VkImageView imageView = VK_NULL_HANDLE;
+
+  VkImageViewCreateInfo depthViewCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+      //     depthViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+      //     depthViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+      //     depthViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+      //     depthViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                           .baseMipLevel = 0,
+                           .levelCount = 1,
+                           .baseArrayLayer = 0,
+                           .layerCount = 1},
   };
+  VkImageView depthView = VK_NULL_HANDLE;
+
+  VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
   SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
-                       VkFormat format, VkRenderPass renderPass)
+                       VkFormat format, VkRenderPass renderPass,
+                       VkImage depth = {}, VkFormat depthFormat = {})
       : device(_device) {
-    _createInfo.image = image;
-    _createInfo.format = format;
-    VKO_CHECK(
-        vkCreateImageView(device, &_createInfo, nullptr, &this->imageView));
 
-    _framebufferInfo.pAttachments = &this->imageView;
-    _framebufferInfo.attachmentCount = 1;
-    _framebufferInfo.renderPass = renderPass;
-    _framebufferInfo.width = extent.width;
-    _framebufferInfo.height = extent.height;
-    VKO_CHECK(vkCreateFramebuffer(device, &_framebufferInfo, nullptr,
-                                  &this->framebuffer));
+    // imageView
+    this->imageViewCreateInfo.image = image;
+    this->imageViewCreateInfo.format = format;
+    VKO_CHECK(vkCreateImageView(this->device, &this->imageViewCreateInfo,
+                                nullptr, &this->imageView));
+
+    if (depth) {
+      // depthView
+      this->depthViewCreateInfo.image = depth;
+      this->depthViewCreateInfo.format = depthFormat;
+      VKO_CHECK(vkCreateImageView(this->device, &this->depthViewCreateInfo,
+                                  nullptr, &this->depthView));
+
+      VkImageView attachments[] = {this->imageView, this->depthView};
+      VkFramebufferCreateInfo framebufferInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = renderPass,
+          .attachmentCount = 2,
+          .pAttachments = attachments,
+          .width = extent.width,
+          .height = extent.height,
+          .layers = 1,
+      };
+      VKO_CHECK(vkCreateFramebuffer(this->device, &framebufferInfo, nullptr,
+                                    &this->framebuffer));
+    } else {
+      VkFramebufferCreateInfo framebufferInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = renderPass,
+          .attachmentCount = 1,
+          .pAttachments = &this->imageView,
+          .width = extent.width,
+          .height = extent.height,
+          .layers = 1,
+      };
+      VKO_CHECK(vkCreateFramebuffer(device, &framebufferInfo, nullptr,
+                                    &this->framebuffer));
+    }
   }
 
   ~SwapchainFramebuffer() {
     vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
     vkDestroyImageView(this->device, this->imageView, nullptr);
+    if (this->depthView != VK_NULL_HANDLE) {
+      vkDestroyImageView(this->device, depthView, nullptr);
+    }
   }
 };
 

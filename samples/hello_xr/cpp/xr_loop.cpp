@@ -4,7 +4,6 @@
 #include "openxr_program/options.h"
 #include "vko/vko_pipeline.h"
 #include "vkr/Pipeline.h"
-#include "vkr/RenderTarget.h"
 #include "vkr/VertexBuffer.h"
 #include <map>
 
@@ -19,7 +18,7 @@ struct ViewRenderer {
 
   std::shared_ptr<struct VertexBuffer> m_drawBuffer;
   std::shared_ptr<vko::DepthImage> m_depthBuffer;
-  std::map<VkImage, std::shared_ptr<class RenderTarget>> m_renderTarget;
+  std::map<VkImage, std::shared_ptr<vko::SwapchainFramebuffer>> m_renderTarget;
 
   ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
                uint32_t queueFamilyIndex, VkExtent2D extent,
@@ -112,13 +111,13 @@ struct ViewRenderer {
     // BindRenderTarget(image, &renderPassBeginInfo);
     auto found = m_renderTarget.find(image);
     if (found == m_renderTarget.end()) {
-      auto rt = RenderTarget::Create(
-          this->device, image, m_depthBuffer->image, size, colorFormat,
-          depthFormat, m_pipeline->m_renderPass);
+      auto rt = std::make_shared<vko::SwapchainFramebuffer>(
+          this->device, image, size, colorFormat, m_pipeline->m_renderPass,
+          m_depthBuffer->image, depthFormat);
       found = m_renderTarget.insert({image, rt}).first;
     }
     renderPassBeginInfo.renderPass = m_pipeline->m_renderPass;
-    renderPassBeginInfo.framebuffer = found->second->fb;
+    renderPassBeginInfo.framebuffer = found->second->framebuffer;
     renderPassBeginInfo.renderArea.offset = {0, 0};
     renderPassBeginInfo.renderArea.extent = size;
 

@@ -1,7 +1,6 @@
 add_library(
   vkr STATIC
   MemoryAllocator.cpp
-  RenderTarget.cpp
   Pipeline.cpp
   VertexBuffer.cpp
 )
