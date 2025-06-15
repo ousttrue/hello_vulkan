@@ -1,5 +1,6 @@
 #include "Pipeline.h"
 #include "VertexBuffer.h"
+#include "glsl_to_spv.h"
 #include <array>
 #include <common/fmt.h>
 #include <common/logger.h>
@@ -8,147 +9,13 @@
 #include <vko/vko_pipeline.h>
 #include <vulkan/vulkan_core.h>
 
-// ShaderProgram to hold a pair of vertex & fragment shaders
-class ShaderProgram {
-  VkDevice m_vkDevice{VK_NULL_HANDLE};
-  void Load(uint32_t index, const std::vector<uint32_t> &code);
-
-  ShaderProgram() = default;
-
-public:
-  std::array<VkPipelineShaderStageCreateInfo, 2> shaderInfo{
-      {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO},
-       {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}}};
-  ~ShaderProgram();
-  ShaderProgram(const ShaderProgram &) = delete;
-  ShaderProgram &operator=(const ShaderProgram &) = delete;
-  ShaderProgram(ShaderProgram &&) = delete;
-  ShaderProgram &operator=(ShaderProgram &&) = delete;
-  static std::shared_ptr<ShaderProgram> Create(VkDevice device) {
-    auto ptr = std::shared_ptr<ShaderProgram>(new ShaderProgram);
-    ptr->m_vkDevice = device;
-    return ptr;
-  }
-  void LoadVertexShader(const std::vector<uint32_t> &code) { Load(0, code); }
-  void LoadFragmentShader(const std::vector<uint32_t> &code) { Load(1, code); }
+constexpr char VertexShaderGlsl[] = {
+#embed "shader.vert"
 };
 
-// Compile a shader to a SPIR-V binary.
-static std::vector<uint32_t> CompileGlslShader(const std::string &name,
-                                               shaderc_shader_kind kind,
-                                               const std::string &source) {
-  shaderc::Compiler compiler;
-  shaderc::CompileOptions options;
-
-  options.SetOptimizationLevel(shaderc_optimization_level_size);
-
-  shaderc::SpvCompilationResult module =
-      compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
-
-  if (module.GetCompilationStatus() != shaderc_compilation_status_success) {
-    Log::Write(Log::Level::Error,
-               Fmt("Shader %s compilation failed: %s", name.c_str(),
-                   module.GetErrorMessage().c_str()));
-    return std::vector<uint32_t>();
-  }
-
-  return {module.cbegin(), module.cend()};
-}
-
-constexpr char VertexShaderGlsl[] = R"_(
-#version 430
-#extension GL_ARB_separate_shader_objects : enable
-
-layout (std140, push_constant) uniform buf
-{
-    mat4 mvp;
-} ubuf;
-
-layout (location = 0) in vec3 Position;
-layout (location = 1) in vec4 Color;
-
-layout (location = 0) out vec4 oColor;
-out gl_PerVertex
-{
-    vec4 gl_Position;
+constexpr char FragmentShaderGlsl[] = {
+#embed "shader.frag"
 };
-
-void main()
-{
-    oColor.rgba  = Color.rgba;
-    gl_Position = ubuf.mvp * vec4(Position, 1);
-}
-)_";
-
-constexpr char FragmentShaderGlsl[] = R"_(
-#version 430
-#extension GL_ARB_separate_shader_objects : enable
-
-layout (location = 0) in vec4 oColor;
-
-layout (location = 0) out vec4 FragColor;
-
-void main()
-{
-    FragColor = oColor;
-}
-)_";
-
-// glslangValidator doesn't wrap its output in brackets if you don't have it
-// define the whole array.
-#if defined(USE_GLSLANGVALIDATOR)
-#define SPV_PREFIX {
-#define SPV_SUFFIX }
-#else
-#define SPV_PREFIX
-#define SPV_SUFFIX
-#endif
-
-//
-// ShaderProgram to hold a pair of vertex & fragment shaders
-//
-ShaderProgram::~ShaderProgram() {
-  for (auto &si : shaderInfo) {
-    if (si.module != VK_NULL_HANDLE) {
-      vkDestroyShaderModule(m_vkDevice, si.module, nullptr);
-    }
-    si.module = VK_NULL_HANDLE;
-  }
-}
-
-void ShaderProgram::Load(uint32_t index, const std::vector<uint32_t> &code) {
-  VkShaderModuleCreateInfo modInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-
-  auto &si = shaderInfo[index];
-  si.pName = "main";
-  std::string name;
-
-  switch (index) {
-  case 0:
-    si.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    name = "vertex";
-    break;
-  case 1:
-    si.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    name = "fragment";
-    break;
-  default:
-    throw std::runtime_error(Fmt("Unknown code index %d", index));
-  }
-
-  modInfo.codeSize = code.size() * sizeof(code[0]);
-  modInfo.pCode = &code[0];
-  if (!(modInfo.codeSize > 0 && modInfo.pCode)) {
-    throw std::runtime_error(Fmt("Invalid %s shader ", name.c_str()));
-  }
-
-  if (vkCreateShaderModule(m_vkDevice, &modInfo, nullptr, &si.module) !=
-      VK_SUCCESS) {
-    throw std::runtime_error("vkCreateShaderModule");
-  }
-
-  Log::Write(Log::Level::Info, Fmt("Loaded %s shader", name.c_str()));
-}
 
 //
 // Pipeline wrapper for rendering pipeline state
@@ -276,39 +143,37 @@ Pipeline::Create(VkDevice device, VkExtent2D size, VkFormat colorFormat,
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
   ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-  auto vertexSPIRV = CompileGlslShader(
-      "vertex", shaderc_glsl_default_vertex_shader, VertexShaderGlsl);
-  auto fragmentSPIRV = CompileGlslShader(
-      "fragment", shaderc_glsl_default_fragment_shader, FragmentShaderGlsl);
-  if (vertexSPIRV.empty()) {
-    throw std::runtime_error("Failed to compile vertex shader");
-  }
-  if (fragmentSPIRV.empty()) {
-    throw std::runtime_error("Failed to compile fragment shader");
-  }
+  auto vertexSPIRV = glsl_vs_to_spv(VertexShaderGlsl);
+  auto vs = vko::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
 
-  auto shaderProgram = ShaderProgram::Create(device);
-  shaderProgram->LoadVertexShader(vertexSPIRV);
-  shaderProgram->LoadFragmentShader(fragmentSPIRV);
+  auto fragmentSPIRV = glsl_fs_to_spv(FragmentShaderGlsl);
+  auto fs =
+      vko::ShaderModule::createFragmentShader(device, fragmentSPIRV, "main");
+
+  VkPipelineShaderStageCreateInfo stages[] = {
+      vs.pipelineShaderStageCreateInfo,
+      fs.pipelineShaderStageCreateInfo,
+  };
 
   VkGraphicsPipelineCreateInfo pipeInfo{
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-  pipeInfo.stageCount = (uint32_t)shaderProgram->shaderInfo.size();
-  pipeInfo.pStages = shaderProgram->shaderInfo.data();
-  pipeInfo.pVertexInputState = &vi;
-  pipeInfo.pInputAssemblyState = &ia;
-  pipeInfo.pTessellationState = nullptr;
-  pipeInfo.pViewportState = &vp;
-  pipeInfo.pRasterizationState = &rs;
-  pipeInfo.pMultisampleState = &ms;
-  pipeInfo.pDepthStencilState = &ds;
-  pipeInfo.pColorBlendState = &cb;
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(std::size(stages)),
+      .pStages = stages,
+      .pVertexInputState = &vi,
+      .pInputAssemblyState = &ia,
+      .pTessellationState = nullptr,
+      .pViewportState = &vp,
+      .pRasterizationState = &rs,
+      .pMultisampleState = &ms,
+      .pDepthStencilState = &ds,
+      .pColorBlendState = &cb,
+      .layout = ptr->m_pipelineLayout,
+      .renderPass = ptr->m_renderPass,
+      .subpass = 0,
+  };
   if (dynamicState.dynamicStateCount > 0) {
     pipeInfo.pDynamicState = &dynamicState;
   }
-  pipeInfo.layout = ptr->m_pipelineLayout;
-  pipeInfo.renderPass = ptr->m_renderPass;
-  pipeInfo.subpass = 0;
   if (vkCreateGraphicsPipelines(ptr->m_vkDevice, VK_NULL_HANDLE, 1, &pipeInfo,
                                 nullptr, &ptr->m_pipeline) != VK_SUCCESS) {
     throw std::runtime_error("vkCreateGraphicsPipelines");

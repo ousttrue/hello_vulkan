@@ -3,6 +3,7 @@ add_library(
   MemoryAllocator.cpp
   Pipeline.cpp
   VertexBuffer.cpp
+  glsl_to_spv.cpp
 )
 
 target_include_directories(vkr PUBLIC ${CMAKE_CURRENT_LIST_DIR}/include)
