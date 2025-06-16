@@ -25,6 +25,9 @@ void ShowHelp() {
 }
 
 int main(int argc, char *argv[]) {
+  {
+  }
+
   // Parse command-line arguments into Options.
   Options options;
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {

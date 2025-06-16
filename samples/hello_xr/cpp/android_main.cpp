@@ -16,6 +16,7 @@
 
 #include "xr_loop.h"
 #include <thread>
+#include <xro/xro.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -70,6 +71,19 @@ void _android_main(struct android_app *app) {
     loaderInitInfoAndroid.applicationContext = app->activity->clazz;
     initializeLoader(
         (const XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfoAndroid);
+  }
+
+  {
+    xro::Instance xr_instance;
+
+    XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{
+        .type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
+        .applicationVM = app->activity->vm,
+        .applicationActivity = app->activity->clazz,
+    };
+    xr_instance.extensions.push_back(
+        XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+    XRO_CHECK(xr_instance.create(&instanceCreateInfoAndroid));
   }
 
   XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{

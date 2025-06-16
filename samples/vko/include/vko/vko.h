@@ -28,19 +28,27 @@
 #define TOSTRING(x) CHK_STRINGIFY(x)
 #define FILE_AND_LINE __FILE__ ":" TOSTRING(__LINE__)
 
-#define THROW(msg) Throw(msg, nullptr, FILE_AND_LINE);
+#ifndef THROW
+#define THROW(msg) vko::Throw(msg, nullptr, FILE_AND_LINE);
+#endif
+
+#ifndef CHECK
 #define CHECK(exp)                                                             \
   {                                                                            \
     if (!(exp)) {                                                              \
-      Throw("Check failed", #exp, FILE_AND_LINE);                              \
+      vko::Throw("Check failed", #exp, FILE_AND_LINE);                              \
     }                                                                          \
   }
+#endif
+
+#ifndef CHECK_MSG
 #define CHECK_MSG(exp, msg)                                                    \
   {                                                                            \
     if (!(exp)) {                                                              \
-      Throw(msg, #exp, FILE_AND_LINE);                                         \
+      vko::Throw(msg, #exp, FILE_AND_LINE);                                         \
     }                                                                          \
   }
+#endif
 
 namespace vko {
 
