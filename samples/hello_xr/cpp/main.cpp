@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
             continue;
           }
 
-          session.PollActions();
+          session.m_input.PollActions(session.m_session);
 
           return true;
         }

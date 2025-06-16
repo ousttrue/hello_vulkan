@@ -8,14 +8,20 @@ enum Side {
   COUNT = 2,
 };
 
-struct InputState {
+class InputState {
   XrActionSet actionSet{XR_NULL_HANDLE};
   XrAction grabAction{XR_NULL_HANDLE};
   XrAction poseAction{XR_NULL_HANDLE};
   XrAction vibrateAction{XR_NULL_HANDLE};
   XrAction quitAction{XR_NULL_HANDLE};
   std::array<XrPath, Side::COUNT> handSubactionPath;
+
+public:
+  std::array<XrBool32, Side::COUNT> handActive;
   std::array<XrSpace, Side::COUNT> handSpace;
   std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
-  std::array<XrBool32, Side::COUNT> handActive;
+  ~InputState();
+  void InitializeActions(XrInstance instance, XrSession session);
+  void Log(XrSession session);
+  void PollActions(XrSession session);
 };

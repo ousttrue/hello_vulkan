@@ -39,9 +39,6 @@ public:
   // Process any events in the event queue.
   void PollEvents(bool *exitRenderLoop, bool *requestRestart);
 
-  // Sample input actions and generate haptic feedback.
-  void PollActions();
-
   bool LocateView(XrSpace appSpace, XrTime predictedDisplayTime,
                   XrViewConfigurationType viewConfigType,
                   uint32_t *viewCountOutput);
@@ -50,8 +47,6 @@ public:
   XrFrameState BeginFrame();
   void EndFrame(XrTime predictedDisplayTime,
                 const std::vector<XrCompositionLayerBaseHeader *> &layers);
-
-  void InitializeActions();
 
 private:
   // Return event if one is available, otherwise return null.

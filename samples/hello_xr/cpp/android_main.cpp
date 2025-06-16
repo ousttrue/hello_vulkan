@@ -176,7 +176,7 @@ void _android_main(struct android_app *app) {
             continue;
           }
 
-          session.PollActions();
+          session.m_input.PollActions(session.m_session);
 
           return true;
         }
