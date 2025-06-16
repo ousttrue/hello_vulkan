@@ -24,31 +24,25 @@
 #include <stdarg.h>
 #endif
 
-#define CHK_STRINGIFY(x) #x
-#define TOSTRING(x) CHK_STRINGIFY(x)
-#define FILE_AND_LINE __FILE__ ":" TOSTRING(__LINE__)
+#define VKO_CHK_STRINGIFY(x) #x
+#define VKO_TOSTRING(x) VKO_CHK_STRINGIFY(x)
+#define VKO_FILE_AND_LINE __FILE__ ":" VKO_TOSTRING(__LINE__)
 
-#ifndef THROW
-#define THROW(msg) vko::Throw(msg, nullptr, FILE_AND_LINE);
-#endif
+// #define VKO_THROW(msg) vko::Throw(msg, nullptr, VKO_FILE_AND_LINE);
 
-#ifndef CHECK
-#define CHECK(exp)                                                             \
-  {                                                                            \
-    if (!(exp)) {                                                              \
-      vko::Throw("Check failed", #exp, FILE_AND_LINE);                              \
-    }                                                                          \
-  }
-#endif
+// #define VKO_CHECK(exp)                                                             \
+//   {                                                                            \
+//     if (!(exp)) {                                                              \
+//       vko::Throw("Check failed", #exp, VKO_FILE_AND_LINE);                     \
+//     }                                                                          \
+//   }
 
-#ifndef CHECK_MSG
-#define CHECK_MSG(exp, msg)                                                    \
-  {                                                                            \
-    if (!(exp)) {                                                              \
-      vko::Throw(msg, #exp, FILE_AND_LINE);                                         \
-    }                                                                          \
-  }
-#endif
+// #define VKO_CHECK_MSG(exp, msg)                                                    \
+//   {                                                                            \
+//     if (!(exp)) {                                                              \
+//       vko::Throw(msg, #exp, VKO_FILE_AND_LINE);                                \
+//     }                                                                          \
+//   }
 
 namespace vko {
 

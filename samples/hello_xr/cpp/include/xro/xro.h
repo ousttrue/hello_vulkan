@@ -8,9 +8,10 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#define XRO_CHECK(cmd) xro::CheckXrResult(cmd, #cmd, FILE_AND_LINE);
+#define XRO_CHECK(cmd) xro::CheckXrResult(cmd, #cmd, VKO_FILE_AND_LINE);
 // #define CHECK_XRRESULT(res, cmdStr) CheckXrResult(res, cmdStr,
-// FILE_AND_LINE);
+// VKO_FILE_AND_LINE);
+// #define XRO_THROW(xr, cmd) ThrowXrResult(xr, #cmd, VKO_FILE_AND_LINE);
 
 namespace xro {
 
@@ -22,8 +23,6 @@ using Logger = vko::Logger;
   vko::Throw(vko::fmt("XrResult failure [%d]", res), originator,
              sourceLocation);
 }
-
-#define THROW_XR(xr, cmd) ThrowXrResult(xr, #cmd, FILE_AND_LINE);
 
 inline XrResult CheckXrResult(XrResult res, const char *originator = nullptr,
                               const char *sourceLocation = nullptr) {
