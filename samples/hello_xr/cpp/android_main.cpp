@@ -128,9 +128,9 @@ void _android_main(struct android_app *app) {
   device.reset(vulkan.Device);
 
   // XrSession
-  OpenXrSession session(options, xr_instance.instance, xr_instance.systemId,
-                        vulkan.Instance, vulkan.PhysicalDevice,
-                        vulkan.QueueFamilyIndex, vulkan.Device);
+  auto session = OpenXrSession::create(
+      options, xr_instance.instance, xr_instance.systemId, vulkan.Instance,
+      vulkan.PhysicalDevice, vulkan.QueueFamilyIndex, vulkan.Device);
 
   xr_loop(
       [app, &session]() {

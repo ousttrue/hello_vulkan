@@ -33,13 +33,32 @@ static void LogReferenceSpaces(XrSession m_session) {
 }
 
 OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
-                             XrSystemId systemId, VkInstance vkInstance,
-                             VkPhysicalDevice vkPhysicalDevice,
-                             uint32_t vkQueueFamilyIndex, VkDevice vkDevice)
-    : m_options(options), m_instance(instance), m_systemId(systemId) {
-  CHECK(m_instance != XR_NULL_HANDLE);
-  CHECK(m_session != XR_NULL_HANDLE);
+                             XrSystemId systemId, XrSession session)
+    : m_options(options), m_instance(instance), m_systemId(systemId),
+      m_session(session) {
+  {
+    XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
+        GetXrReferenceSpaceCreateInfo(options.AppSpace);
+    CHECK_XRCMD(xrCreateReferenceSpace(
+        this->m_session, &referenceSpaceCreateInfo, &this->m_appSpace));
+  }
 
+  // Note: No other view configurations exist at the time this code was
+  // written. If this condition is not met, the project will need to be
+  // audited to see how support should be added.
+  CHECK_MSG(m_options.Parsed.ViewConfigType ==
+                XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+            "Unsupported view configuration type");
+
+  this->m_input.InitializeActions(m_instance, m_session);
+}
+
+OpenXrSession OpenXrSession::create(const Options &options, XrInstance instance,
+                                    XrSystemId systemId, VkInstance vkInstance,
+                                    VkPhysicalDevice vkPhysicalDevice,
+                                    uint32_t vkQueueFamilyIndex,
+                                    VkDevice vkDevice) {
+  XrSession session;
   {
     Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
 
@@ -57,27 +76,12 @@ OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
         .next = &graphicsBinding,
         .systemId = systemId,
     };
-    CHECK_XRCMD(
-        xrCreateSession(this->m_instance, &createInfo, &this->m_session));
+    CHECK_XRCMD(xrCreateSession(instance, &createInfo, &session));
   }
 
-  LogReferenceSpaces(this->m_session);
+  LogReferenceSpaces(session);
 
-  {
-    XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-        GetXrReferenceSpaceCreateInfo(options.AppSpace);
-    CHECK_XRCMD(xrCreateReferenceSpace(
-        this->m_session, &referenceSpaceCreateInfo, &this->m_appSpace));
-  }
-
-  // Note: No other view configurations exist at the time this code was
-  // written. If this condition is not met, the project will need to be
-  // audited to see how support should be added.
-  CHECK_MSG(m_options.Parsed.ViewConfigType ==
-                XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-            "Unsupported view configuration type");
-
-  this->m_input.InitializeActions(m_instance, m_session);
+  return OpenXrSession(options, instance, systemId, session);
 }
 
 OpenXrSession::~OpenXrSession() {

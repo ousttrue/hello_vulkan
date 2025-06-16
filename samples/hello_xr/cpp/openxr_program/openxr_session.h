@@ -14,17 +14,22 @@ class OpenXrSession {
   bool m_sessionRunning{false};
   XrEventDataBuffer m_eventDataBuffer;
 
+  OpenXrSession(const Options &options, XrInstance instance,
+                XrSystemId systemId, XrSession session);
+
 public:
   XrSession m_session;
   XrSpace m_appSpace;
   InputState m_input;
   std::vector<XrView> m_views;
 
-  OpenXrSession(const Options &options, XrInstance instance,
-                XrSystemId systemId, VkInstance vkInstance,
-                VkPhysicalDevice vkPhysicalDevice, uint32_t vkQueueFamilyIndex,
-                VkDevice vkDevice);
+  static OpenXrSession create(const Options &options, XrInstance instance,
+                              XrSystemId systemId, VkInstance vkInstance,
+                              VkPhysicalDevice vkPhysicalDevice,
+                              uint32_t vkQueueFamilyIndex, VkDevice vkDevice);
   ~OpenXrSession();
+  OpenXrSession(const OpenXrSession &) = delete;
+  OpenXrSession &operator=(const OpenXrSession &) = delete;
 
   // Manage session lifecycle to track if RenderFrame should be called.
   bool IsSessionRunning() const { return m_sessionRunning; }
