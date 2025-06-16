@@ -15,8 +15,6 @@ class VulkanGraphicsPlugin;
 
 class OpenXrProgram {
   const struct Options &m_options;
-  XrInstance m_instance;
-  XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
   const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
   VkDebugUtilsMessengerEXT m_vkDebugUtilsMessenger{VK_NULL_HANDLE};
 
@@ -24,6 +22,8 @@ class OpenXrProgram {
                 XrSystemId systemId);
 
 public:
+  XrInstance m_instance;
+  XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
   ~OpenXrProgram();
 
   // Create an Instance and other basic instance-level initialization.
@@ -48,7 +48,4 @@ public:
   // Options
   XrEnvironmentBlendMode GetPreferredBlendMode() const;
 
-  // Create a Session and other basic session-level initialization.
-  std::shared_ptr<class OpenXrSession>
-  InitializeSession(VulkanResources vulkan);
 };

@@ -4,6 +4,5 @@
 #include <memory>
 
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
-             const std::shared_ptr<OpenXrSession> &session,
-             VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-             VkDevice device);
+             OpenXrSession &session, VkPhysicalDevice physicalDevice,
+             uint32_t queueFamilyIndex, VkDevice device);

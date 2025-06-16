@@ -22,7 +22,9 @@ public:
   std::vector<XrView> m_views;
 
   OpenXrSession(const Options &options, XrInstance instance,
-                XrSystemId systemId, XrSession session, XrSpace appSpace);
+                XrSystemId systemId, VkInstance vkInstance,
+                VkPhysicalDevice vkPhysicalDevice, uint32_t vkQueueFamilyIndex,
+                VkDevice vkDevice);
   ~OpenXrSession();
 
   // Manage session lifecycle to track if RenderFrame should be called.

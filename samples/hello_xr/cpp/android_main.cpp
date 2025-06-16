@@ -140,10 +140,12 @@ void _android_main(struct android_app *app) {
   device.reset(vulkan.Device);
 
   // XrSession
-  auto session = program->InitializeSession(vulkan);
+  OpenXrSession session(options, program->m_instance, program->m_systemId,
+                        vulkan.Instance, vulkan.PhysicalDevice,
+                        vulkan.QueueFamilyIndex, vulkan.Device);
 
   xr_loop(
-      [app, session]() {
+      [app, &session]() {
         while (true) {
           if (app->destroyRequested) {
             return false;
@@ -158,7 +160,7 @@ void _android_main(struct android_app *app) {
             // appears.
             const int timeoutMilliseconds =
                 (!((vko::UserData *)app->userData)->_active &&
-                 !session->IsSessionRunning() && app->destroyRequested == 0)
+                 !session.IsSessionRunning() && app->destroyRequested == 0)
                     ? -1
                     : 0;
             if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
@@ -174,19 +176,19 @@ void _android_main(struct android_app *app) {
 
           bool requestRestart = false;
           bool exitRenderLoop = false;
-          session->PollEvents(&exitRenderLoop, &requestRestart);
+          session.PollEvents(&exitRenderLoop, &requestRestart);
           if (exitRenderLoop) {
             ANativeActivity_finish(app->activity);
             continue;
           }
 
-          if (!session->IsSessionRunning()) {
+          if (!session.IsSessionRunning()) {
             // Throttle loop since xrWaitFrame won't be called.
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             continue;
           }
 
-          session->PollActions();
+          session.PollActions();
 
           return true;
         }

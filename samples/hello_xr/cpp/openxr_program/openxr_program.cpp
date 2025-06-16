@@ -470,65 +470,6 @@ OpenXrProgram::VulkanResources OpenXrProgram::InitializeVulkan(
   };
 }
 
-static void LogReferenceSpaces(XrSession m_session) {
-
-  CHECK(m_session != XR_NULL_HANDLE);
-
-  uint32_t spaceCount;
-  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, nullptr));
-  std::vector<XrReferenceSpaceType> spaces(spaceCount);
-  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount,
-                                         spaces.data()));
-
-  Log::Write(Log::Level::Info,
-             Fmt("Available reference spaces: %d", spaceCount));
-  for (XrReferenceSpaceType space : spaces) {
-    Log::Write(Log::Level::Verbose, Fmt("  Name: %s", to_string(space)));
-  }
-}
-
-std::shared_ptr<OpenXrSession>
-OpenXrProgram::InitializeSession(VulkanResources vulkan) {
-  CHECK(m_instance != XR_NULL_HANDLE);
-
-  XrSession session;
-  {
-    Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
-
-    XrGraphicsBindingVulkan2KHR graphicsBinding{
-        .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-        .next = nullptr,
-        .instance = vulkan.Instance,
-        .physicalDevice = vulkan.PhysicalDevice,
-        .device = vulkan.Device,
-        .queueFamilyIndex = vulkan.QueueFamilyIndex,
-        .queueIndex = 0,
-    };
-    XrSessionCreateInfo createInfo{
-        .type = XR_TYPE_SESSION_CREATE_INFO,
-        .next = &graphicsBinding,
-        .systemId = m_systemId,
-    };
-    CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &session));
-  }
-
-  LogReferenceSpaces(session);
-
-  XrSpace appSpace;
-  {
-    XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-        GetXrReferenceSpaceCreateInfo(m_options.AppSpace);
-    CHECK_XRCMD(
-        xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &appSpace));
-  }
-
-  auto ptr = std::shared_ptr<OpenXrSession>(
-      new OpenXrSession(m_options, m_instance, m_systemId, session, appSpace));
-  ptr->InitializeActions();
-  ptr->CreateVisualizedSpaces();
-  return ptr;
-}
-
 XrEnvironmentBlendMode OpenXrProgram::GetPreferredBlendMode() const {
   uint32_t count;
   CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId,

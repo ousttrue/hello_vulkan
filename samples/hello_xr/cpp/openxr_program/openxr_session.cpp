@@ -1,5 +1,14 @@
-#include "openxr_session.h"
+#include <vulkan/vulkan.h>
+#ifdef XR_USE_PLATFORM_ANDROID
+#include <android_native_app_glue.h>
+#endif
+#ifdef XR_USE_PLATFORM_WIN32
+#include <Unknwn.h>
+#endif
+#include <openxr/openxr_platform.h>
+
 #include "GetXrReferenceSpaceCreateInfo.h"
+#include "openxr_session.h"
 #include "options.h"
 #include "xr_check.h"
 #include <algorithm>
@@ -10,12 +19,60 @@
 #define strcpy_s(dest, source) strncpy((dest), (source), sizeof(dest))
 #endif
 
-OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
-                             XrSystemId systemId, XrSession session,
-                             XrSpace appSpace)
-    : m_options(options), m_instance(instance), m_systemId(systemId),
-      m_session(session), m_appSpace(appSpace) {
+static void LogReferenceSpaces(XrSession m_session) {
+
   CHECK(m_session != XR_NULL_HANDLE);
+
+  uint32_t spaceCount;
+  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, nullptr));
+  std::vector<XrReferenceSpaceType> spaces(spaceCount);
+  CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount,
+                                         spaces.data()));
+
+  Log::Write(Log::Level::Info,
+             Fmt("Available reference spaces: %d", spaceCount));
+  for (XrReferenceSpaceType space : spaces) {
+    Log::Write(Log::Level::Verbose, Fmt("  Name: %s", to_string(space)));
+  }
+}
+
+OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
+                             XrSystemId systemId, VkInstance vkInstance,
+                             VkPhysicalDevice vkPhysicalDevice,
+                             uint32_t vkQueueFamilyIndex, VkDevice vkDevice)
+    : m_options(options), m_instance(instance), m_systemId(systemId) {
+  CHECK(m_instance != XR_NULL_HANDLE);
+  CHECK(m_session != XR_NULL_HANDLE);
+
+  {
+    Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
+
+    XrGraphicsBindingVulkan2KHR graphicsBinding{
+        .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+        .next = nullptr,
+        .instance = vkInstance,
+        .physicalDevice = vkPhysicalDevice,
+        .device = vkDevice,
+        .queueFamilyIndex = vkQueueFamilyIndex,
+        .queueIndex = 0,
+    };
+    XrSessionCreateInfo createInfo{
+        .type = XR_TYPE_SESSION_CREATE_INFO,
+        .next = &graphicsBinding,
+        .systemId = systemId,
+    };
+    CHECK_XRCMD(
+        xrCreateSession(this->m_instance, &createInfo, &this->m_session));
+  }
+
+  LogReferenceSpaces(this->m_session);
+
+  {
+    XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
+        GetXrReferenceSpaceCreateInfo(options.AppSpace);
+    CHECK_XRCMD(xrCreateReferenceSpace(
+        this->m_session, &referenceSpaceCreateInfo, &this->m_appSpace));
+  }
 
   // Read graphics properties for preferred swapchain length and logging.
   XrSystemProperties systemProperties{XR_TYPE_SYSTEM_PROPERTIES};
@@ -48,6 +105,9 @@ OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
   CHECK_MSG(m_options.Parsed.ViewConfigType ==
                 XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
             "Unsupported view configuration type");
+
+  this->InitializeActions();
+  this->CreateVisualizedSpaces();
 }
 
 OpenXrSession::~OpenXrSession() {
