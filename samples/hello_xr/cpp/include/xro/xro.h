@@ -84,6 +84,31 @@ struct Instance {
       return result;
     }
 
+    // Read graphics properties for preferred swapchain length and logging.
+    XrSystemProperties systemProperties{
+        .type = XR_TYPE_SYSTEM_PROPERTIES,
+    };
+    XRO_CHECK(xrGetSystemProperties(this->instance, this->systemId,
+                                    &systemProperties));
+
+    // Log system properties.
+    Logger::Info("System Properties: Name=%s VendorId=%d",
+                 systemProperties.systemName, systemProperties.vendorId);
+    Logger::Info(
+        "System Graphics Properties: MaxWidth=%d MaxHeight=%d MaxLayers=%d",
+        systemProperties.graphicsProperties.maxSwapchainImageWidth,
+        systemProperties.graphicsProperties.maxSwapchainImageHeight,
+        systemProperties.graphicsProperties.maxLayerCount);
+    Logger::Info("System Tracking Properties: OrientationTracking=%s "
+                 "PositionTracking=%s",
+                 systemProperties.trackingProperties.orientationTracking ==
+                         XR_TRUE
+                     ? "True"
+                     : "False",
+                 systemProperties.trackingProperties.positionTracking == XR_TRUE
+                     ? "True"
+                     : "False");
+
     return XR_SUCCESS;
   }
 

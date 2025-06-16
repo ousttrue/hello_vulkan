@@ -74,31 +74,6 @@ OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
         this->m_session, &referenceSpaceCreateInfo, &this->m_appSpace));
   }
 
-  // Read graphics properties for preferred swapchain length and logging.
-  XrSystemProperties systemProperties{XR_TYPE_SYSTEM_PROPERTIES};
-  CHECK_XRCMD(xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
-
-  // Log system properties.
-  Log::Write(Log::Level::Info,
-             Fmt("System Properties: Name=%s VendorId=%d",
-                 systemProperties.systemName, systemProperties.vendorId));
-  Log::Write(
-      Log::Level::Info,
-      Fmt("System Graphics Properties: MaxWidth=%d MaxHeight=%d MaxLayers=%d",
-          systemProperties.graphicsProperties.maxSwapchainImageWidth,
-          systemProperties.graphicsProperties.maxSwapchainImageHeight,
-          systemProperties.graphicsProperties.maxLayerCount));
-  Log::Write(
-      Log::Level::Info,
-      Fmt("System Tracking Properties: OrientationTracking=%s "
-          "PositionTracking=%s",
-          systemProperties.trackingProperties.orientationTracking == XR_TRUE
-              ? "True"
-              : "False",
-          systemProperties.trackingProperties.positionTracking == XR_TRUE
-              ? "True"
-              : "False"));
-
   // Note: No other view configurations exist at the time this code was
   // written. If this condition is not met, the project will need to be
   // audited to see how support should be added.
@@ -107,7 +82,6 @@ OpenXrSession::OpenXrSession(const Options &options, XrInstance instance,
             "Unsupported view configuration type");
 
   this->InitializeActions();
-  this->CreateVisualizedSpaces();
 }
 
 OpenXrSession::~OpenXrSession() {
@@ -116,10 +90,6 @@ OpenXrSession::~OpenXrSession() {
       xrDestroySpace(m_input.handSpace[hand]);
     }
     xrDestroyActionSet(m_input.actionSet);
-  }
-
-  for (XrSpace visualizedSpace : m_visualizedSpaces) {
-    xrDestroySpace(visualizedSpace);
   }
 
   if (m_appSpace != XR_NULL_HANDLE) {
@@ -466,30 +436,6 @@ const XrEventDataBaseHeader *OpenXrSession::TryReadNextEvent() {
     return nullptr;
   }
   THROW_XR(xr, "xrPollEvent");
-}
-
-void OpenXrSession::CreateVisualizedSpaces() {
-  CHECK(m_session != XR_NULL_HANDLE);
-
-  std::string visualizedSpaces[] = {
-      "ViewFront",        "Local",      "Stage",
-      "StageLeft",        "StageRight", "StageLeftRotated",
-      "StageRightRotated"};
-
-  for (const auto &visualizedSpace : visualizedSpaces) {
-    auto referenceSpaceCreateInfo =
-        GetXrReferenceSpaceCreateInfo(visualizedSpace);
-    XrSpace space;
-    XrResult res =
-        xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &space);
-    if (XR_SUCCEEDED(res)) {
-      m_visualizedSpaces.push_back(space);
-    } else {
-      Log::Write(Log::Level::Warning,
-                 Fmt("Failed to create reference space %s with error %d",
-                     visualizedSpace.c_str(), res));
-    }
-  }
 }
 
 void OpenXrSession::InitializeActions() {

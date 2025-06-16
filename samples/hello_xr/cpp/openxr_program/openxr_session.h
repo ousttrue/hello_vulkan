@@ -17,7 +17,6 @@ class OpenXrSession {
 public:
   XrSession m_session;
   XrSpace m_appSpace;
-  std::vector<XrSpace> m_visualizedSpaces;
   InputState m_input;
   std::vector<XrView> m_views;
 
@@ -53,7 +52,6 @@ public:
                 const std::vector<XrCompositionLayerBaseHeader *> &layers);
 
   void InitializeActions();
-  void CreateVisualizedSpaces();
 
 private:
   // Return event if one is available, otherwise return null.

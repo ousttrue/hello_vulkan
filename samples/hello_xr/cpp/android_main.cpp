@@ -78,13 +78,17 @@ void _android_main(struct android_app *app) {
       .applicationVM = app->activity->vm,
       .applicationActivity = app->activity->clazz,
   };
-
   xro::Instance xr_instance;
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
   XRO_CHECK(xr_instance.create(&instanceCreateInfoAndroid));
+  // options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
+  // if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
+  //   ShowHelp();
+  // }
+
   vko::Instance instance;
   instance.appInfo.pApplicationName = "hello_xr";
   instance.appInfo.pEngineName = "hello_xr";

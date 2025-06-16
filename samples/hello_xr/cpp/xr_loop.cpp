@@ -1,7 +1,9 @@
 #include "xr_loop.h"
 #include "openxr_program/CubeScene.h"
+#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
 #include "openxr_program/openxr_swapchain.h"
 #include "openxr_program/options.h"
+#include "vko/vko.h"
 #include <map>
 #include <vko/vko_pipeline.h>
 #include <vko/vko_shaderc.h>
@@ -343,6 +345,40 @@ struct ViewRenderer {
   }
 };
 
+struct VisualizedSpaces : public vko::not_copyable {
+  std::vector<XrSpace> m_visualizedSpaces;
+
+  VisualizedSpaces(XrSession session) {
+    // void OpenXrSession::CreateVisualizedSpaces() {
+    // CHECK(m_session != XR_NULL_HANDLE);
+    std::string visualizedSpaces[] = {
+        "ViewFront",        "Local",      "Stage",
+        "StageLeft",        "StageRight", "StageLeftRotated",
+        "StageRightRotated"};
+
+    for (const auto &visualizedSpace : visualizedSpaces) {
+      auto referenceSpaceCreateInfo =
+          GetXrReferenceSpaceCreateInfo(visualizedSpace);
+      XrSpace space;
+      XrResult res =
+          xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &space);
+      if (XR_SUCCEEDED(res)) {
+        m_visualizedSpaces.push_back(space);
+      } else {
+        Log::Write(Log::Level::Warning,
+                   Fmt("Failed to create reference space %s with error %d",
+                       visualizedSpace.c_str(), res));
+      }
+    }
+  }
+
+  ~VisualizedSpaces() {
+    for (XrSpace visualizedSpace : m_visualizedSpaces) {
+      xrDestroySpace(visualizedSpace);
+    }
+  }
+};
+
 void xr_loop(const std::function<bool()> &runLoop, const Options &options,
              OpenXrSession &session, VkPhysicalDevice physicalDevice,
              uint32_t queueFamilyIndex, VkDevice device) {
@@ -417,6 +453,8 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
     views.push_back(ptr);
   }
 
+  VisualizedSpaces spaces(session.m_session);
+
   // mainloop
   while (runLoop()) {
 
@@ -434,7 +472,7 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
         // update scene
         CubeScene scene;
         scene.addSpaceCubes(session.m_appSpace, frameState.predictedDisplayTime,
-                            session.m_visualizedSpaces);
+                            spaces.m_visualizedSpaces);
         scene.addHandCubes(session.m_appSpace, frameState.predictedDisplayTime,
                            session.m_input);
 

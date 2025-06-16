@@ -71,10 +71,10 @@ int main(int argc, char **argv) {
   instance.instanceExtensions = instanceExtensions;
   instance.appInfo.pApplicationName = NAME;
   instance.appInfo.pEngineName = "No Engine";
-  VKO_CHECK(instance.create());
+  vko::VKO_CHECK(instance.create());
 
   VkSurfaceKHR _surface;
-  VKO_CHECK(
+  vko::VKO_CHECK(
       glfwCreateWindowSurface(instance, glfw._window, nullptr, &_surface));
 
   auto physicalDevice = instance.pickPhysicalDevice(_surface);
@@ -83,9 +83,9 @@ int main(int argc, char **argv) {
   vko::Device device;
   device.validationLayers = instance.validationLayers;
   device.deviceExtensions = deviceExtensions;
-  VKO_CHECK(device.create(physicalDevice.physicalDevice,
-                          physicalDevice.graphicsFamilyIndex,
-                          physicalDevice.presentFamilyIndex));
+  vko::VKO_CHECK(device.create(physicalDevice.physicalDevice,
+                               physicalDevice.graphicsFamilyIndex,
+                               physicalDevice.presentFamilyIndex));
 
   main_loop([&glfw]() { return glfw.nextFrame(); }, surface, physicalDevice,
             device);

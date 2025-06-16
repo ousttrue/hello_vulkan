@@ -1,6 +1,5 @@
 #include "vko.h"
 
-#include <iostream>
 #include <shaderc/shaderc.hpp>
 #include <string>
 #include <vector>
@@ -10,9 +9,6 @@ namespace vko {
 inline std::vector<uint32_t> compile_glsl(const std::string &name,
                                           shaderc_shader_kind kind,
                                           const std::string &data) {
-
-  Logger::Info("glsl to spv =>");
-  Logger::Info("%s", data.c_str());
 
   shaderc::Compiler compiler;
   shaderc::CompileOptions options;

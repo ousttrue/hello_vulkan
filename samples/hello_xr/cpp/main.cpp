@@ -6,6 +6,7 @@
 #include <thread>
 
 #include <vko/vko.h>
+#include <xro/xro.h>
 
 #include "xr_loop.h"
 
@@ -25,9 +26,6 @@ void ShowHelp() {
 }
 
 int main(int argc, char *argv[]) {
-  {
-  }
-
   // Parse command-line arguments into Options.
   Options options;
   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
@@ -44,16 +42,14 @@ int main(int argc, char *argv[]) {
   }};
   exitPollingThread.detach();
 
-  // Initialize the OpenXR program.
-  auto program = OpenXrProgram::Create(options, {}, nullptr);
-  if (!program) {
-    Log::Write(Log::Level::Error, "No system. QuestLink not ready ?");
-    return 1;
-  }
-  options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-  if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
-    ShowHelp();
-  }
+  xro::Instance xr_instance;
+  xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+  xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
+  XRO_CHECK(xr_instance.create(nullptr));
+  //   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
+  //   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
+  //     ShowHelp();
+  //   }
 
   // Create VkDevice by OpenXR.
   vko::Instance instance;
@@ -67,7 +63,7 @@ int main(int argc, char *argv[]) {
                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
       .pfnUserCallback = debugMessageThunk,
-      .pUserData = program.get(),
+      // .pUserData = program.get(),
   };
   vko::Device device;
 
@@ -88,17 +84,19 @@ int main(int argc, char *argv[]) {
   });
 #endif
 
-  auto vulkan = program->InitializeVulkan(
+  auto vulkan = xr_instance.createVulkan(
       instance.validationLayers, instance.instanceExtensions,
       device.deviceExtensions, &instance.debugUtilsMessengerCreateInfo);
   instance.reset(vulkan.Instance);
   device.reset(vulkan.Device);
 
   // XrSession
-  auto session = program->InitializeSession(vulkan);
+  OpenXrSession session(options, xr_instance.instance, xr_instance.systemId,
+                        vulkan.Instance, vulkan.PhysicalDevice,
+                        vulkan.QueueFamilyIndex, vulkan.Device);
 
   xr_loop(
-      [pQuit = &quitKeyPressed, session]() {
+      [pQuit = &quitKeyPressed, &session]() {
         while (true) {
           if (*pQuit) {
             return false;
@@ -106,18 +104,18 @@ int main(int argc, char *argv[]) {
 
           bool exitRenderLoop = false;
           bool requestRestart = false;
-          session->PollEvents(&exitRenderLoop, &requestRestart);
+          session.PollEvents(&exitRenderLoop, &requestRestart);
           if (exitRenderLoop) {
             return false;
           }
 
-          if (!session->IsSessionRunning()) {
+          if (!session.IsSessionRunning()) {
             // Throttle loop since xrWaitFrame won't be called.
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             continue;
           }
 
-          session->PollActions();
+          session.PollActions();
 
           return true;
         }
