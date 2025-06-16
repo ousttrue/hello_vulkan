@@ -9,7 +9,6 @@
 #include "openxr_program/options.h"
 
 #include <common/logger.h>
-// #include
 
 #include <vko/android_userdata.h>
 #include <vko/vko.h>
@@ -66,24 +65,12 @@ void _android_main(struct android_app *app) {
           xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
                                 (PFN_xrVoidFunction *)(&initializeLoader)))) {
     XrLoaderInitInfoAndroidKHR loaderInitInfoAndroid = {
-        XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
-    loaderInitInfoAndroid.applicationVM = app->activity->vm;
-    loaderInitInfoAndroid.applicationContext = app->activity->clazz;
+        .type = XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
+        .applicationVM = app->activity->vm,
+        .applicationContext = app->activity->clazz,
+    };
     initializeLoader(
         (const XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfoAndroid);
-  }
-
-  {
-    xro::Instance xr_instance;
-
-    XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{
-        .type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
-        .applicationVM = app->activity->vm,
-        .applicationActivity = app->activity->clazz,
-    };
-    xr_instance.extensions.push_back(
-        XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
-    XRO_CHECK(xr_instance.create(&instanceCreateInfoAndroid));
   }
 
   XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{
@@ -92,15 +79,12 @@ void _android_main(struct android_app *app) {
       .applicationActivity = app->activity->clazz,
   };
 
-  // Initialize the OpenXR program.
-  auto program = OpenXrProgram::Create(
-      options, {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME},
-      &instanceCreateInfoAndroid);
-  options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-  if (!options.UpdateOptionsFromSystemProperties()) {
-    ShowHelp();
-  }
-
+  xro::Instance xr_instance;
+  xr_instance.extensions.push_back(
+      XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+  xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+  xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
+  XRO_CHECK(xr_instance.create(&instanceCreateInfoAndroid));
   vko::Instance instance;
   instance.appInfo.pApplicationName = "hello_xr";
   instance.appInfo.pEngineName = "hello_xr";
@@ -112,7 +96,7 @@ void _android_main(struct android_app *app) {
                      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
       .pfnUserCallback = debugMessageThunk,
-      .pUserData = program.get(),
+      .pUserData = nullptr,
   };
   vko::Device device;
 
@@ -133,14 +117,14 @@ void _android_main(struct android_app *app) {
   });
 #endif
 
-  auto vulkan = program->InitializeVulkan(
+  auto vulkan = xr_instance.createVulkan(
       instance.validationLayers, instance.instanceExtensions,
       device.deviceExtensions, &instance.debugUtilsMessengerCreateInfo);
   instance.reset(vulkan.Instance);
   device.reset(vulkan.Device);
 
   // XrSession
-  OpenXrSession session(options, program->m_instance, program->m_systemId,
+  OpenXrSession session(options, xr_instance.instance, xr_instance.systemId,
                         vulkan.Instance, vulkan.PhysicalDevice,
                         vulkan.QueueFamilyIndex, vulkan.Device);
 
