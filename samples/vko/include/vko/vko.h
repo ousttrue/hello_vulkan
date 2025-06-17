@@ -339,6 +339,7 @@ struct Instance : public not_copyable {
                                     nullptr);
     }
     if (this->instance != VK_NULL_HANDLE) {
+      Logger::Info("vko::Instance::~Instance ...");
       vkDestroyInstance(this->instance, nullptr);
     }
   }
@@ -546,6 +547,7 @@ struct Device : public not_copyable {
   }
   ~Device() {
     if (this->device != VK_NULL_HANDLE) {
+      Logger::Info("vko::Device::~Device ...");
       vkDestroyDevice(this->device, nullptr);
     }
   }

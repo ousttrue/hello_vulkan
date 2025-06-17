@@ -375,6 +375,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
         CubeScene scene;
         scene.addSpaceCubes(appSpace, frameState.predictedDisplayTime,
                             spaces.m_visualizedSpaces);
+
         scene.addHandCubes(appSpace, frameState.predictedDisplayTime, input);
 
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {

@@ -6,9 +6,9 @@
 #ifdef XR_USE_PLATFORM_WIN32
 #include <Unknwn.h>
 #endif
+#include <algorithm>
 #include <openxr/openxr_platform.h>
 #include <vector>
-#include <algorithm>
 
 #define XRO_CHECK(cmd) xro::CheckXrResult(cmd, #cmd, VKO_FILE_AND_LINE);
 // #define CHECK_XRRESULT(res, cmdStr) CheckXrResult(res, cmdStr,
@@ -35,7 +35,7 @@ inline XrResult CheckXrResult(XrResult res, const char *originator = nullptr,
   return res;
 }
 
-struct Instance {
+struct Instance : public vko::not_copyable {
   XrInstance instance = XR_NULL_HANDLE;
   std::vector<const char *> extensions;
   XrInstanceCreateInfo createInfo{
@@ -62,6 +62,7 @@ struct Instance {
 
   ~Instance() {
     if (this->instance != XR_NULL_HANDLE) {
+      Logger::Info("xro::Instance::~Instance ...");
       xrDestroyInstance(this->instance);
     }
   }
@@ -364,7 +365,11 @@ struct Session : public vko::not_copyable {
                                           &swapchainFormatCount,
                                           (int64_t *)formats.data()));
   }
-  ~Session() { xrDestroySession(this->session); }
+  ~Session() {
+    Logger::Info("xro::Session::~Session ...");
+    xrEndSession(this->session);
+    xrDestroySession(this->session);
+  }
 
   VkFormat selectColorSwapchainFormat() const {
     // List of supported color swapchain formats.

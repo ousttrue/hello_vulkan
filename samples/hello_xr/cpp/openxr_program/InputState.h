@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <openxr/openxr.h>
+#include <vulkan/vulkan_core.h>
 
 enum Side {
   LEFT = 0,
@@ -17,9 +18,12 @@ class InputState {
   std::array<XrPath, Side::COUNT> handSubactionPath;
 
 public:
-  std::array<XrBool32, Side::COUNT> handActive;
-  std::array<XrSpace, Side::COUNT> handSpace;
-  std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
+  struct HandState {
+    XrBool32 active = false;
+    XrSpace space = XR_NULL_HANDLE;
+    float scale = 1.0f;
+  };
+  std::array<HandState, Side::COUNT> hands;
   InputState(XrInstance instance, XrSession session);
   ~InputState();
   void Log(XrSession session);

@@ -233,10 +233,10 @@ InputState::InputState(XrInstance instance, XrSession session) {
   actionSpaceInfo.poseInActionSpace.orientation.w = 1.f;
   actionSpaceInfo.subactionPath = this->handSubactionPath[Side::LEFT];
   XRO_CHECK(xrCreateActionSpace(session, &actionSpaceInfo,
-                                &this->handSpace[Side::LEFT]));
+                                &this->hands[Side::LEFT].space));
   actionSpaceInfo.subactionPath = this->handSubactionPath[Side::RIGHT];
   XRO_CHECK(xrCreateActionSpace(session, &actionSpaceInfo,
-                                &this->handSpace[Side::RIGHT]));
+                                &this->hands[Side::RIGHT].space));
 
   XrSessionActionSetsAttachInfo attachInfo{
       XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
@@ -248,7 +248,7 @@ InputState::InputState(XrInstance instance, XrSession session) {
 InputState::~InputState() {
   if (this->actionSet != XR_NULL_HANDLE) {
     for (auto hand : {Side::LEFT, Side::RIGHT}) {
-      xrDestroySpace(this->handSpace[hand]);
+      xrDestroySpace(this->hands[hand].space);
     }
     xrDestroyActionSet(this->actionSet);
   }
@@ -308,7 +308,8 @@ void InputState::Log(XrSession session) {
 }
 
 void InputState::PollActions(XrSession session) {
-  this->handActive = {XR_FALSE, XR_FALSE};
+  this->hands[Side::LEFT].active = XR_FALSE;
+  this->hands[Side::RIGHT].active = XR_FALSE;
 
   // Sync actions
   const XrActiveActionSet activeActionSet{this->actionSet, XR_NULL_PATH};
@@ -328,7 +329,7 @@ void InputState::PollActions(XrSession session) {
     XRO_CHECK(xrGetActionStateFloat(session, &getInfo, &grabValue));
     if (grabValue.isActive == XR_TRUE) {
       // Scale the rendered hand by 1.0f (open) to 0.5f (fully squeezed).
-      this->handScale[hand] = 1.0f - 0.5f * grabValue.currentState;
+      this->hands[hand].scale = 1.0f - 0.5f * grabValue.currentState;
       if (grabValue.currentState > 0.9f) {
         XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
         vibration.amplitude = 0.5;
@@ -346,7 +347,7 @@ void InputState::PollActions(XrSession session) {
     getInfo.action = this->poseAction;
     XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
     XRO_CHECK(xrGetActionStatePose(session, &getInfo, &poseState));
-    this->handActive[hand] = poseState.isActive;
+    this->hands[hand].active = poseState.isActive;
   }
 
   // There were no subaction paths specified for the quit action, because we

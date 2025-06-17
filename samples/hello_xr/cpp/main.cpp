@@ -48,34 +48,42 @@ int main(int argc, char *argv[]) {
   //     ShowHelp();
   //   }
 
-  auto [instance, physicalDevice, device] =
-      xr_instance.createVulkan(debugMessageThunk);
+  {
+    auto [instance, physicalDevice, device] =
+        xr_instance.createVulkan(debugMessageThunk);
 
-  // XrSession
-  xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
-                       physicalDevice, physicalDevice.graphicsFamilyIndex,
-                       device);
-  XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-      GetXrReferenceSpaceCreateInfo(options.AppSpace);
-  XrSpace appSpace;
-  XRO_CHECK(
-      xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &appSpace));
-  auto clearColor = options.GetBackgroundClearColor();
+    {
+      // XrSession
+      xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
+                           physicalDevice, physicalDevice.graphicsFamilyIndex,
+                           device);
+      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
+          GetXrReferenceSpaceCreateInfo(options.AppSpace);
+      XrSpace appSpace;
+      XRO_CHECK(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
+                                       &appSpace));
+      auto clearColor = options.GetBackgroundClearColor();
 
-  xr_loop(
-      [pQuit = &quitKeyPressed](bool isSessionRunning) {
-        if (*pQuit) {
-          return false;
-        }
-        return true;
-      },
-      xr_instance.instance, xr_instance.systemId, session, appSpace,
-      options.Parsed.EnvironmentBlendMode,
-      {
-          .float32 = {clearColor.x, clearColor.y, clearColor.z, clearColor.w},
-      },
-      options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
-      physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+      xr_loop(
+          [pQuit = &quitKeyPressed](bool isSessionRunning) {
+            if (*pQuit) {
+              return false;
+            }
+            return true;
+          },
+          xr_instance.instance, xr_instance.systemId, session, appSpace,
+          options.Parsed.EnvironmentBlendMode,
+          {
+              .float32 = {clearColor.x, clearColor.y, clearColor.z,
+                          clearColor.w},
+          },
+          options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
+          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+
+      // session
+    }
+    // vulkan
+  }
 
   return 0;
 }

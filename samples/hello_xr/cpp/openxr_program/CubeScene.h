@@ -63,7 +63,7 @@ struct CubeScene {
     // will only be true when the application has focus.
     for (auto hand : {Side::LEFT, Side::RIGHT}) {
       XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-      auto res = xrLocateSpace(input.handSpace[hand], appSpace,
+      auto res = xrLocateSpace(input.hands[hand].space, appSpace,
                                predictedDisplayTime, &spaceLocation);
       CHECK_XRRESULT(res, "xrLocateSpace");
       if (XR_UNQUALIFIED_SUCCESS(res)) {
@@ -71,13 +71,13 @@ struct CubeScene {
              XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
             (spaceLocation.locationFlags &
              XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-          float scale = 0.1f * input.handScale[hand];
+          float scale = 0.1f * input.hands[hand].scale;
           cubes.push_back(MakeCube(spaceLocation.pose, {scale, scale, scale}));
         }
       } else {
         // Tracking loss is expected when the hand is not active so only log a
         // message if the hand is active.
-        if (input.handActive[hand] == XR_TRUE) {
+        if (input.hands[hand].active == XR_TRUE) {
           const char *handName[] = {"left", "right"};
           Log::Write(
               Log::Level::Verbose,
