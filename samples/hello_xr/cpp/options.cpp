@@ -1,5 +1,4 @@
 #include "options.h"
-#include "xr_check.h"
 #include <xro/xro.h>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
@@ -19,8 +18,7 @@ XrFormFactor GetXrFormFactor(const std::string &formFactorStr) {
   if (EqualsIgnoreCase(formFactorStr, "Handheld")) {
     return XR_FORM_FACTOR_HANDHELD_DISPLAY;
   }
-  throw std::invalid_argument(
-      Fmt("Unknown form factor '%s'", formFactorStr.c_str()));
+  throw std::invalid_argument("Unknown form factor: " + formFactorStr);
 }
 
 XrViewConfigurationType
@@ -31,8 +29,8 @@ GetXrViewConfigurationType(const std::string &viewConfigurationStr) {
   if (EqualsIgnoreCase(viewConfigurationStr, "Stereo")) {
     return XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
   }
-  throw std::invalid_argument(
-      Fmt("Unknown view configuration '%s'", viewConfigurationStr.c_str()));
+  throw std::invalid_argument("Unknown view configuration: " +
+                              viewConfigurationStr);
 }
 
 XrEnvironmentBlendMode
@@ -46,8 +44,8 @@ GetXrEnvironmentBlendMode(const std::string &environmentBlendModeStr) {
   if (EqualsIgnoreCase(environmentBlendModeStr, "AlphaBlend")) {
     return XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
   }
-  throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'",
-                                  environmentBlendModeStr.c_str()));
+  throw std::invalid_argument("Unknown environment blend mode: " +
+                              environmentBlendModeStr);
 }
 
 const char *
@@ -60,15 +58,16 @@ GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode) {
   case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
     return "AlphaBlend";
   default:
-    throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'",
-                                    to_string(environmentBlendMode)));
+    throw std::invalid_argument(
+        "Unknown environment blend mode: "); //+
+                                             // to_string(environmentBlendMode));
   }
 }
 
-std::string GetXrVersionString(XrVersion ver) {
-  return Fmt("%d.%d.%d", XR_VERSION_MAJOR(ver), XR_VERSION_MINOR(ver),
-             XR_VERSION_PATCH(ver));
-}
+// std::string GetXrVersionString(XrVersion ver) {
+//   return Fmt("%d.%d.%d", XR_VERSION_MAJOR(ver), XR_VERSION_MINOR(ver),
+//              XR_VERSION_PATCH(ver));
+// }
 
 //
 // Options
@@ -134,7 +133,7 @@ bool Options ::UpdateOptionsFromCommandLine(int argc, char *argv[]) {
     } else if (EqualsIgnoreCase(arg, "--help") || EqualsIgnoreCase(arg, "-h")) {
       return false;
     } else {
-      throw std::invalid_argument(Fmt("Unknown argument: %s", arg.c_str()));
+      throw std::invalid_argument("Unknown argument: " + arg);
     }
   }
 

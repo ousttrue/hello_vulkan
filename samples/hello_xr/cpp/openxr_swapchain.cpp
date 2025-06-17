@@ -1,5 +1,4 @@
 #include "openxr_swapchain.h"
-#include "xr_check.h"
 #include <xro/xro.h>
 
 struct SwapchainImpl {
@@ -38,11 +37,11 @@ OpenXrSwapchain::Create(XrSession session, uint32_t i,
       .arraySize = 1,
       .mipCount = 1,
   };
-  CHECK_XRCMD(xrCreateSwapchain(session, &ptr->m_swapchainCreateInfo,
-                                &ptr->m_swapchain));
+  XRO_CHECK(xrCreateSwapchain(session, &ptr->m_swapchainCreateInfo,
+                              &ptr->m_swapchain));
 
   uint32_t imageCount;
-  CHECK_XRCMD(
+  XRO_CHECK(
       xrEnumerateSwapchainImages(ptr->m_swapchain, 0, &imageCount, nullptr));
   ptr->m_impl->m_swapchainImages.resize(imageCount,
                                         {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
@@ -51,8 +50,8 @@ OpenXrSwapchain::Create(XrSession session, uint32_t i,
   for (auto &image : ptr->m_impl->m_swapchainImages) {
     pointers.push_back((XrSwapchainImageBaseHeader *)&image);
   }
-  CHECK_XRCMD(xrEnumerateSwapchainImages(ptr->m_swapchain, imageCount,
-                                         &imageCount, pointers[0]));
+  XRO_CHECK(xrEnumerateSwapchainImages(ptr->m_swapchain, imageCount,
+                                       &imageCount, pointers[0]));
 
   return ptr;
 }
@@ -62,14 +61,14 @@ ViewSwapchainInfo OpenXrSwapchain::AcquireSwapchain(const XrView &view) {
       .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
   };
   uint32_t swapchainImageIndex;
-  CHECK_XRCMD(
+  XRO_CHECK(
       xrAcquireSwapchainImage(m_swapchain, &acquireInfo, &swapchainImageIndex));
 
   XrSwapchainImageWaitInfo waitInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
       .timeout = XR_INFINITE_DURATION,
   };
-  CHECK_XRCMD(xrWaitSwapchainImage(m_swapchain, &waitInfo));
+  XRO_CHECK(xrWaitSwapchainImage(m_swapchain, &waitInfo));
 
   ViewSwapchainInfo info = {
       .Image = m_impl->m_swapchainImages[swapchainImageIndex].image,
@@ -98,5 +97,5 @@ void OpenXrSwapchain::EndSwapchain() {
   XrSwapchainImageReleaseInfo releaseInfo{
       .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
   };
-  CHECK_XRCMD(xrReleaseSwapchainImage(m_swapchain, &releaseInfo));
+  XRO_CHECK(xrReleaseSwapchainImage(m_swapchain, &releaseInfo));
 }

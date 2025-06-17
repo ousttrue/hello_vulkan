@@ -1,10 +1,7 @@
 #include "xr_loop.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "fmt.h"
-#include "logger.h"
 #include "openxr_swapchain.h"
 #include "vko/vko.h"
-#include "xr_check.h"
 #include <map>
 #include <thread>
 #include <vko/vko_pipeline.h>

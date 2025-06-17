@@ -1,7 +1,5 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "fmt.h"
 #include "options.h"
-#include "xr_linear.h"
 #include <cmath>
 
 namespace Math {
@@ -63,8 +61,8 @@ GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr) {
         Math::Pose::RotateCCWAboutYAxis(-3.14f / 3.f, {2.f, 0.5f, -2.f});
     referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
   } else {
-    throw std::invalid_argument(Fmt("Unknown reference space type '%s'",
-                                    referenceSpaceTypeStr.c_str()));
+    throw std::invalid_argument(std::string("Unknown reference space type: ") +
+                                referenceSpaceTypeStr);
   }
   return referenceSpaceCreateInfo;
 }

@@ -1,5 +1,4 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "logger.h"
 #include "options.h"
 #include "xr_loop.h"
 #include <thread>
