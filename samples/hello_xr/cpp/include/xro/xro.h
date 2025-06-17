@@ -174,17 +174,46 @@ struct Instance {
                                     vulkanResult);
   }
 
-  struct VulkanResources {
-    VkInstance Instance;
-    VkPhysicalDevice PhysicalDevice;
-    VkDevice Device;
-    uint32_t QueueFamilyIndex;
-  };
-  VulkanResources
-  createVulkan(const std::vector<const char *> &layers,
-               const std::vector<const char *> &instanceExtensions,
-               const std::vector<const char *> &deviceExtensions,
-               const VkDebugUtilsMessengerCreateInfoEXT *debugInfo) {
+  // struct VulkanResources {
+  //   VkInstance Instance;
+  //   VkPhysicalDevice PhysicalDevice;
+  //   VkDevice Device;
+  //   uint32_t QueueFamilyIndex;
+  // };
+  std::tuple<vko::Instance, vko::PhysicalDevice, vko::Device>
+  createVulkan(PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback) {
+    vko::Instance instance;
+    instance.appInfo.pApplicationName = "hello_xr";
+    instance.appInfo.pEngineName = "hello_xr";
+    instance.debugUtilsMessengerCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+                           VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = pfnUserCallback,
+        .pUserData = nullptr,
+    };
+    vko::Device device;
+
+#ifdef NDEBUG
+#else
+    instance.debugUtilsMessengerCreateInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
+    instance.pushFirstSupportedValidationLayer({
+        "VK_LAYER_KHRONOS_validation",
+        "VK_LAYER_LUNARG_standard_validation",
+    });
+    instance.pushFirstSupportedInstanceExtension({
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_EXT_DEBUG_REPORT_EXTENSION_NAME,
+    });
+#endif
+
     // Create the Vulkan device for the adapter associated with the system.
     // Extension function must be loaded by name
     XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
@@ -193,15 +222,15 @@ struct Instance {
     XRO_CHECK(GetVulkanGraphicsRequirements2KHR(this->instance, this->systemId,
                                                 &graphicsRequirements));
 
-    for (auto name : layers) {
-      Logger::Info("  vulkan layer: %s", name);
-    }
-    for (auto name : instanceExtensions) {
-      Logger::Info("  vulkan instance extensions: %s", name);
-    }
-    for (auto name : deviceExtensions) {
-      Logger::Info("  vulkan device extensions: %s", name);
-    }
+    // for (auto name : layers) {
+    //   Logger::Info("  vulkan layer: %s", name);
+    // }
+    // for (auto name : instanceExtensions) {
+    //   Logger::Info("  vulkan instance extensions: %s", name);
+    // }
+    // for (auto name : deviceExtensions) {
+    //   Logger::Info("  vulkan device extensions: %s", name);
+    // }
 
     VkApplicationInfo appInfo{
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -214,13 +243,14 @@ struct Instance {
 
     VkInstanceCreateInfo instInfo{
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pNext = debugInfo,
+        .pNext = &instance.debugUtilsMessengerCreateInfo,
         .pApplicationInfo = &appInfo,
-        .enabledLayerCount = (uint32_t)layers.size(),
-        .ppEnabledLayerNames = layers.empty() ? nullptr : layers.data(),
-        .enabledExtensionCount = (uint32_t)instanceExtensions.size(),
-        .ppEnabledExtensionNames =
-            instanceExtensions.empty() ? nullptr : instanceExtensions.data(),
+        .enabledLayerCount =
+            static_cast<uint32_t>(instance.validationLayers.size()),
+        .ppEnabledLayerNames = instance.validationLayers.data(),
+        .enabledExtensionCount =
+            static_cast<uint32_t>(instance.instanceExtensions.size()),
+        .ppEnabledExtensionNames = instance.instanceExtensions.data(),
     };
 
     XrVulkanInstanceCreateInfoKHR createInfo{
@@ -235,6 +265,7 @@ struct Instance {
     VkResult err;
     XRO_CHECK(CreateVulkanInstanceKHR(this->instance, &createInfo, &vkInstance,
                                       &err));
+    instance.reset(vkInstance);
 
     XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
         .type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
@@ -276,11 +307,12 @@ struct Instance {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueInfo,
-        .enabledLayerCount = 0,
-        .ppEnabledLayerNames = nullptr,
-        .enabledExtensionCount = (uint32_t)deviceExtensions.size(),
-        .ppEnabledExtensionNames =
-            deviceExtensions.empty() ? nullptr : deviceExtensions.data(),
+        .enabledLayerCount =
+            static_cast<uint32_t>(instance.validationLayers.size()),
+        .ppEnabledLayerNames = instance.validationLayers.data(),
+        .enabledExtensionCount =
+            static_cast<uint32_t>(device.deviceExtensions.size()),
+        .ppEnabledExtensionNames = device.deviceExtensions.data(),
         .pEnabledFeatures = &features,
     };
 
@@ -295,14 +327,11 @@ struct Instance {
     VkDevice vkDevice;
     XRO_CHECK(CreateVulkanDeviceKHR(this->instance, &deviceCreateInfo,
                                     &vkDevice, &err));
+    device.reset(vkDevice);
     vko::VKO_CHECK(err);
 
-    return {
-        .Instance = vkInstance,
-        .PhysicalDevice = vkPhysicalDevice,
-        .Device = vkDevice,
-        .QueueFamilyIndex = queueInfo.queueFamilyIndex,
-    };
+    return {std::move(instance), vko::PhysicalDevice(vkPhysicalDevice),
+            std::move(device)};
   }
 };
 

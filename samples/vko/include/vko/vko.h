@@ -319,6 +319,20 @@ struct Instance : public not_copyable {
   VkInstance instance = VK_NULL_HANDLE;
   operator VkInstance() const { return this->instance; }
 
+  Instance() {}
+  Instance(Instance &&rhs) {
+    this->debugUtilsMessenger = rhs.debugUtilsMessenger;
+    rhs.debugUtilsMessenger = VK_NULL_HANDLE;
+    this->instance = rhs.instance;
+    rhs.instance = VK_NULL_HANDLE;
+  }
+  Instance &operator=(Instance &&rhs) {
+    this->debugUtilsMessenger = rhs.debugUtilsMessenger;
+    rhs.debugUtilsMessenger = VK_NULL_HANDLE;
+    this->instance = rhs.instance;
+    rhs.instance = VK_NULL_HANDLE;
+    return *this;
+  }
   ~Instance() {
     if (this->debugUtilsMessenger != VK_NULL_HANDLE) {
       DestroyDebugUtilsMessengerEXT(this->instance, this->debugUtilsMessenger,
@@ -519,6 +533,17 @@ struct Device : public not_copyable {
   VkQueue graphicsQueue = VK_NULL_HANDLE;
   VkQueue presentQueue = VK_NULL_HANDLE;
   operator VkDevice() const { return this->device; }
+
+  Device() {}
+  Device(Device &&rhs) {
+    this->device = rhs.device;
+    rhs.device = VK_NULL_HANDLE;
+  }
+  Device &operator=(Device &&rhs) {
+    this->device = rhs.device;
+    rhs.device = VK_NULL_HANDLE;
+    return *this;
+  }
   ~Device() {
     if (this->device != VK_NULL_HANDLE) {
       vkDestroyDevice(this->device, nullptr);
