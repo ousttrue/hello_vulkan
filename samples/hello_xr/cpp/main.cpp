@@ -1,8 +1,8 @@
-#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
-#include "openxr_program/VulkanDebugMessageThunk.h"
-#include "openxr_program/options.h"
+#include "GetXrReferenceSpaceCreateInfo.h"
+#include "VulkanDebugMessageThunk.h"
+#include "logger.h"
+#include "options.h"
 #include "xr_loop.h"
-#include <common/logger.h>
 #include <thread>
 #include <vko/vko.h>
 #include <xro/xro.h>

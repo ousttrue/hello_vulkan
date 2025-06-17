@@ -1,17 +1,20 @@
 set(CMAKE_CXX_STANDARD 20)
 
-add_library(xro INTERFACE)
-target_include_directories(xro INTERFACE ${CMAKE_CURRENT_LIST_DIR}/include)
-
-subdirs(common openxr_program)
-
 if(ANDROID)
   add_library(hello_xr MODULE android_main.cpp xr_loop.cpp)
-  target_link_libraries(hello_xr PRIVATE shaderc xro)
+  target_compile_definitions(hello_xr PUBLIC -DXR_USE_PLATFORM_ANDROID
+                                             -DXR_USE_GRAPHICS_API_VULKAN)
+  target_link_libraries(
+    hello_xr PRIVATE ${ANDROID_LIBRARY} ${ANDROID_LOG_LIBRARY}
+                     android_native_app_glue vulkan shaderc)
 else()
   add_executable(hello_xr main.cpp xr_loop.cpp)
   if(WIN32)
-    target_link_libraries(hello_xr PRIVATE ole32 Vulkan::shaderc_combined xro)
+    target_compile_definitions(
+      hello_xr PUBLIC -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
+                      -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+    target_link_libraries(hello_xr PRIVATE ole32 Vulkan::Vulkan
+                                           Vulkan::shaderc_combined)
     if(MSVC)
       target_compile_definitions(hello_xr PRIVATE _CRT_SECURE_NO_WARNINGS)
       target_compile_options(hello_xr PRIVATE /Zc:wchar_t /Zc:forScope /W4
@@ -21,4 +24,13 @@ else()
 
 endif()
 
-target_link_libraries(hello_xr PRIVATE common openxr_program vko)
+target_link_libraries(hello_xr PRIVATE vko xro OpenXR::openxr_loader)
+target_sources(
+  hello_xr
+  PRIVATE logger.cpp
+          SessionEventState.cpp
+          GetXrReferenceSpaceCreateInfo.cpp
+          VulkanDebugMessageThunk.cpp
+          openxr_swapchain.cpp
+          options.cpp
+          InputState.cpp)

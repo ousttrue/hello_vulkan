@@ -7,11 +7,10 @@
 #endif
 #include <openxr/openxr_platform.h>
 
-#include "openxr/openxr.h"
+#include "fmt.h"
+#include "logger.h"
 #include "openxr_swapchain.h"
 #include "xr_check.h"
-#include <common/fmt.h>
-#include <common/logger.h>
 
 struct SwapchainImpl {
   std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;

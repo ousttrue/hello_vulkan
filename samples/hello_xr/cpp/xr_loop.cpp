@@ -1,8 +1,8 @@
 #include "xr_loop.h"
-#include "openxr_program/CubeScene.h"
-#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
-#include "openxr_program/SessionEventState.h"
-#include "openxr_program/openxr_swapchain.h"
+#include "CubeScene.h"
+#include "GetXrReferenceSpaceCreateInfo.h"
+#include "SessionEventState.h"
+#include "openxr_swapchain.h"
 #include <map>
 #include <thread>
 #include <vko/vko_pipeline.h>

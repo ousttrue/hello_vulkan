@@ -1,4 +1,5 @@
 # dependencies
+subdirs(xro)
 
 # FetchContent_Declare( jsoncpp URL
 # https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.zip )

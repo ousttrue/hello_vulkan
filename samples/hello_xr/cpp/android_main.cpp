@@ -1,6 +1,6 @@
-#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
-#include "openxr_program/VulkanDebugMessageThunk.h"
-#include "openxr_program/options.h"
+#include "GetXrReferenceSpaceCreateInfo.h"
+#include "VulkanDebugMessageThunk.h"
+#include "options.h"
 #include "xr_loop.h"
 #include <vko/android_userdata.h>
 #include <xro/xro.h>

@@ -1,10 +1,10 @@
 #pragma once
+#include "FloatTypes.h"
 #include "InputState.h"
+#include "fmt.h"
+#include "logger.h"
 #include "xr_check.h"
 #include "xr_linear.h"
-#include <common/FloatTypes.h>
-#include <common/fmt.h>
-#include <common/logger.h>
 #include <vector>
 
 struct CubeScene {
