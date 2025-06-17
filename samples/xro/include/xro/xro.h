@@ -481,4 +481,26 @@ struct Stereoscope {
   }
 };
 
+inline std::tuple<XrResult, XrSpaceLocation>
+locate(XrSpace world, XrTime predictedDisplayTime, XrSpace target) {
+  XrSpaceLocation spaceLocation{
+      .type = XR_TYPE_SPACE_LOCATION,
+  };
+  auto res = xrLocateSpace(target, world, predictedDisplayTime, &spaceLocation);
+  return {res, spaceLocation};
+}
+
+inline bool locationIsValid(XrResult res, const XrSpaceLocation &location) {
+  if (!XR_UNQUALIFIED_SUCCESS(res)) {
+    return false;
+  }
+  if ((location.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) == 0) {
+    return false;
+  }
+  if ((location.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) == 0) {
+    return false;
+  }
+  return true;
+}
+
 } // namespace xro

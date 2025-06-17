@@ -5,6 +5,7 @@
 #include "fmt.h"
 #include "logger.h"
 #include "openxr_swapchain.h"
+#include "vko/vko.h"
 #include "xr_check.h"
 #include <map>
 #include <thread>
@@ -28,18 +29,8 @@ struct Vec3 {
   float x, y, z;
 };
 
-struct Vec4 {
-  float x, y, z, w;
-};
-
 struct Mat4 {
   float m[16];
-};
-
-struct Cube {
-  Vec3 Translaton;
-  Vec4 Rotation;
-  Vec3 Scaling;
 };
 
 struct Vertex {
@@ -86,82 +77,9 @@ constexpr unsigned short c_cubeIndices[] = {
     30, 31, 32, 33, 34, 35, // +Z
 };
 
-struct CubeScene {
-  std::vector<Cube> cubes;
-
-  static Cube MakeCube(XrPosef pose, XrVector3f scale) {
-    return Cube{
-        .Translaton =
-            {
-                pose.position.x,
-                pose.position.y,
-                pose.position.z,
-            },
-        .Rotation =
-            {
-                pose.orientation.x,
-                pose.orientation.y,
-                pose.orientation.z,
-                pose.orientation.w,
-            },
-        .Scaling =
-            {
-                scale.x,
-                scale.y,
-                scale.z,
-            },
-    };
-  }
-
-  // For each locatable space that we want to visualize, render a 25cm cube.
-  void addSpaceCubes(XrSpace appSpace, XrTime predictedDisplayTime,
-                     const std::vector<XrSpace> &visualizedSpaces) {
-    for (XrSpace visualizedSpace : visualizedSpaces) {
-      XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-      auto res = xrLocateSpace(visualizedSpace, appSpace, predictedDisplayTime,
-                               &spaceLocation);
-      CHECK_XRRESULT(res, "xrLocateSpace");
-      if (XR_UNQUALIFIED_SUCCESS(res)) {
-        if ((spaceLocation.locationFlags &
-             XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-            (spaceLocation.locationFlags &
-             XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-          cubes.push_back(MakeCube(spaceLocation.pose, {0.25f, 0.25f, 0.25f}));
-        }
-      } else {
-        Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized "
-                                            "reference space in app space: %d",
-                                            res));
-      }
-    }
-  }
-
-  void addHandCube(XrSpace appSpace, XrTime predictedDisplayTime,
-                   XrSpace handSpace, float handScale, bool handActive,
-                   const char *handName) {
-    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    auto res = xrLocateSpace(handSpace, appSpace, predictedDisplayTime,
-                             &spaceLocation);
-    CHECK_XRRESULT(res, "xrLocateSpace");
-    if (XR_UNQUALIFIED_SUCCESS(res)) {
-      if ((spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-          (spaceLocation.locationFlags &
-           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-        float scale = 0.1f * handScale;
-        cubes.push_back(MakeCube(spaceLocation.pose, {scale, scale, scale}));
-      }
-    } else {
-      // Tracking loss is expected when the hand is not active so only log a
-      // message if the hand is active.
-      if (handActive == XR_TRUE) {
-        const char *handName[] = {"left", "right"};
-        Log::Write(Log::Level::Verbose,
-                   Fmt("Unable to locate %s hand action space in app space: %d",
-                       handName, res));
-      }
-    }
-  }
+struct Cube {
+  XrPosef pose;
+  XrVector3f scale;
 };
 
 struct ViewRenderer {
@@ -281,8 +199,7 @@ struct ViewRenderer {
       // Compute the model-view-projection transform and push it.
       XrMatrix4x4f model;
       XrMatrix4x4f_CreateTranslationRotationScale(
-          &model, (XrVector3f *)&cube.Translaton,
-          (XrQuaternionf *)&cube.Rotation, (XrVector3f *)&cube.Scaling);
+          &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
       Mat4 mvp;
       XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &viewProjection, &model);
       vkCmdPushConstants(this->commandBuffer, this->pipeline.pipelineLayout,
@@ -308,8 +225,6 @@ struct VisualizedSpaces : public vko::not_copyable {
   std::vector<XrSpace> m_visualizedSpaces;
 
   VisualizedSpaces(XrSession session) {
-    // void OpenXrSession::CreateVisualizedSpaces() {
-    // CHECK(m_session != XR_NULL_HANDLE);
     std::string visualizedSpaces[] = {
         "ViewFront",        "Local",      "Stage",
         "StageLeft",        "StageRight", "StageLeftRotated",
@@ -484,19 +399,27 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
         // XrCompositionLayerProjection
 
         // update scene
-        CubeScene scene;
-        scene.addSpaceCubes(appSpace, frameState.predictedDisplayTime,
-                            spaces.m_visualizedSpaces);
+        std::vector<Cube> cubes;
 
+        // For each locatable space that we want to visualize, render a 25cm
+        for (XrSpace visualizedSpace : spaces.m_visualizedSpaces) {
+          auto [res, location] = xro::locate(
+              appSpace, frameState.predictedDisplayTime, visualizedSpace);
+          if (xro::locationIsValid(res, location)) {
+            cubes.push_back({location.pose, {0.25f, 0.25f, 0.25f}});
+          }
+        }
         for (auto hand : {Side::LEFT, Side::RIGHT}) {
-          scene.addHandCube(appSpace, frameState.predictedDisplayTime,
-                            input.hands[hand].space, input.hands[hand].scale,
-                            input.hands[hand].active,
-                            hand == Side::LEFT ? "left" : "right");
+          auto [res, location] =
+              xro::locate(appSpace, frameState.predictedDisplayTime,
+                          input.hands[hand].space);
+          auto s = input.hands[hand].scale * 0.1f;
+          if (xro::locationIsValid(res, location)) {
+            cubes.push_back({location.pose, {s, s, s}});
+          }
         }
 
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
-
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
           auto info = swapchain->AcquireSwapchain(stereoscope.views[i]);
@@ -505,7 +428,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
           renderers[i]->render(
               info.Image, swapchain->extent(), swapchain->format(), depthFormat,
               clearColor, mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
-              mesh.indexDrawCount, info.calcViewProjection(), scene.cubes);
+              mesh.indexDrawCount, info.calcViewProjection(), cubes);
 
           swapchain->EndSwapchain();
         }

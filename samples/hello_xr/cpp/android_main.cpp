@@ -122,11 +122,7 @@ void _android_main(struct android_app *app) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          options.Parsed.EnvironmentBlendMode,
-          {
-              .float32 = {clearColor.x, clearColor.y, clearColor.z,
-                          clearColor.w},
-          },
+          options.Parsed.EnvironmentBlendMode, clearColor,
           options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
           physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
