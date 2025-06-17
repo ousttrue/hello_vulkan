@@ -1,6 +1,5 @@
 #include "xr_loop.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "InputState.h"
 #include "fmt.h"
 #include "logger.h"
 #include "openxr_swapchain.h"
@@ -238,9 +237,8 @@ struct VisualizedSpaces : public vko::not_copyable {
       if (XR_SUCCEEDED(res)) {
         m_visualizedSpaces.push_back(space);
       } else {
-        Log::Write(Log::Level::Warning,
-                   Fmt("Failed to create reference space %s with error %d",
-                       visualizedSpace.c_str(), res));
+        xro::Logger::Error("Failed to create reference space %s with error %d",
+                           visualizedSpace.c_str(), res);
       }
     }
   }
@@ -317,7 +315,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
   xro::SessionState state(instance, session, viewConfigurationType);
   VisualizedSpaces spaces(session);
-  InputState input(instance, session);
+  xro::InputState input(instance, session);
 
   xro::Stereoscope stereoscope(instance, systemId, viewConfigurationType);
 
@@ -387,7 +385,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
       continue;
     }
 
-    input.PollActions(session);
+    input.PollActions();
 
     auto frameState = xro::beginFrame(session);
     LayerComposition composition(blendMode, appSpace);
@@ -408,11 +406,10 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
             cubes.push_back({location.pose, {0.25f, 0.25f, 0.25f}});
           }
         }
-        for (auto hand : {Side::LEFT, Side::RIGHT}) {
-          auto [res, location] =
-              xro::locate(appSpace, frameState.predictedDisplayTime,
-                          input.hands[hand].space);
-          auto s = input.hands[hand].scale * 0.1f;
+        for (auto &hand : input.hands) {
+          auto [res, location] = xro::locate(
+              appSpace, frameState.predictedDisplayTime, hand.space);
+          auto s = hand.scale * 0.1f;
           if (xro::locationIsValid(res, location)) {
             cubes.push_back({location.pose, {s, s, s}});
           }

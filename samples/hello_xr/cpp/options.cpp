@@ -1,9 +1,6 @@
 #include "options.h"
-#include "fmt.h"
-#include "logger.h"
 #include "xr_check.h"
-#include <vector>
-#include <vulkan/vulkan_core.h>
+#include <xro/xro.h>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
                       const std::locale &loc) {
@@ -133,7 +130,7 @@ bool Options ::UpdateOptionsFromCommandLine(int argc, char *argv[]) {
       this->AppSpace = getNextArg();
     } else if (EqualsIgnoreCase(arg, "--verbose") ||
                EqualsIgnoreCase(arg, "-v")) {
-      Log::SetLevel(Log::Level::Verbose);
+      // Log::SetLevel(Log::Level::Verbose);
     } else if (EqualsIgnoreCase(arg, "--help") || EqualsIgnoreCase(arg, "-h")) {
       return false;
     } else {
@@ -144,7 +141,7 @@ bool Options ::UpdateOptionsFromCommandLine(int argc, char *argv[]) {
   try {
     this->ParseStrings();
   } catch (std::invalid_argument &ia) {
-    Log::Write(Log::Level::Error, ia.what());
+    xro::Logger::Error(ia.what());
     return false;
   }
   return true;
@@ -172,7 +169,7 @@ bool Options::UpdateOptionsFromSystemProperties() {
   try {
     this->ParseStrings();
   } catch (std::invalid_argument &ia) {
-    Log::Write(Log::Level::Error, ia.what());
+    xro::Logger::Error("%s", ia.what());
     return false;
   }
   return true;

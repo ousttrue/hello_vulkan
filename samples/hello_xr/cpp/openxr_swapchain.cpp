@@ -1,16 +1,6 @@
-#include <vulkan/vulkan.h>
-#ifdef XR_USE_PLATFORM_WIN32
-#include <Unknwn.h>
-#endif
-#ifdef XR_USE_PLATFORM_ANDROID
-#include <android_native_app_glue.h>
-#endif
-#include <openxr/openxr_platform.h>
-
-#include "fmt.h"
-#include "logger.h"
 #include "openxr_swapchain.h"
 #include "xr_check.h"
+#include <xro/xro.h>
 
 struct SwapchainImpl {
   std::vector<XrSwapchainImageVulkan2KHR> m_swapchainImages;
@@ -27,11 +17,11 @@ std::shared_ptr<OpenXrSwapchain>
 OpenXrSwapchain::Create(XrSession session, uint32_t i,
                         const XrViewConfigurationView &vp, int64_t format) {
 
-  Log::Write(Log::Level::Info,
-             Fmt("Creating swapchain for view %d with dimensions "
-                 "Width=%d Height=%d SampleCount=%d",
-                 i, vp.recommendedImageRectWidth, vp.recommendedImageRectHeight,
-                 vp.recommendedSwapchainSampleCount));
+  xro::Logger::Info("Creating swapchain for view %d with dimensions "
+                    "Width=%d Height=%d SampleCount=%d",
+                    i, vp.recommendedImageRectWidth,
+                    vp.recommendedImageRectHeight,
+                    vp.recommendedSwapchainSampleCount);
 
   // Create the swapchain.
   auto ptr = std::shared_ptr<OpenXrSwapchain>(new OpenXrSwapchain);

@@ -1,5 +1,4 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "VulkanDebugMessageThunk.h"
 #include "logger.h"
 #include "options.h"
 #include "xr_loop.h"
@@ -8,18 +7,16 @@
 #include <xro/xro.h>
 
 void ShowHelp() {
-  Log::Write(
-      Log::Level::Info,
+  xro::Logger::Info(
       "HelloXr [--formfactor|-ff <Form factor>] "
       "[--viewconfig|-vc <View config>] "
       "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]");
-  Log::Write(Log::Level::Info, "Graphics APIs:            D3D11, D3D12, "
-                               "OpenGLES, OpenGL, Vulkan2, Vulkan, Metal");
-  Log::Write(Log::Level::Info, "Form factors:             Hmd, Handheld");
-  Log::Write(Log::Level::Info, "View configurations:      Mono, Stereo");
-  Log::Write(Log::Level::Info,
-             "Environment blend modes:  Opaque, Additive, AlphaBlend");
-  Log::Write(Log::Level::Info, "Spaces:                   View, Local, Stage");
+  xro::Logger::Info("Graphics APIs:            D3D11, D3D12, "
+                    "OpenGLES, OpenGL, Vulkan2, Vulkan, Metal");
+  xro::Logger::Info("Form factors:             Hmd, Handheld");
+  xro::Logger::Info("View configurations:      Mono, Stereo");
+  xro::Logger::Info("Environment blend modes:  Opaque, Additive, AlphaBlend");
+  xro::Logger::Info("Spaces:                   View, Local, Stage");
 }
 
 int main(int argc, char *argv[]) {
@@ -33,7 +30,7 @@ int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
   static bool quitKeyPressed = false;
   auto exitPollingThread = std::thread{[] {
-    Log::Write(Log::Level::Info, "Press any key to shutdown...");
+    xro::Logger::Info("Press [enter key] to shutdown...");
     (void)getchar();
     quitKeyPressed = true;
   }};
@@ -42,15 +39,17 @@ int main(int argc, char *argv[]) {
   xro::Instance xr_instance;
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
-  XRO_CHECK(xr_instance.create(nullptr));
+  if(xr_instance.create(nullptr)!=XR_SUCCESS){
+    xro::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
+    return 1;
+  }
   //   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
   //   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
   //     ShowHelp();
   //   }
 
   {
-    auto [instance, physicalDevice, device] =
-        xr_instance.createVulkan(debugMessageThunk);
+    auto [instance, physicalDevice, device] = xr_instance.createVulkan(nullptr);
 
     {
       // XrSession
