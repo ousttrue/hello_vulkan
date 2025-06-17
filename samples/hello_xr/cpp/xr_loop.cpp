@@ -1,9 +1,9 @@
 #include "xr_loop.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "openxr_swapchain.h"
-#include "vko/vko.h"
+#include "xr_linear.h"
 #include <map>
 #include <thread>
+#include <vko/vko.h>
 #include <vko/vko_pipeline.h>
 #include <vko/vko_shaderc.h>
 #include <vulkan/vulkan_core.h>
@@ -138,7 +138,7 @@ struct ViewRenderer {
   void render(VkImage image, VkExtent2D size, VkFormat colorFormat,
               VkFormat depthFormat, const VkClearColorValue &clearColor,
               VkBuffer vertices, VkBuffer indices, uint32_t drawCount,
-              const XrMatrix4x4f &viewProjection,
+              const XrPosef &hmdPose, XrFovf fov,
               const std::vector<Cube> &cubes) {
     // Waiting on a not-in-flight command buffer is a no-op
     execFence.wait();
@@ -191,12 +191,24 @@ struct ViewRenderer {
 
     // Render each cube
     for (auto &cube : cubes) {
+      // Compute the view-projection transform. Note all matrixes
+      // (including OpenXR's) are column-major, right-handed.
+      XrMatrix4x4f proj;
+      XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, fov, 0.05f,
+                                       100.0f);
+      XrMatrix4x4f toView;
+      XrMatrix4x4f_CreateFromRigidTransform(&toView, &hmdPose);
+      XrMatrix4x4f view;
+      XrMatrix4x4f_InvertRigidBody(&view, &toView);
+      XrMatrix4x4f vp;
+      XrMatrix4x4f_Multiply(&vp, &proj, &view);
+
       // Compute the model-view-projection transform and push it.
       XrMatrix4x4f model;
       XrMatrix4x4f_CreateTranslationRotationScale(
           &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
-      Mat4 mvp;
-      XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &viewProjection, &model);
+      XrMatrix4x4f mvp;
+      XrMatrix4x4f_Multiply(&mvp, &vp, &model);
       vkCmdPushConstants(this->commandBuffer, this->pipeline.pipelineLayout,
                          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvp), &mvp.m[0]);
 
@@ -215,6 +227,28 @@ struct ViewRenderer {
     vko::VKO_CHECK(vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
   }
 };
+// struct ViewSwapchainInfo {
+//   VkImage Image;
+//   XrCompositionLayerProjectionView CompositionLayer;
+//
+//   // XrMatrix4x4f calcViewProjection() const {
+//   //   // Compute the view-projection transform. Note all matrixes
+//   //   // (including OpenXR's) are column-major, right-handed.
+//   //   XrMatrix4x4f proj;
+//   //   XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN,
+//   //                                    this->CompositionLayer.fov, 0.05f,
+//   100.0f);
+//   //   XrMatrix4x4f toView;
+//   //   XrMatrix4x4f_CreateFromRigidTransform(&toView,
+//   //                                         &this->CompositionLayer.pose);
+//   //   XrMatrix4x4f view;
+//   //   XrMatrix4x4f_InvertRigidBody(&view, &toView);
+//   //   XrMatrix4x4f vp;
+//   //   XrMatrix4x4f_Multiply(&vp, &proj, &view);
+//   //
+//   //   return vp;
+//   // }
+// };
 
 struct VisualizedSpaces : public vko::not_copyable {
   std::vector<XrSpace> m_visualizedSpaces;
@@ -305,7 +339,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   }
 
   // Create resources for each view.
-  std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
+  std::vector<std::shared_ptr<xro::Swapchain>> swapchains;
   std::vector<std::shared_ptr<ViewRenderer>> renderers;
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
@@ -318,7 +352,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
-    auto swapchain = OpenXrSwapchain::Create(
+    auto swapchain = std::make_shared<xro::Swapchain>(
         session, i, stereoscope.viewConfigurations[i], viewFormat);
     swapchains.push_back(swapchain);
 
@@ -385,7 +419,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
     input.PollActions();
 
     auto frameState = xro::beginFrame(session);
-    LayerComposition composition(blendMode, appSpace);
+    xro::LayerComposition composition(blendMode, appSpace);
 
     if (frameState.shouldRender == XR_TRUE) {
       if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
@@ -415,13 +449,15 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
-          auto info = swapchain->AcquireSwapchain(stereoscope.views[i]);
-          composition.pushView(info.CompositionLayer);
+          auto [image, projectionLayer] =
+              swapchain->AcquireSwapchain(stereoscope.views[i]);
+          composition.pushView(projectionLayer);
 
           renderers[i]->render(
-              info.Image, swapchain->extent(), swapchain->format(), depthFormat,
+              image, swapchain->extent(), swapchain->format(), depthFormat,
               clearColor, mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
-              mesh.indexDrawCount, info.calcViewProjection(), cubes);
+              mesh.indexDrawCount, projectionLayer.pose, projectionLayer.fov,
+              cubes);
 
           swapchain->EndSwapchain();
         }

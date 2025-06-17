@@ -30,6 +30,5 @@ target_sources(
   PRIVATE 
   # logger.cpp
           GetXrReferenceSpaceCreateInfo.cpp
-          openxr_swapchain.cpp
           options.cpp
           )
