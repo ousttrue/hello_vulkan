@@ -2,13 +2,11 @@
 #include "openxr_program/openxr_program.h"
 #include "openxr_program/openxr_session.h"
 #include "openxr_program/options.h"
+#include "xr_loop.h"
 #include <common/logger.h>
 #include <thread>
-
 #include <vko/vko.h>
 #include <xro/xro.h>
-
-#include "xr_loop.h"
 
 void ShowHelp() {
   Log::Write(
@@ -60,27 +58,11 @@ int main(int argc, char *argv[]) {
       physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
   xr_loop(
-      [pQuit = &quitKeyPressed, &session]() {
-        while (true) {
-          if (*pQuit) {
-            return false;
-          }
-
-          auto poll = session.m_state.PollEvents();
-          if (poll.exitRenderLoop) {
-            return false;
-          }
-
-          if (!session.m_state.IsSessionRunning()) {
-            // Throttle loop since xrWaitFrame won't be called.
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-            continue;
-          }
-
-          session.m_input.PollActions(session.m_session);
-
-          return true;
+      [pQuit = &quitKeyPressed](bool isSessionRunning) {
+        if (*pQuit) {
+          return false;
         }
+        return true;
       },
       options, session, physicalDevice, physicalDevice.graphicsFamilyIndex,
       device);

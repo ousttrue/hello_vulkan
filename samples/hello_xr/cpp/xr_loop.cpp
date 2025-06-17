@@ -5,6 +5,7 @@
 #include "openxr_program/options.h"
 #include "vko/vko.h"
 #include <map>
+#include <thread>
 #include <vko/vko_pipeline.h>
 #include <vko/vko_shaderc.h>
 
@@ -379,7 +380,7 @@ struct VisualizedSpaces : public vko::not_copyable {
   }
 };
 
-void xr_loop(const std::function<bool()> &runLoop, const Options &options,
+void xr_loop(const std::function<bool(bool)> &runLoop, const Options &options,
              OpenXrSession &session, VkPhysicalDevice physicalDevice,
              uint32_t queueFamilyIndex, VkDevice device) {
 
@@ -456,7 +457,21 @@ void xr_loop(const std::function<bool()> &runLoop, const Options &options,
   VisualizedSpaces spaces(session.m_session);
 
   // mainloop
-  while (runLoop()) {
+  while (runLoop(session.m_state.IsSessionRunning())) {
+    auto poll = session.m_state.PollEvents();
+    if (poll.exitRenderLoop) {
+      //   ANativeActivity_finish(app->activity);
+      //   continue;
+      break;
+    }
+
+    if (!session.m_state.IsSessionRunning()) {
+      // Throttle loop since xrWaitFrame won't be called.
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+      continue;
+    }
+
+    session.m_input.PollActions(session.m_session);
 
     auto frameState = session.BeginFrame();
     LayerComposition composition(options.Parsed.EnvironmentBlendMode,

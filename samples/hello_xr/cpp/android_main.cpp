@@ -98,55 +98,54 @@ void _android_main(struct android_app *app) {
       physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
   xr_loop(
-      [app, &session]() {
-        while (true) {
-          if (app->destroyRequested) {
-            return false;
-          }
-
-          // Read all pending events.
-          for (;;) {
-            int events;
-            struct android_poll_source *source;
-            // If the timeout is zero, returns immediately without blocking.
-            // If the timeout is negative, waits indefinitely until an event
-            // appears.
-            const int timeoutMilliseconds =
-                (!((vko::UserData *)app->userData)->_active &&
-                 !session.m_state.IsSessionRunning() &&
-                 app->destroyRequested == 0)
-                    ? -1
-                    : 0;
-            if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
-                                 (void **)&source) < 0) {
-              break;
-            }
-
-            // Process this event.
-            if (source != nullptr) {
-              source->process(app, source);
-            }
-          }
-
-          auto poll = session.m_state.PollEvents();
-          if (poll.exitRenderLoop) {
-            ANativeActivity_finish(app->activity);
-            continue;
-          }
-
-          if (!session.m_state.IsSessionRunning()) {
-            // Throttle loop since xrWaitFrame won't be called.
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-            continue;
-          }
-
-          session.m_input.PollActions(session.m_session);
-
-          return true;
+      [app](bool isSessionRunning) {
+        if (app->destroyRequested) {
+          return false;
         }
+
+        // Read all pending events.
+        for (;;) {
+          int events;
+          struct android_poll_source *source;
+          // If the timeout is zero, returns immediately without blocking.
+          // If the timeout is negative, waits indefinitely until an event
+          // appears.
+          const int timeoutMilliseconds =
+              (!((vko::UserData *)app->userData)->_active &&
+               !isSessionRunning && app->destroyRequested == 0)
+                  ? -1
+                  : 0;
+          if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
+                               (void **)&source) < 0) {
+            break;
+          }
+
+          // Process this event.
+          if (source != nullptr) {
+            source->process(app, source);
+          }
+        }
+
+        return true;
       },
       options, session, physicalDevice, physicalDevice.graphicsFamilyIndex,
       device);
+
+  ANativeActivity_finish(app->activity);
+
+  // Read all pending events.
+  for (;;) {
+    int events;
+    struct android_poll_source *source;
+    if (ALooper_pollOnce(-1, nullptr, &events, (void **)&source) < 0) {
+      break;
+    }
+
+    // Process this event.
+    if (source != nullptr) {
+      source->process(app, source);
+    }
+  }
 
   app->activity->vm->DetachCurrentThread();
 }
