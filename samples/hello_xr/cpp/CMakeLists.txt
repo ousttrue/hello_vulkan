@@ -28,7 +28,6 @@ target_link_libraries(hello_xr PRIVATE vko xro OpenXR::openxr_loader)
 target_sources(
   hello_xr
   PRIVATE logger.cpp
-          SessionEventState.cpp
           GetXrReferenceSpaceCreateInfo.cpp
           VulkanDebugMessageThunk.cpp
           openxr_swapchain.cpp

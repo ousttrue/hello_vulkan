@@ -1,7 +1,6 @@
 #include "xr_loop.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "InputState.h"
-#include "SessionEventState.h"
 #include "fmt.h"
 #include "logger.h"
 #include "openxr_swapchain.h"
@@ -316,7 +315,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
-  SessionEventState state(instance, session, viewConfigurationType);
+  xro::SessionState state(instance, session, viewConfigurationType);
   VisualizedSpaces spaces(session);
   InputState input(instance, session);
 
@@ -382,7 +381,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
       break;
     }
 
-    if (!state.IsSessionRunning()) {
+    if (!poll.isSessionRunning) {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
       continue;
