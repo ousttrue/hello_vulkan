@@ -174,12 +174,6 @@ struct Instance {
                                     vulkanResult);
   }
 
-  // struct VulkanResources {
-  //   VkInstance Instance;
-  //   VkPhysicalDevice PhysicalDevice;
-  //   VkDevice Device;
-  //   uint32_t QueueFamilyIndex;
-  // };
   std::tuple<vko::Instance, vko::PhysicalDevice, vko::Device>
   createVulkan(PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback) {
     vko::Instance instance;
@@ -222,15 +216,15 @@ struct Instance {
     XRO_CHECK(GetVulkanGraphicsRequirements2KHR(this->instance, this->systemId,
                                                 &graphicsRequirements));
 
-    // for (auto name : layers) {
-    //   Logger::Info("  vulkan layer: %s", name);
-    // }
-    // for (auto name : instanceExtensions) {
-    //   Logger::Info("  vulkan instance extensions: %s", name);
-    // }
-    // for (auto name : deviceExtensions) {
-    //   Logger::Info("  vulkan device extensions: %s", name);
-    // }
+    for (auto name : instance.validationLayers) {
+      Logger::Info("  vulkan layer: %s", name);
+    }
+    for (auto name : instance.instanceExtensions) {
+      Logger::Info("  vulkan instance extensions: %s", name);
+    }
+    for (auto name : device.deviceExtensions) {
+      Logger::Info("  vulkan device extensions: %s", name);
+    }
 
     VkApplicationInfo appInfo{
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
