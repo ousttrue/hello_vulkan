@@ -1,6 +1,6 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "options.h"
-#include "xr_loop.h"
+#include "xr_vulkan_session.h"
 #include <thread>
 #include <vko/vko.h>
 #include <xro/xro.h>
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
   xro::Instance xr_instance;
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
-  if(xr_instance.create(nullptr)!=XR_SUCCESS){
+  if (xr_instance.create(nullptr) != XR_SUCCESS) {
     xro::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
     return 1;
   }
@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
   //   }
 
   {
-    auto [instance, physicalDevice, device] = xr_instance.createVulkan(nullptr);
+    auto [instance, physicalDevice, device] = xr_instance.createVulkan();
 
     {
       // XrSession
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
                                        &appSpace));
       auto clearColor = options.GetBackgroundClearColor();
 
-      xr_loop(
+      xr_vulkan_session(
           [pQuit = &quitKeyPressed](bool isSessionRunning) {
             if (*pQuit) {
               return false;

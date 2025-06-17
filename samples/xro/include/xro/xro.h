@@ -182,7 +182,7 @@ struct Instance : public vko::not_copyable {
   }
 
   std::tuple<vko::Instance, vko::PhysicalDevice, vko::Device>
-  createVulkan(PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback) {
+  createVulkan(PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback = nullptr) {
     vko::Instance instance;
     instance.appInfo.pApplicationName = "hello_xr";
     instance.appInfo.pEngineName = "hello_xr";
@@ -668,12 +668,16 @@ struct InputState {
   std::array<XrPath, Side::COUNT> handSubactionPath;
   std::array<HandState, Side::COUNT> hands;
 
+  static void str_cpy(char *dst, const char *src) {
+    memcpy(dst, src, strlen(src + 1));
+  }
+
   InputState(XrInstance instance, XrSession _session) : session(_session) {
     // Create an action set.
     {
       XrActionSetCreateInfo actionSetInfo{XR_TYPE_ACTION_SET_CREATE_INFO};
-      strcpy_s(actionSetInfo.actionSetName, "gameplay");
-      strcpy_s(actionSetInfo.localizedActionSetName, "Gameplay");
+      str_cpy(actionSetInfo.actionSetName, "gameplay");
+      str_cpy(actionSetInfo.localizedActionSetName, "Gameplay");
       actionSetInfo.priority = 0;
       XRO_CHECK(xrCreateActionSet(instance, &actionSetInfo, &this->actionSet));
     }
@@ -691,8 +695,8 @@ struct InputState {
       // hands.
       XrActionCreateInfo actionInfo{XR_TYPE_ACTION_CREATE_INFO};
       actionInfo.actionType = XR_ACTION_TYPE_FLOAT_INPUT;
-      strcpy_s(actionInfo.actionName, "grab_object");
-      strcpy_s(actionInfo.localizedActionName, "Grab Object");
+      str_cpy(actionInfo.actionName, "grab_object");
+      str_cpy(actionInfo.localizedActionName, "Grab Object");
       actionInfo.countSubactionPaths = uint32_t(this->handSubactionPath.size());
       actionInfo.subactionPaths = this->handSubactionPath.data();
       XRO_CHECK(
@@ -700,8 +704,8 @@ struct InputState {
 
       // Create an input action getting the left and right hand poses.
       actionInfo.actionType = XR_ACTION_TYPE_POSE_INPUT;
-      strcpy_s(actionInfo.actionName, "hand_pose");
-      strcpy_s(actionInfo.localizedActionName, "Hand Pose");
+      str_cpy(actionInfo.actionName, "hand_pose");
+      str_cpy(actionInfo.localizedActionName, "Hand Pose");
       actionInfo.countSubactionPaths = uint32_t(this->handSubactionPath.size());
       actionInfo.subactionPaths = this->handSubactionPath.data();
       XRO_CHECK(
@@ -709,8 +713,8 @@ struct InputState {
 
       // Create output actions for vibrating the left and right controller.
       actionInfo.actionType = XR_ACTION_TYPE_VIBRATION_OUTPUT;
-      strcpy_s(actionInfo.actionName, "vibrate_hand");
-      strcpy_s(actionInfo.localizedActionName, "Vibrate Hand");
+      str_cpy(actionInfo.actionName, "vibrate_hand");
+      str_cpy(actionInfo.localizedActionName, "Vibrate Hand");
       actionInfo.countSubactionPaths = uint32_t(this->handSubactionPath.size());
       actionInfo.subactionPaths = this->handSubactionPath.data();
       XRO_CHECK(
@@ -721,8 +725,8 @@ struct InputState {
       // specify subaction paths for it. We will just suggest bindings for both
       // hands, where possible.
       actionInfo.actionType = XR_ACTION_TYPE_BOOLEAN_INPUT;
-      strcpy_s(actionInfo.actionName, "quit_session");
-      strcpy_s(actionInfo.localizedActionName, "Quit Session");
+      str_cpy(actionInfo.actionName, "quit_session");
+      str_cpy(actionInfo.localizedActionName, "Quit Session");
       actionInfo.countSubactionPaths = 0;
       actionInfo.subactionPaths = nullptr;
       XRO_CHECK(

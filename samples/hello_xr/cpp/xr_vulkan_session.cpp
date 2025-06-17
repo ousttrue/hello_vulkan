@@ -1,4 +1,4 @@
-#include "xr_loop.h"
+#include "xr_vulkan_session.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "xr_linear.h"
 #include <map>
@@ -281,7 +281,7 @@ struct VisualizedSpaces : public vko::not_copyable {
   }
 };
 
-void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
+void xr_vulkan_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
              XrSystemId systemId, XrSession session, XrSpace appSpace,
              XrEnvironmentBlendMode blendMode, VkClearColorValue clearColor,
              XrViewConfigurationType viewConfigurationType, VkFormat viewFormat,

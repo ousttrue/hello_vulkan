@@ -1,7 +1,7 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "VulkanDebugMessageThunk.h"
 #include "options.h"
-#include "xr_loop.h"
+#include "xr_vulkan_session.h"
+#include <cstddef>
 #include <vko/android_userdata.h>
 #include <xro/xro.h>
 
@@ -76,8 +76,7 @@ void _android_main(struct android_app *app) {
   // }
 
   {
-    auto [instance, physicalDevice, device] =
-        xr_instance.createVulkan(debugMessageThunk);
+    auto [instance, physicalDevice, device] = xr_instance.createVulkan();
 
     {
       xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
@@ -90,7 +89,7 @@ void _android_main(struct android_app *app) {
       XRO_CHECK(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
                                        &appSpace));
       auto clearColor = options.GetBackgroundClearColor();
-      xr_loop(
+      xr_vulkan_session(
           [app](bool isSessionRunning) {
             if (app->destroyRequested) {
               return false;
