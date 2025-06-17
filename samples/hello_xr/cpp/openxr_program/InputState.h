@@ -20,8 +20,8 @@ public:
   std::array<XrBool32, Side::COUNT> handActive;
   std::array<XrSpace, Side::COUNT> handSpace;
   std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
+  InputState(XrInstance instance, XrSession session);
   ~InputState();
-  void InitializeActions(XrInstance instance, XrSession session);
   void Log(XrSession session);
   void PollActions(XrSession session);
 };

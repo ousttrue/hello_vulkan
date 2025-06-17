@@ -6,16 +6,7 @@
 #define strcpy_s(dest, source) strncpy((dest), (source), sizeof(dest))
 #endif
 
-InputState::~InputState() {
-  if (this->actionSet != XR_NULL_HANDLE) {
-    for (auto hand : {Side::LEFT, Side::RIGHT}) {
-      xrDestroySpace(this->handSpace[hand]);
-    }
-    xrDestroyActionSet(this->actionSet);
-  }
-}
-
-void InputState::InitializeActions(XrInstance instance, XrSession session) {
+InputState::InputState(XrInstance instance, XrSession session) {
   // Create an action set.
   {
     XrActionSetCreateInfo actionSetInfo{XR_TYPE_ACTION_SET_CREATE_INFO};
@@ -252,6 +243,15 @@ void InputState::InitializeActions(XrInstance instance, XrSession session) {
   attachInfo.countActionSets = 1;
   attachInfo.actionSets = &this->actionSet;
   XRO_CHECK(xrAttachSessionActionSets(session, &attachInfo));
+}
+
+InputState::~InputState() {
+  if (this->actionSet != XR_NULL_HANDLE) {
+    for (auto hand : {Side::LEFT, Side::RIGHT}) {
+      xrDestroySpace(this->handSpace[hand]);
+    }
+    xrDestroyActionSet(this->actionSet);
+  }
 }
 
 static void LogActionSourceName(XrSession session, XrAction action,

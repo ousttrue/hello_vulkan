@@ -1,31 +1,17 @@
-#include <vulkan/vulkan.h>
-
-#include <android_native_app_glue.h>
-
-#include <openxr/openxr_platform.h>
-
+#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
 #include "openxr_program/VulkanDebugMessageThunk.h"
-#include "openxr_program/openxr_program.h"
 #include "openxr_program/options.h"
-
-#include <common/logger.h>
-
-#include <vko/android_userdata.h>
-#include <vko/vko.h>
-
 #include "xr_loop.h"
-#include <thread>
+#include <vko/android_userdata.h>
 #include <xro/xro.h>
 
 auto APP_NAME = "hello_xr";
 
 static void ShowHelp() {
-  Log::Write(Log::Level::Info,
-             "adb shell setprop debug.xr.formFactor Hmd|Handheld");
-  Log::Write(Log::Level::Info,
-             "adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
-  Log::Write(Log::Level::Info,
-             "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
+  xro::Logger::Info("adb shell setprop debug.xr.formFactor Hmd|Handheld");
+  xro::Logger::Info("adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
+  xro::Logger::Info(
+      "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
 }
 
 /**
@@ -89,47 +75,65 @@ void _android_main(struct android_app *app) {
   //   ShowHelp();
   // }
 
-  auto [instance, physicalDevice, device] =
-      xr_instance.createVulkan(debugMessageThunk);
+  {
+    auto [instance, physicalDevice, device] =
+        xr_instance.createVulkan(debugMessageThunk);
 
-  // XrSession
-  auto session = OpenXrSession::create(
-      options, xr_instance.instance, xr_instance.systemId, instance,
-      physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+    {
+      xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
+                           physicalDevice, physicalDevice.graphicsFamilyIndex,
+                           device);
 
-  xr_loop(
-      [app](bool isSessionRunning) {
-        if (app->destroyRequested) {
-          return false;
-        }
+      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
+          GetXrReferenceSpaceCreateInfo(options.AppSpace);
+      XrSpace appSpace;
+      XRO_CHECK(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
+                                       &appSpace));
+      auto clearColor = options.GetBackgroundClearColor();
+      xr_loop(
+          [app](bool isSessionRunning) {
+            if (app->destroyRequested) {
+              return false;
+            }
 
-        // Read all pending events.
-        for (;;) {
-          int events;
-          struct android_poll_source *source;
-          // If the timeout is zero, returns immediately without blocking.
-          // If the timeout is negative, waits indefinitely until an event
-          // appears.
-          const int timeoutMilliseconds =
-              (!((vko::UserData *)app->userData)->_active &&
-               !isSessionRunning && app->destroyRequested == 0)
-                  ? -1
-                  : 0;
-          if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
-                               (void **)&source) < 0) {
-            break;
-          }
+            // Read all pending events.
+            for (;;) {
+              int events;
+              struct android_poll_source *source;
+              // If the timeout is zero, returns immediately without blocking.
+              // If the timeout is negative, waits indefinitely until an event
+              // appears.
+              const int timeoutMilliseconds =
+                  (!((vko::UserData *)app->userData)->_active &&
+                   !isSessionRunning && app->destroyRequested == 0)
+                      ? -1
+                      : 0;
+              if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
+                                   (void **)&source) < 0) {
+                break;
+              }
 
-          // Process this event.
-          if (source != nullptr) {
-            source->process(app, source);
-          }
-        }
+              // Process this event.
+              if (source != nullptr) {
+                source->process(app, source);
+              }
+            }
 
-        return true;
-      },
-      options, session, physicalDevice, physicalDevice.graphicsFamilyIndex,
-      device);
+            return true;
+          },
+          xr_instance.instance, xr_instance.systemId, session, appSpace,
+          options.Parsed.EnvironmentBlendMode,
+          {
+              .float32 = {clearColor.x, clearColor.y, clearColor.z,
+                          clearColor.w},
+          },
+          options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
+          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+
+      // session scope
+    }
+    // vulkan scope
+  }
 
   ANativeActivity_finish(app->activity);
 
@@ -154,8 +158,8 @@ void android_main(struct android_app *app) {
   try {
     _android_main(app);
   } catch (const std::exception &ex) {
-    Log::Write(Log::Level::Error, ex.what());
+    xro::Logger::Error("%s", ex.what());
   } catch (...) {
-    Log::Write(Log::Level::Error, "Unknown Error");
+    xro::Logger::Error("Unknown Error");
   }
 }

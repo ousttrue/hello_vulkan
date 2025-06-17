@@ -1,6 +1,5 @@
+#include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
 #include "openxr_program/VulkanDebugMessageThunk.h"
-#include "openxr_program/openxr_program.h"
-#include "openxr_program/openxr_session.h"
 #include "openxr_program/options.h"
 #include "xr_loop.h"
 #include <common/logger.h>
@@ -53,9 +52,15 @@ int main(int argc, char *argv[]) {
       xr_instance.createVulkan(debugMessageThunk);
 
   // XrSession
-  auto session = OpenXrSession ::create(
-      options, xr_instance.instance, xr_instance.systemId, instance,
-      physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+  xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
+                       physicalDevice, physicalDevice.graphicsFamilyIndex,
+                       device);
+  XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
+      GetXrReferenceSpaceCreateInfo(options.AppSpace);
+  XrSpace appSpace;
+  XRO_CHECK(
+      xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &appSpace));
+  auto clearColor = options.GetBackgroundClearColor();
 
   xr_loop(
       [pQuit = &quitKeyPressed](bool isSessionRunning) {
@@ -64,8 +69,13 @@ int main(int argc, char *argv[]) {
         }
         return true;
       },
-      options, session, physicalDevice, physicalDevice.graphicsFamilyIndex,
-      device);
+      xr_instance.instance, xr_instance.systemId, session, appSpace,
+      options.Parsed.EnvironmentBlendMode,
+      {
+          .float32 = {clearColor.x, clearColor.y, clearColor.z, clearColor.w},
+      },
+      options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
+      physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
   return 0;
 }

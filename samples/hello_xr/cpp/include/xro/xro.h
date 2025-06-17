@@ -7,6 +7,8 @@
 #include <Unknwn.h>
 #endif
 #include <openxr/openxr_platform.h>
+#include <vector>
+#include <algorithm>
 
 #define XRO_CHECK(cmd) xro::CheckXrResult(cmd, #cmd, VKO_FILE_AND_LINE);
 // #define CHECK_XRRESULT(res, cmdStr) CheckXrResult(res, cmdStr,
@@ -27,7 +29,7 @@ using Logger = vko::Logger;
 inline XrResult CheckXrResult(XrResult res, const char *originator = nullptr,
                               const char *sourceLocation = nullptr) {
   if (XR_FAILED(res)) {
-    ThrowXrResult(res, originator, sourceLocation);
+    xro::ThrowXrResult(res, originator, sourceLocation);
   }
 
   return res;
@@ -326,6 +328,151 @@ struct Instance {
 
     return {std::move(instance), vko::PhysicalDevice(vkPhysicalDevice),
             std::move(device)};
+  }
+};
+
+struct Session : public vko::not_copyable {
+  XrSession session;
+  operator XrSession() const { return this->session; }
+  std::vector<VkFormat> formats;
+  Session(XrInstance _instance, XrSystemId _systemId, VkInstance instance,
+          VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+          VkDevice device) {
+    // Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
+    XrGraphicsBindingVulkan2KHR graphicsBinding{
+        .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+        .next = nullptr,
+        .instance = instance,
+        .physicalDevice = physicalDevice,
+        .device = device,
+        .queueFamilyIndex = queueFamilyIndex,
+        .queueIndex = 0,
+    };
+    XrSessionCreateInfo createInfo{
+        .type = XR_TYPE_SESSION_CREATE_INFO,
+        .next = &graphicsBinding,
+        .systemId = _systemId,
+    };
+    XRO_CHECK(xrCreateSession(_instance, &createInfo, &this->session));
+
+    // Select a swapchain format.
+    uint32_t swapchainFormatCount;
+    XRO_CHECK(xrEnumerateSwapchainFormats(this->session, 0,
+                                          &swapchainFormatCount, nullptr));
+    this->formats.resize(swapchainFormatCount);
+    XRO_CHECK(xrEnumerateSwapchainFormats(this->session, swapchainFormatCount,
+                                          &swapchainFormatCount,
+                                          (int64_t *)formats.data()));
+  }
+  ~Session() { xrDestroySession(this->session); }
+
+  VkFormat selectColorSwapchainFormat() const {
+    // List of supported color swapchain formats.
+    constexpr VkFormat SupportedColorSwapchainFormats[] = {
+        VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_UNORM,
+    };
+
+    auto swapchainFormatIt =
+        std::find_first_of(formats.begin(), formats.end(),
+                           std::begin(SupportedColorSwapchainFormats),
+                           std::end(SupportedColorSwapchainFormats));
+    if (swapchainFormatIt == formats.end()) {
+      throw std::runtime_error(
+          "No runtime swapchain format supported for color swapchain");
+    }
+
+    // Print swapchain formats and the selected one.
+    {
+      std::string swapchainFormatsString;
+      for (auto format : this->formats) {
+        const bool selected = format == *swapchainFormatIt;
+        swapchainFormatsString += " ";
+        if (selected) {
+          swapchainFormatsString += "[";
+        }
+        swapchainFormatsString += std::to_string(format);
+        if (selected) {
+          swapchainFormatsString += "]";
+        }
+      }
+      Logger::Info("Swapchain Formats: %s", swapchainFormatsString.c_str());
+    }
+    return *swapchainFormatIt;
+  }
+};
+
+inline XrFrameState beginFrame(XrSession session) {
+  XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
+  XrFrameState frameState{XR_TYPE_FRAME_STATE};
+  XRO_CHECK(xrWaitFrame(session, &frameWaitInfo, &frameState));
+  XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
+  XRO_CHECK(xrBeginFrame(session, &frameBeginInfo));
+  return frameState;
+}
+
+inline void
+endFrame(XrSession session, XrTime predictedDisplayTime,
+         XrEnvironmentBlendMode blendMode,
+         const std::vector<XrCompositionLayerBaseHeader *> &layers) {
+  XrFrameEndInfo frameEndInfo{
+      .type = XR_TYPE_FRAME_END_INFO,
+      .displayTime = predictedDisplayTime,
+      .environmentBlendMode = blendMode,
+      .layerCount = static_cast<uint32_t>(layers.size()),
+      .layers = layers.data(),
+  };
+  XRO_CHECK(xrEndFrame(session, &frameEndInfo));
+}
+
+struct Stereoscope {
+  std::vector<XrViewConfigurationView> viewConfigurations;
+  std::vector<XrView> views;
+
+  Stereoscope(XrInstance instance, XrSystemId systemId,
+              XrViewConfigurationType viewConfigurationType) {
+    // Query and cache view configuration views.
+    uint32_t viewCount;
+    XRO_CHECK(xrEnumerateViewConfigurationViews(
+        instance, systemId, viewConfigurationType, 0, &viewCount, nullptr));
+    this->viewConfigurations.resize(viewCount,
+                                    {XR_TYPE_VIEW_CONFIGURATION_VIEW});
+    this->views.resize(viewCount, {XR_TYPE_VIEW});
+    XRO_CHECK(xrEnumerateViewConfigurationViews(
+        instance, systemId, viewConfigurationType, viewCount, &viewCount,
+        viewConfigurations.data()));
+  }
+
+  bool Locate(XrSession session, XrSpace appSpace, XrTime predictedDisplayTime,
+              XrViewConfigurationType viewConfigType) {
+    XrViewLocateInfo viewLocateInfo{
+        .type = XR_TYPE_VIEW_LOCATE_INFO,
+        .viewConfigurationType = viewConfigType,
+        .displayTime = predictedDisplayTime,
+        .space = appSpace,
+    };
+
+    XrViewState viewState{
+        .type = XR_TYPE_VIEW_STATE,
+    };
+
+    uint32_t viewCountOutput;
+    auto res = xrLocateViews(session, &viewLocateInfo, &viewState,
+                             static_cast<uint32_t>(this->views.size()),
+                             &viewCountOutput, this->views.data());
+    // CHECK_XRRESULT(res, "xrLocateViews");
+    if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
+        (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
+      return false; // There is no valid tracking poses for the views.
+    }
+
+    // CHECK(*viewCountOutput == this->views.size());
+    // CHECK(*viewCountOutput == m_configViews.size());
+    // CHECK(*viewCountOutput == m_swapchains.size());
+
+    return true;
   }
 };
 

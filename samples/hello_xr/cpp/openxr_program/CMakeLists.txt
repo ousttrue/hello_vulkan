@@ -1,7 +1,7 @@
 add_library(
   openxr_program STATIC
-  openxr_program.cpp
-  openxr_session.cpp
+  # openxr_program.cpp
+  # openxr_session.cpp
   SessionEventState.cpp
   GetXrReferenceSpaceCreateInfo.cpp
   VulkanDebugMessageThunk.cpp

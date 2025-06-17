@@ -1,13 +1,14 @@
 #include "xr_loop.h"
 #include "openxr_program/CubeScene.h"
 #include "openxr_program/GetXrReferenceSpaceCreateInfo.h"
+#include "openxr_program/SessionEventState.h"
 #include "openxr_program/openxr_swapchain.h"
-#include "openxr_program/options.h"
-#include "vko/vko.h"
 #include <map>
 #include <thread>
 #include <vko/vko_pipeline.h>
 #include <vko/vko_shaderc.h>
+#include <vulkan/vulkan_core.h>
+#include <xro/xro.h>
 
 char VertexShaderGlsl[] = {
 #embed "shader.vert"
@@ -270,7 +271,7 @@ struct ViewRenderer {
   }
 
   void render(VkImage image, VkExtent2D size, VkFormat colorFormat,
-              VkFormat depthFormat, const Vec4 &clearColor,
+              VkFormat depthFormat, const VkClearColorValue &clearColor,
               const std::vector<Mat4> &matrices, VkBuffer vertices,
               VkBuffer indices, uint32_t drawCount) {
     // Waiting on a not-in-flight command buffer is a no-op
@@ -290,10 +291,7 @@ struct ViewRenderer {
 
     // Bind and clear eye render target
     static std::array<VkClearValue, 2> clearValues;
-    clearValues[0].color.float32[0] = clearColor.x;
-    clearValues[0].color.float32[1] = clearColor.y;
-    clearValues[0].color.float32[2] = clearColor.z;
-    clearValues[0].color.float32[3] = clearColor.w;
+    clearValues[0].color = clearColor;
     clearValues[1].depthStencil.depth = 1.0f;
     clearValues[1].depthStencil.stencil = 0;
     VkRenderPassBeginInfo renderPassBeginInfo{
@@ -380,9 +378,12 @@ struct VisualizedSpaces : public vko::not_copyable {
   }
 };
 
-void xr_loop(const std::function<bool(bool)> &runLoop, const Options &options,
-             OpenXrSession &session, VkPhysicalDevice physicalDevice,
-             uint32_t queueFamilyIndex, VkDevice device) {
+void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
+             XrSystemId systemId, XrSession session, XrSpace appSpace,
+             XrEnvironmentBlendMode blendMode, VkClearColorValue clearColor,
+             XrViewConfigurationType viewConfigurationType, VkFormat viewFormat,
+             VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+             VkDevice device) {
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   vko::IndexedMesh mesh = {
@@ -435,74 +436,72 @@ void xr_loop(const std::function<bool(bool)> &runLoop, const Options &options,
   }
 
   // Create resources for each view.
-  auto config = session.GetSwapchainConfiguration();
   std::vector<std::shared_ptr<OpenXrSwapchain>> swapchains;
-  std::vector<std::shared_ptr<ViewRenderer>> views;
+  std::vector<std::shared_ptr<ViewRenderer>> renderers;
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
-  for (uint32_t i = 0; i < config.Views.size(); i++) {
+  SessionEventState state(instance, session, viewConfigurationType);
+  VisualizedSpaces spaces(session);
+  InputState input(instance, session);
+
+  xro::Stereoscope stereoscope(instance, systemId, viewConfigurationType);
+
+  for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
-    auto swapchain = OpenXrSwapchain::Create(session.m_session, i,
-                                             config.Views[i], config.Format);
+    auto swapchain = OpenXrSwapchain::Create(
+        session, i, stereoscope.viewConfigurations[i], viewFormat);
     swapchains.push_back(swapchain);
 
     auto ptr = std::make_shared<ViewRenderer>(
         physicalDevice, device, queueFamilyIndex, swapchain->extent(),
         swapchain->format(), depthFormat, swapchain->sampleCountFlagBits(),
         mesh.inputBindingDescriptions, mesh.attributeDescriptions);
-    views.push_back(ptr);
+    renderers.push_back(ptr);
   }
 
-  VisualizedSpaces spaces(session.m_session);
-
   // mainloop
-  while (runLoop(session.m_state.IsSessionRunning())) {
-    auto poll = session.m_state.PollEvents();
+  bool isSessionRunning = true;
+  while (runLoop(isSessionRunning)) {
+    auto poll = state.PollEvents();
     if (poll.exitRenderLoop) {
-      //   ANativeActivity_finish(app->activity);
-      //   continue;
       break;
     }
 
-    if (!session.m_state.IsSessionRunning()) {
+    if (!state.IsSessionRunning()) {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
       continue;
     }
 
-    session.m_input.PollActions(session.m_session);
+    input.PollActions(session);
 
-    auto frameState = session.BeginFrame();
-    LayerComposition composition(options.Parsed.EnvironmentBlendMode,
-                                 session.m_appSpace);
+    auto frameState = xro::beginFrame(session);
+    LayerComposition composition(blendMode, appSpace);
 
     if (frameState.shouldRender == XR_TRUE) {
-      uint32_t viewCountOutput;
-      if (session.LocateView(session.m_appSpace,
-                             frameState.predictedDisplayTime,
-                             options.Parsed.ViewConfigType, &viewCountOutput)) {
+      if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
+                             viewConfigurationType)) {
         // XrCompositionLayerProjection
 
         // update scene
         CubeScene scene;
-        scene.addSpaceCubes(session.m_appSpace, frameState.predictedDisplayTime,
+        scene.addSpaceCubes(appSpace, frameState.predictedDisplayTime,
                             spaces.m_visualizedSpaces);
-        scene.addHandCubes(session.m_appSpace, frameState.predictedDisplayTime,
-                           session.m_input);
+        scene.addHandCubes(appSpace, frameState.predictedDisplayTime, input);
 
-        for (uint32_t i = 0; i < viewCountOutput; ++i) {
+        for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
 
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
-          auto info = swapchain->AcquireSwapchain(session.m_views[i]);
+          auto info = swapchain->AcquireSwapchain(stereoscope.views[i]);
           composition.pushView(info.CompositionLayer);
 
-          views[i]->render(info.Image, swapchain->extent(), swapchain->format(),
-                           depthFormat, options.GetBackgroundClearColor(),
-                           scene.CalcCubeMatrices(info.calcViewProjection()),
-                           mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
-                           mesh.indexDrawCount);
+          renderers[i]->render(
+              info.Image, swapchain->extent(), swapchain->format(), depthFormat,
+              clearColor, scene.CalcCubeMatrices(info.calcViewProjection()),
+              mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
+              mesh.indexDrawCount);
 
           swapchain->EndSwapchain();
         }
@@ -511,7 +510,7 @@ void xr_loop(const std::function<bool(bool)> &runLoop, const Options &options,
 
     // std::vector<XrCompositionLayerBaseHeader *>
     auto &layers = composition.commitLayers();
-    session.EndFrame(frameState.predictedDisplayTime, layers);
+    xro::endFrame(session, frameState.predictedDisplayTime, blendMode, layers);
   }
 
   vkDeviceWaitIdle(device);
