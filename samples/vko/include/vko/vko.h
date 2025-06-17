@@ -30,12 +30,12 @@
 
 // #define VKO_THROW(msg) vko::Throw(msg, nullptr, VKO_FILE_AND_LINE);
 
-// #define VKO_CHECK(exp)                                                             \
-//   {                                                                            \
-//     if (!(exp)) {                                                              \
-//       vko::Throw("Check failed", #exp, VKO_FILE_AND_LINE);                     \
-//     }                                                                          \
-//   }
+#define VKO_ASSERT(exp)                                                        \
+  {                                                                            \
+    if (!(exp)) {                                                              \
+      vko::Throw("Check failed", #exp, VKO_FILE_AND_LINE);                     \
+    }                                                                          \
+  }
 
 // #define VKO_CHECK_MSG(exp, msg)                                                    \
 //   {                                                                            \

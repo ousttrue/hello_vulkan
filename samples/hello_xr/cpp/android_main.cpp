@@ -148,7 +148,8 @@ void _android_main(struct android_app *app) {
             // appears.
             const int timeoutMilliseconds =
                 (!((vko::UserData *)app->userData)->_active &&
-                 !session.IsSessionRunning() && app->destroyRequested == 0)
+                 !session.m_state.IsSessionRunning() &&
+                 app->destroyRequested == 0)
                     ? -1
                     : 0;
             if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
@@ -162,15 +163,13 @@ void _android_main(struct android_app *app) {
             }
           }
 
-          bool requestRestart = false;
-          bool exitRenderLoop = false;
-          session.PollEvents(&exitRenderLoop, &requestRestart);
-          if (exitRenderLoop) {
+          auto poll = session.m_state.PollEvents();
+          if (poll.exitRenderLoop) {
             ANativeActivity_finish(app->activity);
             continue;
           }
 
-          if (!session.IsSessionRunning()) {
+          if (!session.m_state.IsSessionRunning()) {
             // Throttle loop since xrWaitFrame won't be called.
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             continue;

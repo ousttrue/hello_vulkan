@@ -11,7 +11,7 @@
 #define XRO_CHECK(cmd) xro::CheckXrResult(cmd, #cmd, VKO_FILE_AND_LINE);
 // #define CHECK_XRRESULT(res, cmdStr) CheckXrResult(res, cmdStr,
 // VKO_FILE_AND_LINE);
-// #define XRO_THROW(xr, cmd) ThrowXrResult(xr, #cmd, VKO_FILE_AND_LINE);
+#define XRO_THROW(xr, cmd) xro::ThrowXrResult(xr, #cmd, VKO_FILE_AND_LINE);
 
 namespace xro {
 
