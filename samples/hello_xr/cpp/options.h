@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "FloatTypes.h"
 #include <locale>
 #include <openxr/openxr.h>
+#include <vulkan/vulkan_core.h>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
                       const std::locale &loc = std::locale());
@@ -43,7 +43,7 @@ struct Options {
   } Parsed;
 
   void ParseStrings();
-  Vec4 GetBackgroundClearColor() const;
+  VkClearColorValue GetBackgroundClearColor() const;
   void SetEnvironmentBlendMode(XrEnvironmentBlendMode environmentBlendMode);
 
   bool UpdateOptionsFromCommandLine(int argc, char *argv[]);

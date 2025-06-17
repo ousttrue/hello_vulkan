@@ -72,11 +72,7 @@ int main(int argc, char *argv[]) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          options.Parsed.EnvironmentBlendMode,
-          {
-              .float32 = {clearColor.x, clearColor.y, clearColor.z,
-                          clearColor.w},
-          },
+          options.Parsed.EnvironmentBlendMode, clearColor,
           options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
           physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 

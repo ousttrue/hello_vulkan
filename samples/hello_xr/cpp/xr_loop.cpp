@@ -1,8 +1,11 @@
 #include "xr_loop.h"
-#include "CubeScene.h"
 #include "GetXrReferenceSpaceCreateInfo.h"
+#include "InputState.h"
 #include "SessionEventState.h"
+#include "fmt.h"
+#include "logger.h"
 #include "openxr_swapchain.h"
+#include "xr_check.h"
 #include <map>
 #include <thread>
 #include <vko/vko_pipeline.h>
@@ -20,6 +23,29 @@ char FragmentShaderGlsl[] = {
 
 static_assert(sizeof(VertexShaderGlsl), "VertexShaderGlsl");
 static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
+
+struct Vec3 {
+  float x, y, z;
+};
+
+struct Vec4 {
+  float x, y, z, w;
+};
+
+struct Mat4 {
+  float m[16];
+};
+
+struct Cube {
+  Vec3 Translaton;
+  Vec4 Rotation;
+  Vec3 Scaling;
+};
+
+struct Vertex {
+  Vec3 Position;
+  Vec3 Color;
+};
 
 constexpr Vec3 Red{1, 0, 0};
 constexpr Vec3 DarkRed{0.25f, 0, 0};
@@ -58,6 +84,84 @@ constexpr unsigned short c_cubeIndices[] = {
     18, 19, 20, 21, 22, 23, // +Y
     24, 25, 26, 27, 28, 29, // -Z
     30, 31, 32, 33, 34, 35, // +Z
+};
+
+struct CubeScene {
+  std::vector<Cube> cubes;
+
+  static Cube MakeCube(XrPosef pose, XrVector3f scale) {
+    return Cube{
+        .Translaton =
+            {
+                pose.position.x,
+                pose.position.y,
+                pose.position.z,
+            },
+        .Rotation =
+            {
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            },
+        .Scaling =
+            {
+                scale.x,
+                scale.y,
+                scale.z,
+            },
+    };
+  }
+
+  // For each locatable space that we want to visualize, render a 25cm cube.
+  void addSpaceCubes(XrSpace appSpace, XrTime predictedDisplayTime,
+                     const std::vector<XrSpace> &visualizedSpaces) {
+    for (XrSpace visualizedSpace : visualizedSpaces) {
+      XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
+      auto res = xrLocateSpace(visualizedSpace, appSpace, predictedDisplayTime,
+                               &spaceLocation);
+      CHECK_XRRESULT(res, "xrLocateSpace");
+      if (XR_UNQUALIFIED_SUCCESS(res)) {
+        if ((spaceLocation.locationFlags &
+             XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+            (spaceLocation.locationFlags &
+             XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
+          cubes.push_back(MakeCube(spaceLocation.pose, {0.25f, 0.25f, 0.25f}));
+        }
+      } else {
+        Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized "
+                                            "reference space in app space: %d",
+                                            res));
+      }
+    }
+  }
+
+  void addHandCube(XrSpace appSpace, XrTime predictedDisplayTime,
+                   XrSpace handSpace, float handScale, bool handActive,
+                   const char *handName) {
+    XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
+    auto res = xrLocateSpace(handSpace, appSpace, predictedDisplayTime,
+                             &spaceLocation);
+    CHECK_XRRESULT(res, "xrLocateSpace");
+    if (XR_UNQUALIFIED_SUCCESS(res)) {
+      if ((spaceLocation.locationFlags &
+           XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+          (spaceLocation.locationFlags &
+           XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
+        float scale = 0.1f * handScale;
+        cubes.push_back(MakeCube(spaceLocation.pose, {scale, scale, scale}));
+      }
+    } else {
+      // Tracking loss is expected when the hand is not active so only log a
+      // message if the hand is active.
+      if (handActive == XR_TRUE) {
+        const char *handName[] = {"left", "right"};
+        Log::Write(Log::Level::Verbose,
+                   Fmt("Unable to locate %s hand action space in app space: %d",
+                       handName, res));
+      }
+    }
+  }
 };
 
 struct ViewRenderer {
@@ -120,8 +224,9 @@ struct ViewRenderer {
 
   void render(VkImage image, VkExtent2D size, VkFormat colorFormat,
               VkFormat depthFormat, const VkClearColorValue &clearColor,
-              const std::vector<Mat4> &matrices, VkBuffer vertices,
-              VkBuffer indices, uint32_t drawCount) {
+              VkBuffer vertices, VkBuffer indices, uint32_t drawCount,
+              const XrMatrix4x4f &viewProjection,
+              const std::vector<Cube> &cubes) {
     // Waiting on a not-in-flight command buffer is a no-op
     execFence.wait();
     execFence.reset();
@@ -172,9 +277,16 @@ struct ViewRenderer {
     vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertices, &offset);
 
     // Render each cube
-    for (const Mat4 &mat : matrices) {
+    for (auto &cube : cubes) {
+      // Compute the model-view-projection transform and push it.
+      XrMatrix4x4f model;
+      XrMatrix4x4f_CreateTranslationRotationScale(
+          &model, (XrVector3f *)&cube.Translaton,
+          (XrQuaternionf *)&cube.Rotation, (XrVector3f *)&cube.Scaling);
+      Mat4 mvp;
+      XrMatrix4x4f_Multiply((XrMatrix4x4f *)&mvp, &viewProjection, &model);
       vkCmdPushConstants(this->commandBuffer, this->pipeline.pipelineLayout,
-                         VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat), &mat.m[0]);
+                         VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvp), &mvp.m[0]);
 
       // Draw the cube.
       vkCmdDrawIndexed(this->commandBuffer, drawCount, 1, 0, 0, 0);
@@ -376,7 +488,12 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
         scene.addSpaceCubes(appSpace, frameState.predictedDisplayTime,
                             spaces.m_visualizedSpaces);
 
-        scene.addHandCubes(appSpace, frameState.predictedDisplayTime, input);
+        for (auto hand : {Side::LEFT, Side::RIGHT}) {
+          scene.addHandCube(appSpace, frameState.predictedDisplayTime,
+                            input.hands[hand].space, input.hands[hand].scale,
+                            input.hands[hand].active,
+                            hand == Side::LEFT ? "left" : "right");
+        }
 
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
 
@@ -387,9 +504,8 @@ void xr_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
           renderers[i]->render(
               info.Image, swapchain->extent(), swapchain->format(), depthFormat,
-              clearColor, scene.CalcCubeMatrices(info.calcViewProjection()),
-              mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
-              mesh.indexDrawCount);
+              clearColor, mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
+              mesh.indexDrawCount, info.calcViewProjection(), scene.cubes);
 
           swapchain->EndSwapchain();
         }

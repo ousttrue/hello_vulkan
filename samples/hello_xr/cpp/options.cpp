@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "xr_check.h"
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
                       const std::locale &loc) {
@@ -81,10 +82,12 @@ void Options::ParseStrings() {
   Parsed.EnvironmentBlendMode = GetXrEnvironmentBlendMode(EnvironmentBlendMode);
 }
 
-Vec4 Options::GetBackgroundClearColor() const {
-  static const Vec4 SlateGrey{0.184313729f, 0.309803933f, 0.309803933f, 1.0f};
-  static const Vec4 TransparentBlack{0.0f, 0.0f, 0.0f, 0.0f};
-  static const Vec4 Black{0.0f, 0.0f, 0.0f, 1.0f};
+VkClearColorValue Options::GetBackgroundClearColor() const {
+  static const VkClearColorValue SlateGrey{
+      .float32 = {0.184313729f, 0.309803933f, 0.309803933f, 1.0f}};
+  static const VkClearColorValue TransparentBlack{
+      .float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
+  static const VkClearColorValue Black{.float32 = {0.0f, 0.0f, 0.0f, 1.0f}};
 
   switch (Parsed.EnvironmentBlendMode) {
   case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
