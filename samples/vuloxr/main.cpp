@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <json/json.h>
+#include <vuloxr/glfw.h>
 #include <vuloxr/vk.h>
 
 const char gltf[] = {
@@ -220,35 +221,6 @@ public:
   }
 };
 
-class Glfw {
-  GLFWwindow *window = nullptr;
-
-public:
-  Glfw() {}
-  ~Glfw() {}
-
-  static void glfw_error_callback(int error, const char *description) {
-    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
-  }
-
-  GLFWwindow *createWindow() {
-    glfwSetErrorCallback(glfw_error_callback);
-    if (!glfwInit()) {
-      return nullptr;
-    }
-
-    // Create window with Vulkan context
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    this->window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example",
-                                    nullptr, nullptr);
-    if (!glfwVulkanSupported()) {
-      printf("GLFW: Vulkan Not Supported\n");
-      return nullptr;
-    }
-    return this->window;
-  }
-};
-
 // Main code
 int main(int, char **) {
 #if NDEBUG
@@ -262,7 +234,7 @@ int main(int, char **) {
   Scene scene;
   scene.loadGltf(gltf);
 
-  Glfw glfw;
+  vuloxr::Glfw glfw;
   auto window = glfw.createWindow();
   if (!window) {
     return 1;
@@ -322,8 +294,7 @@ int main(int, char **) {
   }
 
   // Create Framebuffers
-  int w, h;
-  glfwGetFramebufferSize(window, &w, &h);
+  auto [w, h] = glfw.framebufferSize();
   ImGui_ImplVulkanH_Window *wd = &g_MainWindowData;
   SetupVulkanWindow(wd, instance, physicalDevice, surface, queueFamily, device,
                     w, h);
@@ -394,7 +365,7 @@ int main(int, char **) {
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   // Main loop
-  while (!glfwWindowShouldClose(window)) {
+  while (glfw.newFrame()) {
     // Poll and handle events (inputs, window resize, etc.)
     // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
     // tell if dear imgui wants to use your inputs.
@@ -404,11 +375,9 @@ int main(int, char **) {
     // data to your main application, or clear/overwrite your copy of the
     // keyboard data. Generally you may always pass all inputs to dear imgui,
     // and hide them from your application based on those two flags.
-    glfwPollEvents();
 
     // Resize swap chain?
-    int fb_width, fb_height;
-    glfwGetFramebufferSize(window, &fb_width, &fb_height);
+    auto [fb_width, fb_height] = glfw.framebufferSize();
     if (fb_width > 0 && fb_height > 0 &&
         (g_SwapChainRebuild || g_MainWindowData.Width != fb_width ||
          g_MainWindowData.Height != fb_height)) {
@@ -419,7 +388,7 @@ int main(int, char **) {
       g_MainWindowData.FrameIndex = 0;
       g_SwapChainRebuild = false;
     }
-    if (glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0) {
+    if (glfw.isIconified()) {
       ImGui_ImplGlfw_Sleep(10);
       continue;
     }
@@ -505,9 +474,6 @@ int main(int, char **) {
 
   CleanupVulkanWindow(instance, device);
   CleanupVulkan(device, descriptorPool);
-
-  glfwDestroyWindow(window);
-  glfwTerminate();
 
   return 0;
 }

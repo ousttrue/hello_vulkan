@@ -26,6 +26,47 @@ inline std::string fmt(const char *fmt, ...) {
   throw std::runtime_error("Unexpected vsnprintf failure");
 }
 
+struct Logger {
+  static std::string tag;
+
+#ifdef ANDROID
+  static void Info(const char *fmt, ...) {
+    va_list arg;
+    va_start(arg, fmt);
+    __android_log_vprint(ANDROID_LOG_INFO, tag.c_str(), fmt, arg);
+    va_end(arg);
+  }
+  static void Error(const char *fmt, ...) {
+    va_list arg;
+    va_start(arg, fmt);
+    __android_log_vprint(ANDROID_LOG_ERROR, tag.c_str(), fmt, arg);
+    va_end(arg);
+  }
+#else
+  static void Info(const char *_fmt, ...) {
+    va_list arg;
+    va_start(arg, _fmt);
+    auto fmt = (std::string("INFO: ") + _fmt);
+    if (!fmt.ends_with('\n')) {
+      fmt += '\n';
+    }
+    vfprintf(stderr, fmt.c_str(), arg);
+    va_end(arg);
+  }
+  static void Error(const char *_fmt, ...) {
+    va_list arg;
+    va_start(arg, _fmt);
+    auto fmt = (std::string("ERROR: ") + _fmt);
+    if (!fmt.ends_with('\n')) {
+      fmt += '\n';
+    }
+    vfprintf(stderr, fmt.c_str(), arg);
+    va_end(arg);
+  }
+#endif
+};
+inline std::string Logger::tag = "vuloxr";
+
 [[noreturn]] inline void Throw(std::string failureMessage,
                                const char *originator = nullptr,
                                const char *sourceLocation = nullptr) {
