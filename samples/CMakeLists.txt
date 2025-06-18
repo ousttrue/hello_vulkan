@@ -107,4 +107,4 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(shaderc)
 
 subdirs(#
-        hello_xr/cpp)
+        hello_xr/cpp vuloxr)

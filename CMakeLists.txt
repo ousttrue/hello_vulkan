@@ -33,5 +33,11 @@ FetchContent_Declare(
   GIT_TAG 3.3.8)
 FetchContent_MakeAvailable(glfw)
 
+FetchContent_Declare(
+  magic_enum
+  URL https://github.com/Neargye/magic_enum/releases/download/v0.9.7/magic_enum-v0.9.7.tar.gz
+)
+FetchContent_MakeAvailable(magic_enum)
+
 # target
 subdirs(samples vuloxr)
