@@ -27,8 +27,8 @@ else()
       ${TARGET_NAME}
       #
       main.cpp ${ARGV})
-    target_link_libraries(${TARGET_NAME} PRIVATE vko Vulkan::Vulkan glfw
-                                                 Vulkan::shaderc_combined glm)
+    target_link_libraries(${TARGET_NAME} PRIVATE vko Vulkan::Vulkan glfw glm
+                                                 shaderc)
   endfunction()
 
 endif()

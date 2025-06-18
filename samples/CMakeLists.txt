@@ -74,20 +74,12 @@ if(ANDROID_NDK)
     GIT_TAG vulkan-sdk-1.4.313.0)
   FetchContent_MakeAvailable(glslang)
 
-  set(SHADERC_SKIP_INSTALL OFF)
-  set(SHADERC_SKIP_TESTS ON)
-  set(SHADERC_SKIP_INSTALL ON)
-  FetchContent_Declare(
-    shaderc
-    GIT_REPOSITORY https://github.com/google/shaderc.git
-    GIT_TAG v2025.2)
-  FetchContent_MakeAvailable(shaderc)
-
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
   subdirs(ovr_openxr_mobile_sdk)
 else()
-  find_package(Vulkan REQUIRED COMPONENTS glslang glslangValidator SPIRV-Tools
-                                          shaderc_combined)
+  find_package(Vulkan REQUIRED 
+  # COMPONENTS glslang glslangValidator SPIRV-Tools shaderc_combined
+  )
 
   set(BUILD_SHARED_LIBS OFF)
   set(GLFW_BUILD_EXAMPLES OFF)
@@ -102,6 +94,31 @@ else()
   FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
   FetchContent_MakeAvailable(zlib)
 endif()
+
+FetchContent_Declare(
+  SPIRV-Headers
+  GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Headers.git
+  GIT_TAG vulkan-sdk-1.4.313.0)
+FetchContent_MakeAvailable(SPIRV-Headers)
+
+FetchContent_Declare(
+  SPIRV-Tools
+  URL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/v2025.1.zip)
+FetchContent_MakeAvailable(SPIRV-Tools)
+
+FetchContent_Declare(
+  glslang
+  URL https://github.com/KhronosGroup/glslang/archive/refs/tags/15.3.0.zip)
+FetchContent_MakeAvailable(glslang)
+
+set(SHADERC_SKIP_INSTALL OFF)
+set(SHADERC_SKIP_TESTS ON)
+set(SHADERC_SKIP_INSTALL ON)
+FetchContent_Declare(
+  shaderc
+  GIT_REPOSITORY https://github.com/google/shaderc.git
+  GIT_TAG v2025.2)
+FetchContent_MakeAvailable(shaderc)
 
 subdirs(#
         hello_xr/cpp)

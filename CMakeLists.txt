@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 set(CMAKE_POLICY_DEFAULT_CMP0148 OLD)
 add_compile_options(# stop embed warning
-                    -Wno-c23-extensions)
+                    -Wno-c23-extensions -D_CRT_SECURE_NO_WARNINGS)
 
 if(NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   # Git auto-ignore out-of-source build directory
