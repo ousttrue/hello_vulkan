@@ -3,6 +3,8 @@
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+// #define GLFW_EXPOSE_NATIVE_WIN32
+// #include <GLFW/glfw3native.h>
 
 #include "vuloxr.h"
 
@@ -17,7 +19,11 @@ class Glfw {
   }
 
 public:
-  Glfw() { glfwSetErrorCallback(glfw_error_callback); }
+  Glfw() {
+    glfwSetErrorCallback(glfw_error_callback);
+    assert(glfwInit());
+  }
+
   ~Glfw() {
     if (window) {
       glfwDestroyWindow(window);
@@ -25,21 +31,24 @@ public:
     glfwTerminate();
   }
 
-  GLFWwindow *createWindow() {
-    if (!glfwInit()) {
-      return nullptr;
-    }
-
+  GLFWwindow *createWindow(int width, int height, const char *windowTitle) {
+    //     if (!glfwVulkanSupported()) {
+    //       vko::Logger::Error("GLFW: Vulkan Not Supported\n");
+    //       return nullptr;
+    //     }
     // Create window with Vulkan context
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    this->window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+Vulkan example",
-                                    nullptr, nullptr);
+    //     // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    this->window =
+        glfwCreateWindow(width, height, windowTitle, nullptr, nullptr);
     if (!glfwVulkanSupported()) {
       printf("GLFW: Vulkan Not Supported\n");
       return nullptr;
     }
     return this->window;
   }
+
+  //     return glfwGetWin32Window(_window);
 
   bool newFrame() const {
     if (glfwWindowShouldClose(this->window)) {

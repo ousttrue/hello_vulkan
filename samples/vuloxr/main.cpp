@@ -294,7 +294,7 @@ int main(int, char **) {
   scene.loadGltf(gltf);
 
   vuloxr::glfw::Glfw glfw;
-  auto window = glfw.createWindow();
+  auto window = glfw.createWindow(1280, 720, "Dear ImGui GLFW+Vulkan example");
   if (!window) {
     return 1;
   }

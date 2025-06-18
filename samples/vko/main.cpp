@@ -1,49 +1,7 @@
 #include "main_loop.h"
-
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
+#include <vuloxr/glfw.h>
 
 auto NAME = "vko";
-
-class Glfw {
-
-public:
-  GLFWwindow *_window = nullptr;
-  Glfw() {
-    glfwSetErrorCallback([](int error, const char *description) {
-      vko::Logger::Error("GLFW Error %d: %s\n", error, description);
-    });
-    glfwInit();
-  }
-  ~Glfw() {
-    if (_window) {
-      glfwDestroyWindow(_window);
-    }
-    glfwTerminate();
-  }
-  void *createWindow(int width, int height, const char *title) {
-    if (!glfwVulkanSupported()) {
-      vko::Logger::Error("GLFW: Vulkan Not Supported\n");
-      return nullptr;
-    }
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    _window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-
-    return glfwGetWin32Window(_window);
-  }
-  bool nextFrame() {
-    if (glfwWindowShouldClose(_window)) {
-      return false;
-    }
-    glfwPollEvents();
-    // glfwGetFramebufferSize(_window, width, height);
-    return true;
-  }
-};
 
 int main(int argc, char **argv) {
   std::vector<const char *> validationLayers;
@@ -57,8 +15,8 @@ int main(int argc, char **argv) {
   instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
-  Glfw glfw;
-  auto hwnd = glfw.createWindow(640, 480, NAME);
+  vuloxr::glfw::Glfw glfw;
+  auto window = glfw.createWindow(640, 480, NAME);
   uint32_t glfwExtensionCount = 0;
   const char **glfwExtensions;
   glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -75,7 +33,7 @@ int main(int argc, char **argv) {
 
   VkSurfaceKHR _surface;
   vko::VKO_CHECK(
-      glfwCreateWindowSurface(instance, glfw._window, nullptr, &_surface));
+      glfwCreateWindowSurface(instance, window, nullptr, &_surface));
 
   auto physicalDevice = instance.pickPhysicalDevice(_surface);
   vko::Surface surface(instance, _surface, physicalDevice.physicalDevice);
@@ -93,7 +51,7 @@ int main(int argc, char **argv) {
       surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
       physicalDevice.presentFamilyIndex);
 
-  main_loop([&glfw]() { return glfw.nextFrame(); }, swapchain, physicalDevice,
+  main_loop([&glfw]() { return glfw.newFrame(); }, swapchain, physicalDevice,
             device);
 
   return 0;
