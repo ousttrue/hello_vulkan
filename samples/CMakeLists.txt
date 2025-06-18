@@ -77,20 +77,6 @@ if(ANDROID_NDK)
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
   subdirs(ovr_openxr_mobile_sdk)
 else()
-  find_package(Vulkan REQUIRED 
-  # COMPONENTS glslang glslangValidator SPIRV-Tools shaderc_combined
-  )
-
-  set(BUILD_SHARED_LIBS OFF)
-  set(GLFW_BUILD_EXAMPLES OFF)
-  set(GLFW_BUILD_TESTS OFF)
-  set(GLFW_BUILD_DOCS OFF)
-  FetchContent_Declare(
-    glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.3.8)
-  FetchContent_MakeAvailable(glfw)
-
   FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
   FetchContent_MakeAvailable(zlib)
 endif()
