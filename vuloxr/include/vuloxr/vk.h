@@ -1,5 +1,5 @@
 #pragma once
-#include "../vuloxr.h"
+#include "vuloxr.h"
 #include <assert.h>
 #include <magic_enum/magic_enum.hpp>
 #include <vector>

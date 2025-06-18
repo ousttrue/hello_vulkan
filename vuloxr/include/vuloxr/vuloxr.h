@@ -3,8 +3,19 @@
 #include <stdarg.h>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace vuloxr {
+
+inline bool find_name(const std::vector<const char *> &names,
+                      const char *target) {
+  for (auto name : names) {
+    if (strcmp(name, target) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 inline std::string fmt(const char *fmt, ...) {
   va_list vl;

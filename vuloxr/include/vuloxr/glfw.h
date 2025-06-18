@@ -4,7 +4,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "../vuloxr.h"
+#include "vuloxr.h"
 
 namespace vuloxr {
 namespace glfw {
