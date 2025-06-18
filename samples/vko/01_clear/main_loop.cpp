@@ -1,4 +1,5 @@
 #include "../main_loop.h"
+#include "vko/vko.h"
 
 #include <assert.h>
 #include <chrono>
@@ -79,14 +80,8 @@ VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
 }
 
 void main_loop(const std::function<bool()> &runLoop,
-               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
+               vko::Swapchain &swapchain, vko::PhysicalDevice physicalDevice,
                const vko::Device &device) {
-
-  vko::Swapchain swapchain(device);
-  swapchain.create(
-      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
-      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
-      physicalDevice.presentFamilyIndex);
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    swapchain.images.size());

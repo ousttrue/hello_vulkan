@@ -13,9 +13,8 @@ const char FS[] = {
 #embed "shader.frag"
 };
 
-void main_loop(const std::function<bool()> &runLoop,
-               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
-               const vko::Device &device) {
+void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
+               vko::PhysicalDevice physicalDevice, const vko::Device &device) {
   //
   // pipeline
   //
@@ -34,8 +33,8 @@ void main_loop(const std::function<bool()> &runLoop,
   vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
                                         &pipelineLayout));
 
-  auto renderPass = vko::createColorRenderPass(
-      device, surface.chooseSwapSurfaceFormat().format);
+  auto renderPass =
+      vko::createColorRenderPass(device, swapchain.createInfo.imageFormat);
 
   auto pipeline = vko::PipelineBuilder().create(
       device, renderPass, pipelineLayout,
@@ -48,11 +47,6 @@ void main_loop(const std::function<bool()> &runLoop,
   //
   // swapchain
   //
-  vko::Swapchain swapchain(device);
-  swapchain.create(
-      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
-      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
-      physicalDevice.presentFamilyIndex);
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> images(
       swapchain.images.size());

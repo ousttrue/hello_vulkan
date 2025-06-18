@@ -79,22 +79,14 @@ void main()
 }
 )";
 
-void main_loop(const std::function<bool()> &runLoop,
-               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
-               const vko::Device &device) {
+void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
+               vko::PhysicalDevice physicalDevice, const vko::Device &device) {
 
   Scene scene(physicalDevice, device, physicalDevice.graphicsFamilyIndex);
 
   VkQueue graphicsQueue;
   vkGetDeviceQueue(device, physicalDevice.graphicsFamilyIndex, 0,
                    &graphicsQueue);
-
-  vko::Swapchain swapchain(device);
-  swapchain.create(
-      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
-      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
-      physicalDevice.presentFamilyIndex, VK_NULL_HANDLE);
-  auto imageCount = swapchain.images.size();
 
   vko::DescriptorSets descriptorSets(
       device,
@@ -117,19 +109,20 @@ void main_loop(const std::function<bool()> &runLoop,
           },
       });
   descriptorSets.allocate(
-      imageCount, {
-                      VkDescriptorPoolSize{
-                          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                          .descriptorCount = static_cast<uint32_t>(imageCount),
-                      },
-                      VkDescriptorPoolSize{
-                          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                          .descriptorCount = static_cast<uint32_t>(imageCount),
-                      },
-                  });
+      swapchain.images.size(),
+      {
+          VkDescriptorPoolSize{
+              .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+              .descriptorCount = static_cast<uint32_t>(swapchain.images.size()),
+          },
+          VkDescriptorPoolSize{
+              .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+              .descriptorCount = static_cast<uint32_t>(swapchain.images.size()),
+          },
+      });
 
-  auto renderPass = vko::createColorRenderPass(
-      device, surface.chooseSwapSurfaceFormat().format);
+  auto renderPass =
+      vko::createColorRenderPass(device, swapchain.createInfo.imageFormat);
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       //
@@ -141,7 +134,7 @@ void main_loop(const std::function<bool()> &runLoop,
   };
   VkPipelineLayout pipelineLayout;
   vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                   &pipelineLayout));
+                                        &pipelineLayout));
 
   auto vs =
       vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
@@ -169,11 +162,12 @@ void main_loop(const std::function<bool()> &runLoop,
   ;
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
-      imageCount);
-  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(imageCount);
+      swapchain.images.size());
+  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
+      swapchain.images.size());
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   imageCount);
+                                   swapchain.images.size());
 
   VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
 

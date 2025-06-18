@@ -87,7 +87,13 @@ int main(int argc, char **argv) {
                                physicalDevice.graphicsFamilyIndex,
                                physicalDevice.presentFamilyIndex));
 
-  main_loop([&glfw]() { return glfw.nextFrame(); }, surface, physicalDevice,
+  vko::Swapchain swapchain(device);
+  swapchain.create(
+      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
+      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
+      physicalDevice.presentFamilyIndex);
+
+  main_loop([&glfw]() { return glfw.nextFrame(); }, swapchain, physicalDevice,
             device);
 
   return 0;

@@ -1,20 +1,13 @@
 #include "../main_loop.h"
 #include "pipeline.hpp"
+#include "vko/vko.h"
 #include <chrono>
 
-void main_loop(const std::function<bool()> &runLoop,
-               const vko::Surface &surface, vko::PhysicalDevice physicalDevice,
-               const vko::Device &device) {
+void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
+               vko::PhysicalDevice physicalDevice, const vko::Device &device) {
 
-  std::shared_ptr<class Pipeline> pipeline =
-      Pipeline::create(physicalDevice.physicalDevice, device,
-                       surface.chooseSwapSurfaceFormat().format);
-
-  vko::Swapchain swapchain(device);
-  vko::VKO_CHECK(swapchain.create(
-      physicalDevice.physicalDevice, surface, surface.chooseSwapSurfaceFormat(),
-      surface.chooseSwapPresentMode(), physicalDevice.graphicsFamilyIndex,
-      physicalDevice.presentFamilyIndex));
+  std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
+      physicalDevice.physicalDevice, device, swapchain.createInfo.imageFormat);
 
   std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
@@ -31,7 +24,7 @@ void main_loop(const std::function<bool()> &runLoop,
       if (!backbuffer) {
         backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
-            surface.chooseSwapSurfaceFormat().format, pipeline->renderPass());
+            swapchain.createInfo.imageFormat, pipeline->renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
       }
 
