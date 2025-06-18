@@ -1,4 +1,5 @@
 #pragma once
+#include "vuloxr/vk.h"
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -6,6 +7,7 @@
 #include "../vuloxr.h"
 
 namespace vuloxr {
+namespace glfw {
 
 class Glfw {
   GLFWwindow *window = nullptr;
@@ -58,4 +60,5 @@ public:
   }
 };
 
+} // namespace glfw
 } // namespace vuloxr
