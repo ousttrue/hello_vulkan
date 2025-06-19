@@ -523,11 +523,12 @@ struct Swapchain : public NonCopyable {
   VkPresentModeKHR chooseSwapPresentMode() const {
 #ifdef ANDROID
 #else
-    for (const auto &availablePresentMode : this->presentModes) {
-      if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-        return availablePresentMode;
-      }
-    }
+    // for (const auto &availablePresentMode : this->presentModes) {
+    //   if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+    //     return availablePresentMode;
+    //   }
+    // }
+
 #endif
     // VSYNC ?
     return VK_PRESENT_MODE_FIFO_KHR;
@@ -540,6 +541,7 @@ struct Swapchain : public NonCopyable {
       .imageUsage =
           VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+
   // Find a supported compositeAlpha type.
   // VkCompositeAlphaFlagBitsKHR compositeAlpha =
   // VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; if
@@ -609,6 +611,12 @@ struct Swapchain : public NonCopyable {
     if (result != VK_SUCCESS) {
       return result;
     }
+
+    Logger::Info(
+        "swapchain.imageSharingMode: %s",
+        magic_enum::enum_name(this->createInfo.imageSharingMode).data());
+    Logger::Info("swapchain.presentMode: %s",
+                 magic_enum::enum_name(this->createInfo.presentMode).data());
 
     uint32_t imageCount;
     vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
