@@ -52,49 +52,55 @@ struct Logger {
     __android_log_vprint(prio, tag.c_str(), fmt, arg);
     va_end(arg);
   }
+  template <typename... ARGS>
+  static void Verbose(const char *fmt, ARGS... args) {
+    Log(ANDROID_LOG_VERBOSE, fmt, args...);
+  }
   template <typename... ARGS> static void Info(const char *fmt, ARGS... args) {
     Log(ANDROID_LOG_INFO, fmt, args...);
+  }
+  template <typename... ARGS> static void Warn(const char *fmt, ARGS... args) {
+    Log(ANDROID_LOG_WARN, fmt, args...);
   }
   template <typename... ARGS> static void Error(const char *fmt, ARGS... args) {
     Log(ANDROID_LOG_ERROR, fmt, args...);
   }
 #else
 
-  enum Severity {
-    VERBOSE,
-    INFO,
-    WARN,
-    ERROR,
-  };
-
-  const char *SeverityColors[4] = {};
-
-  static void Info(const char *_fmt, ...) {
-    auto begin = "\e[0;32m";
+  template <typename... ARGS>
+  static void Log(const std::string &begin, const char *_fmt, ...) {
     auto end = "\e[0m";
-
     va_list arg;
     va_start(arg, _fmt);
-    auto fmt = (begin + std::string("INFO: ") + _fmt + end);
+    auto fmt = (begin + _fmt + end);
     if (!fmt.ends_with('\n')) {
       fmt += '\n';
     }
     vfprintf(stderr, fmt.c_str(), arg);
     va_end(arg);
   }
-  static void Error(const char *_fmt, ...) {
-    auto begin = "\e[0;31m";
-    auto end = "\e[0m";
-
-    va_list arg;
-    va_start(arg, _fmt);
-    auto fmt = (begin + std::string("ERROR: ") + _fmt + end);
-    if (!fmt.ends_with('\n')) {
-      fmt += '\n';
-    }
-    vfprintf(stderr, fmt.c_str(), arg);
-    va_end(arg);
+  template <typename... ARGS>
+  static void Verbose(const char *fmt, ARGS... args) {
+    Log("\e[0m" // default
+        "VERBOSE: ",
+        fmt, args...);
   }
+  template <typename... ARGS> static void Info(const char *fmt, ARGS... args) {
+    Log("\e[0;32m" // green
+        "INFO   : ",
+        fmt, args...);
+  }
+  template <typename... ARGS> static void Warn(const char *fmt, ARGS... args) {
+    Log("\e[0;33m" // yellow
+        "WARN   : ",
+        fmt, args...);
+  }
+  template <typename... ARGS> static void Error(const char *fmt, ARGS... args) {
+    Log("\e[0;31m" // red
+        "ERROR  : ",
+        fmt, args...);
+  }
+
 #endif
 };
 inline std::string Logger::tag = "vuloxr";

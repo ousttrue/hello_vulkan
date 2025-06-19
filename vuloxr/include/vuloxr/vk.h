@@ -713,7 +713,7 @@ public:
   FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
                 uint32_t flightCount)
       : device(_device), commandBuffers(flightCount), flights(flightCount) {
-    Logger::Info("frames in flight: %d", flightCount);
+    Logger::Verbose("frames in flight: %d", flightCount);
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
@@ -773,7 +773,7 @@ public:
       return semaphroe;
     }
 
-    Logger::Info("* create acquireSemaphore *");
+    Logger::Verbose("* create acquireSemaphore *");
     VkSemaphore semaphore;
     VkSemaphoreCreateInfo semaphoreInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
