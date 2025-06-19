@@ -1,6 +1,5 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
-#include "vko/vko.h"
 #include "vko/vko_pipeline.h"
 #include <assert.h>
 #include <vulkan/vulkan_core.h>
@@ -14,13 +13,14 @@ const char FS[] = {
 };
 
 void main_loop(const std::function<bool()> &runLoop,
+               const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
-               const vuloxr::vk::Device &device) {
+               const vuloxr::vk::Device &device, void *) {
   //
   // pipeline
   //
-  vko::Logger::Info("convert glsl to spv and create shader module...");
+  vuloxr::Logger::Info("convert glsl to spv and create shader module...");
   auto vs =
       vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
   auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),

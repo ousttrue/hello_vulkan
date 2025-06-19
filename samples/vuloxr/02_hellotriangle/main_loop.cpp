@@ -4,9 +4,10 @@
 #include <chrono>
 
 void main_loop(const std::function<bool()> &runLoop,
+               const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
-               const vuloxr::vk::Device &device) {
+               const vuloxr::vk::Device &device, void *) {
 
   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
       physicalDevice.physicalDevice, device, swapchain.createInfo.imageFormat);

@@ -30,11 +30,19 @@ else()
 
 endif()
 
-add_vko_sample(01_clear 01_clear/main_loop.cpp)
+add_vuloxr_sample(01_clear 01_clear/main_loop.cpp)
+add_vuloxr_sample(02_triangle glsl_to_spv.cpp 02_triangle/main_loop.cpp)
+target_link_libraries(02_triangle PRIVATE vko)
+add_vuloxr_sample(02_hellotriangle glsl_to_spv.cpp
+                  02_hellotriangle/main_loop.cpp 02_hellotriangle/pipeline.cpp)
+target_link_libraries(02_hellotriangle PRIVATE vko)
+add_vuloxr_sample(03_texture glsl_to_spv.cpp 03_texture/main_loop.cpp
+                  03_texture/scene.cpp)
+target_link_libraries(03_texture PRIVATE vko)
 
 if(ANDROID)
 
 else()
-  add_vko_sample(04_imgui 04_imgui/main_loop.cpp)
+  add_vuloxr_sample(04_imgui 04_imgui/main_loop.cpp)
   target_link_libraries(04_imgui PRIVATE vuloxr imgui jsoncpp_static)
 endif()
