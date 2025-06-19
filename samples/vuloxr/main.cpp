@@ -1,14 +1,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
-#include <stdio.h>  // printf, fprintf
-#include <stdlib.h> // abort
-#include <vulkan/vulkan_core.h>
-#define GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
 
-#include <iostream>
 #include <json/json.h>
 #include <vuloxr/glfw.h>
 #include <vuloxr/vk.h>
@@ -16,17 +9,6 @@
 const char gltf[] = {
 #embed "triangle.gltf"
 };
-
-// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to
-// maximize ease of testing and compatibility with old VS compilers. To link
-// with VS2010-era libraries, VS2015+ requires linking with
-// legacy_stdio_definitions.lib, which we do using this pragma. Your own project
-// should not be affected, as you are likely to link with a newer binary of GLFW
-// that is adequate for your version of Visual Studio.
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) &&                                 \
-    !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
 
 class Scene {
 public:
@@ -36,198 +18,130 @@ public:
     bool parsingSuccessful = reader.parse(gltf, root);
     if (parsingSuccessful) {
       // std::cout << root;
+      vuloxr::Logger::Error("gltf json");
     } else {
-      std::cout << "Error parsing the string" << std::endl;
+      vuloxr::Logger::Error("Error parsing the string");
     }
   }
 };
 
-class ImGuiVulkanResource {
+struct ImGuiVulkanResource {
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
   uint32_t queueFamily;
   VkDevice device;
   VkQueue queue;
-
-  VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+  VkRenderPass renderPass = VK_NULL_HANDLE;
+  // VkPipelineCache pipelineCache = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 
 public:
-  VkRenderPass renderPass = VK_NULL_HANDLE;
-
-private:
-  // Data
-  uint32_t g_MinImageCount = 2;
-  bool g_SwapChainRebuild = false;
-
-  static void check_vk_result(VkResult err) {
-    if (err == VK_SUCCESS)
-      return;
-    fprintf(stderr, "[vulkan] Error: VkResult = %d\n", err);
-    if (err < 0)
-      abort();
-  }
-
-public:
   ImGuiVulkanResource(VkInstance _instance, VkPhysicalDevice _physicalDevice,
-                      uint32_t _queueFamily, VkDevice _device,
-                      VkSurfaceKHR surface, uint32_t imageCount)
+                      uint32_t _queueFamily, VkDevice _device, VkFormat format,
+                      uint32_t imageCount)
       : instance(_instance), physicalDevice(_physicalDevice),
         queueFamily(_queueFamily), device(_device) {
     vkGetDeviceQueue(device, queueFamily, 0, &this->queue);
 
-    // Check for WSI support
-    VkBool32 res;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamily, surface,
-                                         &res);
-    if (res != VK_TRUE) {
-      fprintf(stderr, "Error no WSI support on physical device 0\n");
-      exit(-1);
+    {
+      // Create Descriptor Pool
+      // If you wish to load e.g. additional textures you may need to alter
+      // pools sizes and maxSets.
+      VkDescriptorPoolSize pool_sizes[] = {
+          {
+              .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+              .descriptorCount =
+                  IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE,
+          },
+      };
+      VkDescriptorPoolCreateInfo pool_info = {
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+          .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+          .maxSets = 0,
+          .poolSizeCount = static_cast<uint32_t>(IM_ARRAYSIZE(pool_sizes)),
+          .pPoolSizes = pool_sizes,
+      };
+      for (VkDescriptorPoolSize &pool_size : pool_sizes) {
+        pool_info.maxSets += pool_size.descriptorCount;
+      }
+      vuloxr::vk::CheckVkResult(vkCreateDescriptorPool(
+          this->device, &pool_info, nullptr, &this->descriptorPool));
     }
-
-    // Select Surface Format
-    const VkFormat requestSurfaceImageFormat[] = {
-        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM};
-    const VkColorSpaceKHR requestSurfaceColorSpace =
-        VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    auto surfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
-        physicalDevice, surface, requestSurfaceImageFormat,
-        (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat),
-        requestSurfaceColorSpace);
-
-    // Create Descriptor Pool
-    // If you wish to load e.g. additional textures you may need to alter pools
-    // sizes and maxSets.
-    VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-         IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE},
-    };
-    VkDescriptorPoolCreateInfo pool_info = {};
-    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    pool_info.maxSets = 0;
-    for (VkDescriptorPoolSize &pool_size : pool_sizes)
-      pool_info.maxSets += pool_size.descriptorCount;
-    pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
-    pool_info.pPoolSizes = pool_sizes;
-    auto err = vkCreateDescriptorPool(this->device, &pool_info, nullptr,
-                                      &this->descriptorPool);
-    check_vk_result(err);
 
     {
-      VkAttachmentDescription attachment = {};
-      attachment.format = surfaceFormat.format;
-      attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-      attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-      // VkAttachmentDescription attachment = {};
-      // attachment.format = surfaceFormat.format;
-      // attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-      // attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      // attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      // attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      // attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      // attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      // attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-      VkAttachmentReference color_attachment = {};
-      color_attachment.attachment = 0;
-      color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-      // VkAttachmentReference color_attachment = {};
-      // color_attachment.attachment = 0;
-      // color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-      VkSubpassDescription subpass = {};
-      subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-      subpass.colorAttachmentCount = 1;
-      subpass.pColorAttachments = &color_attachment;
-      // VkSubpassDescription subpass = {};
-      // subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-      // subpass.colorAttachmentCount = 1;
-      // subpass.pColorAttachments = &color_attachment;
-      VkSubpassDependency dependency = {};
-      dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-      dependency.dstSubpass = 0;
-      dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      dependency.srcAccessMask = 0;
-      dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      // VkSubpassDependency dependency = {};
-      // dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-      // dependency.dstSubpass = 0;
-      // dependency.srcStageMask =
-      // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; dependency.dstStageMask
-      // = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      // dependency.srcAccessMask = 0;
-      // dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      VkRenderPassCreateInfo info = {};
-      info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-      info.attachmentCount = 1;
-      info.pAttachments = &attachment;
-      info.subpassCount = 1;
-      info.pSubpasses = &subpass;
-      info.dependencyCount = 1;
-      info.pDependencies = &dependency;
-      // VkRenderPassCreateInfo info = {};
-      // info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-      // info.attachmentCount = 1;
-      // info.pAttachments = &attachment;
-      // info.subpassCount = 1;
-      // info.pSubpasses = &subpass;
-      // info.dependencyCount = 1;
-      // info.pDependencies = &dependency;
-      err = vkCreateRenderPass(device, &info, nullptr, &renderPass);
-      check_vk_result(err);
+      VkAttachmentDescription attachment = {
+          .format = format,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      };
+      VkAttachmentReference color_attachment = {
+          .attachment = 0,
+          .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      };
+      VkSubpassDescription subpass = {
+          .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+          .colorAttachmentCount = 1,
+          .pColorAttachments = &color_attachment,
+      };
+      VkSubpassDependency dependency = {
+          .srcSubpass = VK_SUBPASS_EXTERNAL,
+          .dstSubpass = 0,
+          .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          .srcAccessMask = 0,
+          .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+      };
+      VkRenderPassCreateInfo info = {
+          .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+          .attachmentCount = 1,
+          .pAttachments = &attachment,
+          .subpassCount = 1,
+          .pSubpasses = &subpass,
+          .dependencyCount = 1,
+          .pDependencies = &dependency,
+      };
+      vuloxr::vk::CheckVkResult(
+          vkCreateRenderPass(device, &info, nullptr, &renderPass));
     }
 
-    ImGui_ImplVulkan_InitInfo init_info = {};
-    // init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your
-    // value of VkApplicationInfo::apiVersion, otherwise will default to header
-    // version.
-    init_info.Instance = instance;
-    init_info.PhysicalDevice = physicalDevice;
-    init_info.Device = device;
-    init_info.QueueFamily = queueFamily;
-    init_info.Queue = queue;
-    init_info.PipelineCache = this->pipelineCache;
-    init_info.DescriptorPool = descriptorPool;
-    init_info.RenderPass = renderPass;
-    init_info.Subpass = 0;
-    init_info.MinImageCount = g_MinImageCount;
-    init_info.ImageCount = imageCount;
-    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    init_info.Allocator = nullptr;
-    init_info.CheckVkResultFn = check_vk_result;
-    ImGui_ImplVulkan_Init(&init_info);
+    {
+      ImGui_ImplVulkan_InitInfo init_info = {
+          .Instance = instance,
+          .PhysicalDevice = physicalDevice,
+          .Device = device,
+          .QueueFamily = queueFamily,
+          .Queue = queue,
+          .DescriptorPool = descriptorPool,
+          .RenderPass = renderPass,
+          .MinImageCount = 2,
+          .ImageCount = imageCount,
+          .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+          // .PipelineCache = this->pipelineCache,
+          .Subpass = 0,
+          .Allocator = nullptr,
+          .CheckVkResultFn = [](VkResult r) { vuloxr::vk::CheckVkResult(r); },
+      };
+      // init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your
+      // value of VkApplicationInfo::apiVersion, otherwise will default to
+      // header version.
+      ImGui_ImplVulkan_Init(&init_info);
+    }
   }
 
   ~ImGuiVulkanResource() {
-    // ImGui_ImplVulkanH_DestroyWindow(this->instance, this->device, &this->wd,
-    //                                 nullptr);
+    vkDestroyRenderPass(this->device, this->renderPass, nullptr);
     vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
   }
 
-  void newFrame(int fb_width, int fb_height) {
-    if (fb_width > 0 && fb_height > 0 &&
-        (g_SwapChainRebuild
-         // || this->wd.Width != fb_width || this->wd.Height != fb_height
-         )) {
-      ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
-      // ImGui_ImplVulkanH_CreateOrResizeWindow(
-      //     instance, physicalDevice, device, &this->wd, queueFamily, nullptr,
-      //     fb_width, fb_height, g_MinImageCount);
-      // this->wd.FrameIndex = 0;
-      g_SwapChainRebuild = false;
-    }
-  }
-
-  void present(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer,
-               VkExtent2D extent, const ImVec4 &clear_color,
-               VkSemaphore acquireSemaphore, VkSemaphore submitSemaphore,
-               VkFence submitFence, ImDrawData *draw_data) {
+  void render(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer,
+              VkExtent2D extent, const ImVec4 &clear_color,
+              VkSemaphore acquireSemaphore, VkSemaphore submitSemaphore,
+              VkFence submitFence, ImDrawData *draw_data) {
 
     // FrameRender(draw_data);
     // VkSemaphore image_acquired_semaphore =
@@ -264,8 +178,7 @@ public:
       VkCommandBufferBeginInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
       info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-      auto err = vkBeginCommandBuffer(commandBuffer, &info);
-      check_vk_result(err);
+      vuloxr::vk::CheckVkResult(vkBeginCommandBuffer(commandBuffer, &info));
     }
 
     VkClearValue clearValue = {
@@ -298,8 +211,7 @@ public:
     // Submit command buffer
     vkCmdEndRenderPass(commandBuffer);
     {
-      auto err = vkEndCommandBuffer(commandBuffer);
-      check_vk_result(err);
+      vuloxr::vk::CheckVkResult(vkEndCommandBuffer(commandBuffer));
 
       // VkPipelineStageFlags wait_stage =
       //     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -348,10 +260,10 @@ public:
 int main(int, char **) {
 #if NDEBUG
   bool useDebug = false;
-  std::cout << "NDEBUG" << std::endl;
+  vuloxr::Logger::Info("## NDEBUG ##");
 #else
   bool useDebug = true;
-  std::cout << "DEBUG" << std::endl;
+  vuloxr::Logger::Info("## DEBUG ##");
 #endif
 
   Scene scene;
@@ -363,239 +275,255 @@ int main(int, char **) {
     return 1;
   }
 
-  auto [instance, physicalDevice, device, swapchain] =
-      glfw.createVulkan(useDebug);
+  {
+    auto [instance, physicalDevice, device, swapchain] =
+        glfw.createVulkan(useDebug);
 
-  // Select Physical Device (GPU)
-  // auto physicalDevice = ImGui_ImplVulkanH_SelectPhysicalDevice(instance);
-  // IM_ASSERT(physicalDevice != VK_NULL_HANDLE);
+    // Select Physical Device (GPU)
+    // auto physicalDevice = ImGui_ImplVulkanH_SelectPhysicalDevice(instance);
+    // IM_ASSERT(physicalDevice != VK_NULL_HANDLE);
 
-  // Select graphics queue family
-  // auto queueFamily =
-  // ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
-  // IM_ASSERT(queueFamily != (uint32_t)-1);
+    // Select graphics queue family
+    // auto queueFamily =
+    // ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
+    // IM_ASSERT(queueFamily != (uint32_t)-1);
 
-  // Create Window Surface
-  VkSurfaceKHR surface;
-  VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
-  vuloxr::vk::CheckVkResult(err);
+    // Create Window Surface
+    // VkSurfaceKHR surface;
+    // VkResult err = glfwCreateWindowSurface(instance, window, nullptr,
+    // &surface); vuloxr::vk::CheckVkResult(err);
 
-  // vuloxr::vk::Device device;
-  // if (device.create(instance, physicalDevice, queueFamily) != VK_SUCCESS) {
-  //   return 3;
-  // }
+    // Select Surface Format
+    // const VkFormat requestSurfaceImageFormat[] = {
+    //     VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+    //     VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM};
+    // const VkColorSpaceKHR requestSurfaceColorSpace =
+    //     VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    // auto surfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
+    //     physicalDevice, surface, requestSurfaceImageFormat,
+    //     (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat),
+    //     requestSurfaceColorSpace);
 
-  // Setup Dear ImGui context
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGuiIO &io = ImGui::GetIO();
-  (void)io;
-  io.ConfigFlags |=
-      ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-  io.ConfigFlags |=
-      ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    // vuloxr::vk::Device device;
+    // if (device.create(instance, physicalDevice, queueFamily) != VK_SUCCESS) {
+    //   return 3;
+    // }
 
-  // Setup Dear ImGui style
-  ImGui::StyleColorsDark();
-  // ImGui::StyleColorsLight();
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    (void)io;
+    io.ConfigFlags |=
+        ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    io.ConfigFlags |=
+        ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
 
-  // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForVulkan(window, true);
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    // ImGui::StyleColorsLight();
 
-  // Create Framebuffers
-  auto [w, h] = glfw.framebufferSize();
-  ImGuiVulkanResource imvulkan(instance, physicalDevice, device.queueFamily,
-                               device, surface, swapchain.images.size());
+    // Setup Platform/Renderer backends
+    ImGui_ImplGlfw_InitForVulkan(window, true);
 
-  // Load Fonts
-  // - If no fonts are loaded, dear imgui will use the default font. You can
-  // also load multiple fonts and use ImGui::PushFont()/PopFont() to select
-  // them.
-  // - AddFontFromFileTTF() will return the ImFont* so you can store it if you
-  // need to select the font among multiple.
-  // - If the file cannot be loaded, the function will return a nullptr. Please
-  // handle those errors in your application (e.g. use an assertion, or display
-  // an error and quit).
-  // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype
-  // for higher quality font rendering.
-  // - Read 'docs/FONTS.md' for more instructions and details.
-  // - Remember that in C/C++ if you want to include a backslash \ in a string
-  // literal you need to write a double backslash \\ !
-  // style.FontSizeBase = 20.0f;
-  // io.Fonts->AddFontDefault();
-  // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
-  // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
-  // ImFont* font =
-  // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
-  // IM_ASSERT(font != nullptr);
+    // Create Framebuffers
+    auto [w, h] = glfw.framebufferSize();
+    ImGuiVulkanResource imvulkan(instance, physicalDevice, device.queueFamily,
+                                 device, swapchain.createInfo.imageFormat,
+                                 swapchain.images.size());
 
-  // Our state
-  bool show_demo_window = true;
-  bool show_another_window = false;
-  ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    // Load Fonts
+    // - If no fonts are loaded, dear imgui will use the default font. You can
+    // also load multiple fonts and use ImGui::PushFont()/PopFont() to select
+    // them.
+    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you
+    // need to select the font among multiple.
+    // - If the file cannot be loaded, the function will return a nullptr.
+    // Please handle those errors in your application (e.g. use an assertion, or
+    // display an error and quit).
+    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use
+    // Freetype for higher quality font rendering.
+    // - Read 'docs/FONTS.md' for more instructions and details.
+    // - Remember that in C/C++ if you want to include a backslash \ in a string
+    // literal you need to write a double backslash \\ !
+    // style.FontSizeBase = 20.0f;
+    // io.Fonts->AddFontDefault();
+    // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
+    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
+    // ImFont* font =
+    // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
+    // IM_ASSERT(font != nullptr);
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
-      swapchain.images.size());
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+    // Our state
+    bool show_demo_window = true;
+    bool show_another_window = false;
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  // Main loop
-  while (glfw.newFrame()) {
-    // Poll and handle events (inputs, window resize, etc.)
-    // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-    // tell if dear imgui wants to use your inputs.
-    // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-    // your main application, or clear/overwrite your copy of the mouse data.
-    // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-    // data to your main application, or clear/overwrite your copy of the
-    // keyboard data. Generally you may always pass all inputs to dear imgui,
-    // and hide them from your application based on those two flags.
+    std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
+        swapchain.images.size());
+    vuloxr::vk::FlightManager flightManager(
+        device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
-    // Resize swap chain?
-    auto [fb_width, fb_height] = glfw.framebufferSize();
-    imvulkan.newFrame(fb_width, fb_height);
-    if (glfw.isIconified()) {
-      ImGui_ImplGlfw_Sleep(10);
-      continue;
-    }
+    // Main loop
+    while (glfw.newFrame()) {
+      // Poll and handle events (inputs, window resize, etc.)
+      // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
+      // tell if dear imgui wants to use your inputs.
+      // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
+      // your main application, or clear/overwrite your copy of the mouse data.
+      // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
+      // data to your main application, or clear/overwrite your copy of the
+      // keyboard data. Generally you may always pass all inputs to dear imgui,
+      // and hide them from your application based on those two flags.
 
-    // Start the Dear ImGui frame
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+      // Resize swap chain?
+      // auto [fb_width, fb_height] = glfw.framebufferSize();
+      // imvulkan.newFrame(fb_width, fb_height);
+      if (glfw.isIconified()) {
+        ImGui_ImplGlfw_Sleep(10);
+        continue;
+      }
 
-    // 1. Show the big demo window (Most of the sample code is in
-    // ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear
-    // ImGui!).
-    if (show_demo_window)
-      ImGui::ShowDemoWindow(&show_demo_window);
+      // Start the Dear ImGui frame
+      ImGui_ImplVulkan_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
 
-    // 2. Show a simple window that we create ourselves. We use a Begin/End pair
-    // to create a named window.
-    {
-      static float f = 0.0f;
-      static int counter = 0;
+      // 1. Show the big demo window (Most of the sample code is in
+      // ImGui::ShowDemoWindow()! You can browse its code to learn more about
+      // Dear ImGui!).
+      if (show_demo_window)
+        ImGui::ShowDemoWindow(&show_demo_window);
 
-      ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!"
-                                     // and append into it.
+      // 2. Show a simple window that we create ourselves. We use a Begin/End
+      // pair to create a named window.
+      {
+        static float f = 0.0f;
+        static int counter = 0;
 
-      ImGui::Text("This is some useful text."); // Display some text (you can
-                                                // use a format strings too)
-      ImGui::Checkbox(
-          "Demo Window",
-          &show_demo_window); // Edit bools storing our window open/close state
-      ImGui::Checkbox("Another Window", &show_another_window);
+        ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!"
+                                       // and append into it.
 
-      ImGui::SliderFloat("float", &f, 0.0f,
-                         1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
-      ImGui::ColorEdit3(
-          "clear color",
-          (float *)&clear_color); // Edit 3 floats representing a color
+        ImGui::Text("This is some useful text."); // Display some text (you can
+                                                  // use a format strings too)
+        ImGui::Checkbox("Demo Window",
+                        &show_demo_window); // Edit bools storing our window
+                                            // open/close state
+        ImGui::Checkbox("Another Window", &show_another_window);
 
-      if (ImGui::Button("Button")) // Buttons return true when clicked (most
-                                   // widgets return true when edited/activated)
-        counter++;
-      ImGui::SameLine();
-      ImGui::Text("counter = %d", counter);
+        ImGui::SliderFloat(
+            "float", &f, 0.0f,
+            1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+        ImGui::ColorEdit3(
+            "clear color",
+            (float *)&clear_color); // Edit 3 floats representing a color
 
-      ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-                  1000.0f / io.Framerate, io.Framerate);
-      ImGui::End();
-    }
+        if (ImGui::Button(
+                "Button")) // Buttons return true when clicked (most
+                           // widgets return true when edited/activated)
+          counter++;
+        ImGui::SameLine();
+        ImGui::Text("counter = %d", counter);
 
-    // 3. Show another simple window.
-    if (show_another_window) {
-      ImGui::Begin(
-          "Another Window",
-          &show_another_window); // Pass a pointer to our bool variable (the
-                                 // window will have a closing button that will
-                                 // clear the bool when clicked)
-      ImGui::Text("Hello from another window!");
-      if (ImGui::Button("Close Me"))
-        show_another_window = false;
-      ImGui::End();
-    }
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+                    1000.0f / io.Framerate, io.Framerate);
+        ImGui::End();
+      }
 
-    // Rendering
-    ImGui::Render();
-    ImDrawData *draw_data = ImGui::GetDrawData();
-    const bool is_minimized =
-        (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
-    if (!is_minimized) {
+      // 3. Show another simple window.
+      if (show_another_window) {
+        ImGui::Begin(
+            "Another Window",
+            &show_another_window); // Pass a pointer to our bool variable (the
+                                   // window will have a closing button that
+                                   // will clear the bool when clicked)
+        ImGui::Text("Hello from another window!");
+        if (ImGui::Button("Close Me"))
+          show_another_window = false;
+        ImGui::End();
+      }
 
-      auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-      auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-      if (acquired.result == VK_SUCCESS) {
-        auto backbuffer = backbuffers[acquired.imageIndex];
-        if (!backbuffer) {
-          backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-              device, acquired.image, swapchain.createInfo.imageExtent,
-              swapchain.createInfo.imageFormat, imvulkan.renderPass);
-          backbuffers[acquired.imageIndex] = backbuffer;
+      // Rendering
+      ImGui::Render();
+      ImDrawData *draw_data = ImGui::GetDrawData();
+      const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f ||
+                                 draw_data->DisplaySize.y <= 0.0f);
+      if (!is_minimized) {
+
+        auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+        auto acquired = swapchain.acquireNextImage(acquireSemaphore);
+        if (acquired.result == VK_SUCCESS) {
+          auto backbuffer = backbuffers[acquired.imageIndex];
+          if (!backbuffer) {
+            backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
+                device, acquired.image, swapchain.createInfo.imageExtent,
+                swapchain.createInfo.imageFormat, imvulkan.renderPass);
+            backbuffers[acquired.imageIndex] = backbuffer;
+          }
+
+          // All queue submissions get a fence that CPU will wait
+          // on for synchronization purposes.
+          auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+          vkResetCommandBuffer(cmd, 0);
+
+          imvulkan.render(cmd, backbuffer->framebuffer,
+                          swapchain.createInfo.imageExtent, clear_color,
+                          flight.acquireSemaphore, flight.submitSemaphore,
+                          flight.submitFence, draw_data);
+
+          const VkPipelineStageFlags waitStage =
+              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+          VkSubmitInfo info = {
+              .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+              .waitSemaphoreCount = static_cast<uint32_t>(
+                  acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
+              .pWaitSemaphores = &acquireSemaphore,
+              .pWaitDstStageMask = &waitStage,
+              .commandBufferCount = 1,
+              .pCommandBuffers = &cmd,
+              .signalSemaphoreCount = 1,
+              .pSignalSemaphores = &flight.submitSemaphore,
+          };
+          vuloxr::vk::CheckVkResult(
+              vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
+
+          VkPresentInfoKHR present = {
+              .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+              .waitSemaphoreCount = 1,
+              .pWaitSemaphores = &flight.submitSemaphore,
+              .swapchainCount = 1,
+              .pSwapchains = &swapchain.swapchain,
+              .pImageIndices = &acquired.imageIndex,
+              .pResults = nullptr,
+          };
+          vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
+
+        } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
+                   acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
+          vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+          vkQueueWaitIdle(swapchain.presentQueue);
+          flightManager.reuseSemaphore(acquireSemaphore);
+          // TODO:
+          // swapchain = {};
+          // return true;
+
+        } else {
+          // error ?
+          vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
+          vkQueueWaitIdle(swapchain.presentQueue);
+          flightManager.reuseSemaphore(acquireSemaphore);
+          break;
         }
-
-        // All queue submissions get a fence that CPU will wait
-        // on for synchronization purposes.
-        auto [cmd, flight] = flightManager.sync(acquireSemaphore);
-        vkResetCommandBuffer(cmd, 0);
-
-        imvulkan.present(cmd, backbuffer->framebuffer,
-                         swapchain.createInfo.imageExtent, clear_color,
-                         flight.acquireSemaphore, flight.submitSemaphore,
-                         flight.submitFence, draw_data);
-
-        const VkPipelineStageFlags waitStage =
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        VkSubmitInfo info = {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .waitSemaphoreCount = static_cast<uint32_t>(
-                acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
-            .pWaitSemaphores = &acquireSemaphore,
-            .pWaitDstStageMask = &waitStage,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &cmd,
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &flight.submitSemaphore,
-        };
-        vuloxr::vk::CheckVkResult(
-            vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
-
-        VkPresentInfoKHR present = {
-            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &flight.submitSemaphore,
-            .swapchainCount = 1,
-            .pSwapchains = &swapchain.swapchain,
-            .pImageIndices = &acquired.imageIndex,
-            .pResults = nullptr,
-        };
-        vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
-
-      } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
-                 acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
-        vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-        vkQueueWaitIdle(swapchain.presentQueue);
-        flightManager.reuseSemaphore(acquireSemaphore);
-        // TODO:
-        // swapchain = {};
-        // return true;
-
-      } else {
-        // error ?
-        vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
-        vkQueueWaitIdle(swapchain.presentQueue);
-        flightManager.reuseSemaphore(acquireSemaphore);
-        break;
       }
     }
+
+    // Cleanup
+    vuloxr::vk::CheckVkResult(vkDeviceWaitIdle(device));
+    ImGui_ImplVulkan_Shutdown();
   }
 
-  // Cleanup
-  err = vkDeviceWaitIdle(device);
-  vuloxr::vk::CheckVkResult(err);
-  ImGui_ImplVulkan_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 
