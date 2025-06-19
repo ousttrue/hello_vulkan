@@ -91,6 +91,17 @@
             "cwd": "${workspaceFolder}/build/samples/vulfwk",
             "environment": [],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "vuloxr",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr/vuloxr_sample.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
         }
     ]
 }

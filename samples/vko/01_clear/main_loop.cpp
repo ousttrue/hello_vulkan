@@ -1,5 +1,5 @@
 #include "../main_loop.h"
-#include "vko/vko.h"
+#include "vuloxr/vk.h"
 
 #include <assert.h>
 #include <chrono>
@@ -15,7 +15,8 @@ static void clearImage(VkCommandBuffer commandBuffer,
       .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
       .pInheritanceInfo = nullptr,
   };
-  vko::VKO_CHECK(vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
+  vuloxr::vk::CheckVkResult(
+      vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
 
   VkImageSubresourceRange subResourceRange = {
       .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -66,7 +67,7 @@ static void clearImage(VkCommandBuffer commandBuffer,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &clearToPresentBarrier);
 
-  vko::VKO_CHECK(vkEndCommandBuffer(commandBuffer));
+  vuloxr::vk::CheckVkResult(vkEndCommandBuffer(commandBuffer));
 }
 
 VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
@@ -84,13 +85,13 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device) {
 
-  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(
+      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-    vko::VKO_CHECK(acquired.result);
+    vuloxr::vk::CheckVkResult(acquired.result);
 
     auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
@@ -102,9 +103,9 @@ void main_loop(const std::function<bool()> &runLoop,
                  physicalDevice.graphicsFamilyIndex);
     }
 
-    vko::VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
-                                 flight.submitFence));
-    vko::VKO_CHECK(
+    vuloxr::vk::CheckVkResult(device.submit(
+        cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
+    vuloxr::vk::CheckVkResult(
         swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 

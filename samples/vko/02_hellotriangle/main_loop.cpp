@@ -1,6 +1,6 @@
 #include "../main_loop.h"
 #include "pipeline.hpp"
-#include "vko/vko.h"
+#include "vuloxr/vk.h"
 #include <chrono>
 
 void main_loop(const std::function<bool()> &runLoop,
@@ -11,10 +11,10 @@ void main_loop(const std::function<bool()> &runLoop,
   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
       physicalDevice.physicalDevice, device, swapchain.createInfo.imageFormat);
 
-  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
-  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(
+      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
   unsigned frameCount = 0;
   auto startTime = std::chrono::high_resolution_clock::now();
@@ -24,7 +24,7 @@ void main_loop(const std::function<bool()> &runLoop,
     if (acquired.result == VK_SUCCESS) {
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
-        backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
+        backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
             swapchain.createInfo.imageFormat, pipeline->renderPass());
         backbuffers[acquired.imageIndex] = backbuffer;
@@ -63,7 +63,8 @@ void main_loop(const std::function<bool()> &runLoop,
           .signalSemaphoreCount = 1,
           .pSignalSemaphores = &flight.submitSemaphore,
       };
-      vko::VKO_CHECK(vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
+      vuloxr::vk::CheckVkResult(
+          vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
 
       VkPresentInfoKHR present = {
           .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -74,11 +75,11 @@ void main_loop(const std::function<bool()> &runLoop,
           .pImageIndices = &acquired.imageIndex,
           .pResults = nullptr,
       };
-      vko::VKO_CHECK(vkQueuePresentKHR(device.queue, &present));
+      vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
 
     } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
                acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
-      vko::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+      vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
       vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
       // TODO:
@@ -87,7 +88,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
     } else {
       // error ?
-      vko::Logger::Error("Unrecoverable swapchain error.\n");
+      vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
       vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
       return;

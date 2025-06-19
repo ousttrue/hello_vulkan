@@ -1,5 +1,5 @@
 #pragma once
-#include "vuloxr.h"
+#include "../vuloxr.h"
 #include <assert.h>
 #include <chrono>
 #include <climits>
@@ -658,6 +658,219 @@ struct Swapchain : public NonCopyable {
         .pImageIndices = &imageIndex,
     };
     return vkQueuePresentKHR(this->presentQueue, &presentInfo);
+  }
+};
+
+struct Flight {
+  VkFence submitFence;
+  VkSemaphore submitSemaphore;
+  // keep next frame
+  VkSemaphore acquireSemaphore;
+};
+
+struct FlightManager {
+  VkDevice device = VK_NULL_HANDLE;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> commandBuffers;
+  std::vector<Flight> flights;
+  uint32_t frameCount = 0;
+
+  std::list<VkSemaphore> acquireSemaphoresOwn;
+  std::list<VkSemaphore> acquireSemaphoresReuse;
+
+public:
+  FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
+                uint32_t flightCount)
+      : device(_device), commandBuffers(flightCount), flights(flightCount) {
+    Logger::Info("frames in flight: %d\n", flightCount);
+    VkCommandPoolCreateInfo commandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = graphicsQueueIndex,
+    };
+    CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
+                                      nullptr, &this->pool));
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = this->pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = flightCount,
+    };
+    CheckVkResult(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
+                                           this->commandBuffers.data()));
+
+    for (auto &flight : this->flights) {
+      VkFenceCreateInfo fenceInfo = {
+          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+      };
+      CheckVkResult(vkCreateFence(this->device, &fenceInfo, nullptr,
+                                  &flight.submitFence));
+
+      VkSemaphoreCreateInfo semaphoreInfo = {
+          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      };
+      CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
+                                      &flight.submitSemaphore));
+    }
+  }
+
+  ~FlightManager() {
+    for (auto semaphore : this->acquireSemaphoresOwn) {
+      vkDestroySemaphore(this->device, semaphore, nullptr);
+    }
+
+    for (auto flight : this->flights) {
+      vkDestroyFence(this->device, flight.submitFence, nullptr);
+      vkDestroySemaphore(this->device, flight.submitSemaphore, nullptr);
+    }
+
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+    }
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+
+  VkSemaphore getOrCreateSemaphore() {
+    if (!this->acquireSemaphoresReuse.empty()) {
+      auto semaphroe = this->acquireSemaphoresReuse.front();
+      this->acquireSemaphoresReuse.pop_front();
+      return semaphroe;
+    }
+
+    Logger::Info("* create acquireSemaphore *");
+    VkSemaphore semaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    CheckVkResult(
+        vkCreateSemaphore(this->device, &semaphoreInfo, nullptr, &semaphore));
+    this->acquireSemaphoresOwn.push_back(semaphore);
+    return semaphore;
+  }
+
+  std::tuple<VkCommandBuffer, Flight> sync(VkSemaphore acquireSemaphore) {
+    auto index = (this->frameCount++) % this->flights.size();
+    // keep acquireSemaphore
+    auto &flight = this->flights[index];
+    auto oldSemaphore = flight.acquireSemaphore;
+    if (oldSemaphore != VK_NULL_HANDLE) {
+      this->reuseSemaphore(oldSemaphore);
+    }
+    flight.acquireSemaphore = acquireSemaphore;
+
+    // block. ensure oldSemaphore be signaled.
+    vkWaitForFences(this->device, 1, &flight.submitFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &flight.submitFence);
+
+    auto cmd = this->commandBuffers[index];
+
+    return {cmd, flight};
+  }
+
+  void reuseSemaphore(VkSemaphore semaphore) {
+    this->acquireSemaphoresReuse.push_back(semaphore);
+  }
+};
+
+struct SwapchainFramebuffer {
+  VkDevice device;
+
+  VkImageViewCreateInfo imageViewCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+      //     colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+      //     colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+      //     colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+      //     colorViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                           .baseMipLevel = 0,
+                           .levelCount = 1,
+                           .baseArrayLayer = 0,
+                           .layerCount = 1},
+  };
+  VkImageView imageView = VK_NULL_HANDLE;
+
+  VkImageViewCreateInfo depthViewCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                     .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+      //     depthViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+      //     depthViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+      //     depthViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+      //     depthViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                           .baseMipLevel = 0,
+                           .levelCount = 1,
+                           .baseArrayLayer = 0,
+                           .layerCount = 1},
+  };
+  VkImageView depthView = VK_NULL_HANDLE;
+
+  VkFramebuffer framebuffer = VK_NULL_HANDLE;
+
+  SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
+                       VkFormat format, VkRenderPass renderPass,
+                       VkImage depth = {}, VkFormat depthFormat = {})
+      : device(_device) {
+
+    // imageView
+    this->imageViewCreateInfo.image = image;
+    this->imageViewCreateInfo.format = format;
+    vuloxr::vk::CheckVkResult(vkCreateImageView(
+        this->device, &this->imageViewCreateInfo, nullptr, &this->imageView));
+
+    if (depth) {
+      // depthView
+      this->depthViewCreateInfo.image = depth;
+      this->depthViewCreateInfo.format = depthFormat;
+      vuloxr::vk::CheckVkResult(vkCreateImageView(this->device, &this->depthViewCreateInfo,
+                                  nullptr, &this->depthView));
+
+      VkImageView attachments[] = {this->imageView, this->depthView};
+      VkFramebufferCreateInfo framebufferInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = renderPass,
+          .attachmentCount = 2,
+          .pAttachments = attachments,
+          .width = extent.width,
+          .height = extent.height,
+          .layers = 1,
+      };
+      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(this->device, &framebufferInfo, nullptr,
+                                    &this->framebuffer));
+    } else {
+      VkFramebufferCreateInfo framebufferInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = renderPass,
+          .attachmentCount = 1,
+          .pAttachments = &this->imageView,
+          .width = extent.width,
+          .height = extent.height,
+          .layers = 1,
+      };
+      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(device, &framebufferInfo, nullptr,
+                                    &this->framebuffer));
+    }
+  }
+
+  ~SwapchainFramebuffer() {
+    vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
+    vkDestroyImageView(this->device, this->imageView, nullptr);
+    if (this->depthView != VK_NULL_HANDLE) {
+      vkDestroyImageView(this->device, depthView, nullptr);
+    }
   }
 };
 

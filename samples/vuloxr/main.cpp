@@ -3,6 +3,7 @@
 #include "imgui_impl_vulkan.h"
 #include <stdio.h>  // printf, fprintf
 #include <stdlib.h> // abort
+#include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -50,8 +51,11 @@ class ImGuiVulkanResource {
 
   VkPipelineCache pipelineCache = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  ImGui_ImplVulkanH_Window wd = {};
 
+public:
+  VkRenderPass renderPass = VK_NULL_HANDLE;
+
+private:
   // Data
   uint32_t g_MinImageCount = 2;
   bool g_SwapChainRebuild = false;
@@ -67,20 +71,15 @@ class ImGuiVulkanResource {
 public:
   ImGuiVulkanResource(VkInstance _instance, VkPhysicalDevice _physicalDevice,
                       uint32_t _queueFamily, VkDevice _device,
-                      VkSurfaceKHR surface, int width, int height)
+                      VkSurfaceKHR surface, uint32_t imageCount)
       : instance(_instance), physicalDevice(_physicalDevice),
         queueFamily(_queueFamily), device(_device) {
     vkGetDeviceQueue(device, queueFamily, 0, &this->queue);
 
-    // SetupVulkanWindow(&this->wd, this->instance, this->physicalDevice,
-    // surface,
-    //                   this->queueFamily, this->device, w, h);
-    this->wd.Surface = surface;
-
     // Check for WSI support
     VkBool32 res;
-    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamily,
-                                         this->wd.Surface, &res);
+    vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamily, surface,
+                                         &res);
     if (res != VK_TRUE) {
       fprintf(stderr, "Error no WSI support on physical device 0\n");
       exit(-1);
@@ -92,29 +91,10 @@ public:
         VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM};
     const VkColorSpaceKHR requestSurfaceColorSpace =
         VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    this->wd.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
-        physicalDevice, this->wd.Surface, requestSurfaceImageFormat,
+    auto surfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
+        physicalDevice, surface, requestSurfaceImageFormat,
         (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat),
         requestSurfaceColorSpace);
-
-    // Select Present Mode
-#ifdef APP_USE_UNLIMITED_FRAME_RATE
-    VkPresentModeKHR present_modes[] = {VK_PRESENT_MODE_MAILBOX_KHR,
-                                        VK_PRESENT_MODE_IMMEDIATE_KHR,
-                                        VK_PRESENT_MODE_FIFO_KHR};
-#else
-    VkPresentModeKHR present_modes[] = {VK_PRESENT_MODE_FIFO_KHR};
-#endif
-    this->wd.PresentMode = ImGui_ImplVulkanH_SelectPresentMode(
-        physicalDevice, this->wd.Surface, &present_modes[0],
-        IM_ARRAYSIZE(present_modes));
-    // printf("[vulkan] Selected PresentMode = %d\n", wd->PresentMode);
-
-    // Create SwapChain, RenderPass, Framebuffer, etc.
-    IM_ASSERT(g_MinImageCount >= 2);
-    ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physicalDevice, device,
-                                           &this->wd, queueFamily, nullptr,
-                                           width, height, g_MinImageCount);
 
     // Create Descriptor Pool
     // If you wish to load e.g. additional textures you may need to alter pools
@@ -135,6 +115,74 @@ public:
                                       &this->descriptorPool);
     check_vk_result(err);
 
+    {
+      VkAttachmentDescription attachment = {};
+      attachment.format = surfaceFormat.format;
+      attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+      attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      // VkAttachmentDescription attachment = {};
+      // attachment.format = surfaceFormat.format;
+      // attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+      // attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+      // attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      // attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      // attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+      // attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      // attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      VkAttachmentReference color_attachment = {};
+      color_attachment.attachment = 0;
+      color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      // VkAttachmentReference color_attachment = {};
+      // color_attachment.attachment = 0;
+      // color_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+      VkSubpassDescription subpass = {};
+      subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+      subpass.colorAttachmentCount = 1;
+      subpass.pColorAttachments = &color_attachment;
+      // VkSubpassDescription subpass = {};
+      // subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+      // subpass.colorAttachmentCount = 1;
+      // subpass.pColorAttachments = &color_attachment;
+      VkSubpassDependency dependency = {};
+      dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+      dependency.dstSubpass = 0;
+      dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      dependency.srcAccessMask = 0;
+      dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      // VkSubpassDependency dependency = {};
+      // dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+      // dependency.dstSubpass = 0;
+      // dependency.srcStageMask =
+      // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; dependency.dstStageMask
+      // = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      // dependency.srcAccessMask = 0;
+      // dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      VkRenderPassCreateInfo info = {};
+      info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+      info.attachmentCount = 1;
+      info.pAttachments = &attachment;
+      info.subpassCount = 1;
+      info.pSubpasses = &subpass;
+      info.dependencyCount = 1;
+      info.pDependencies = &dependency;
+      // VkRenderPassCreateInfo info = {};
+      // info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+      // info.attachmentCount = 1;
+      // info.pAttachments = &attachment;
+      // info.subpassCount = 1;
+      // info.pSubpasses = &subpass;
+      // info.dependencyCount = 1;
+      // info.pDependencies = &dependency;
+      err = vkCreateRenderPass(device, &info, nullptr, &renderPass);
+      check_vk_result(err);
+    }
+
     ImGui_ImplVulkan_InitInfo init_info = {};
     // init_info.ApiVersion = VK_API_VERSION_1_3;              // Pass in your
     // value of VkApplicationInfo::apiVersion, otherwise will default to header
@@ -146,10 +194,10 @@ public:
     init_info.Queue = queue;
     init_info.PipelineCache = this->pipelineCache;
     init_info.DescriptorPool = descriptorPool;
-    init_info.RenderPass = this->wd.RenderPass;
+    init_info.RenderPass = renderPass;
     init_info.Subpass = 0;
     init_info.MinImageCount = g_MinImageCount;
-    init_info.ImageCount = this->wd.ImageCount;
+    init_info.ImageCount = imageCount;
     init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.Allocator = nullptr;
     init_info.CheckVkResultFn = check_vk_result;
@@ -157,126 +205,142 @@ public:
   }
 
   ~ImGuiVulkanResource() {
-    ImGui_ImplVulkanH_DestroyWindow(this->instance, this->device, &this->wd,
-                                    nullptr);
+    // ImGui_ImplVulkanH_DestroyWindow(this->instance, this->device, &this->wd,
+    //                                 nullptr);
     vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
   }
 
   void newFrame(int fb_width, int fb_height) {
     if (fb_width > 0 && fb_height > 0 &&
-        (g_SwapChainRebuild || this->wd.Width != fb_width ||
-         this->wd.Height != fb_height)) {
+        (g_SwapChainRebuild
+         // || this->wd.Width != fb_width || this->wd.Height != fb_height
+         )) {
       ImGui_ImplVulkan_SetMinImageCount(g_MinImageCount);
-      ImGui_ImplVulkanH_CreateOrResizeWindow(
-          instance, physicalDevice, device, &this->wd, queueFamily, nullptr,
-          fb_width, fb_height, g_MinImageCount);
-      this->wd.FrameIndex = 0;
+      // ImGui_ImplVulkanH_CreateOrResizeWindow(
+      //     instance, physicalDevice, device, &this->wd, queueFamily, nullptr,
+      //     fb_width, fb_height, g_MinImageCount);
+      // this->wd.FrameIndex = 0;
       g_SwapChainRebuild = false;
     }
   }
 
-  void present(const ImVec4 clear_color, ImDrawData *draw_data) {
-    this->wd.ClearValue.color.float32[0] = clear_color.x * clear_color.w;
-    this->wd.ClearValue.color.float32[1] = clear_color.y * clear_color.w;
-    this->wd.ClearValue.color.float32[2] = clear_color.z * clear_color.w;
-    this->wd.ClearValue.color.float32[3] = clear_color.w;
+  void present(VkCommandBuffer commandBuffer, VkFramebuffer framebuffer,
+               VkExtent2D extent, const ImVec4 &clear_color,
+               VkSemaphore acquireSemaphore, VkSemaphore submitSemaphore,
+               VkFence submitFence, ImDrawData *draw_data) {
+
     // FrameRender(draw_data);
-    VkSemaphore image_acquired_semaphore =
-        this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-            .ImageAcquiredSemaphore;
-    VkSemaphore render_complete_semaphore =
-        this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-            .RenderCompleteSemaphore;
-    VkResult err = vkAcquireNextImageKHR(device, this->wd.Swapchain, UINT64_MAX,
-                                         image_acquired_semaphore,
-                                         VK_NULL_HANDLE, &this->wd.FrameIndex);
-    if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
-      g_SwapChainRebuild = true;
-    if (err == VK_ERROR_OUT_OF_DATE_KHR)
-      return;
-    if (err != VK_SUBOPTIMAL_KHR)
-      check_vk_result(err);
+    // VkSemaphore image_acquired_semaphore =
+    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
+    //         .ImageAcquiredSemaphore;
+    // VkSemaphore render_complete_semaphore =
+    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
+    //         .RenderCompleteSemaphore;
+    // VkResult err = vkAcquireNextImageKHR(device, this->wd.Swapchain,
+    // UINT64_MAX,
+    //                                      image_acquired_semaphore,
+    //                                      VK_NULL_HANDLE,
+    //                                      &this->wd.FrameIndex);
+    // if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
+    //   g_SwapChainRebuild = true;
+    // if (err == VK_ERROR_OUT_OF_DATE_KHR)
+    //   return;
+    // if (err != VK_SUBOPTIMAL_KHR)
+    //   check_vk_result(err);
 
-    ImGui_ImplVulkanH_Frame *fd = &this->wd.Frames[this->wd.FrameIndex];
-    {
-      err = vkWaitForFences(
-          device, 1, &fd->Fence, VK_TRUE,
-          UINT64_MAX); // wait indefinitely instead of periodically checking
-      check_vk_result(err);
-
-      err = vkResetFences(device, 1, &fd->Fence);
-      check_vk_result(err);
-    }
-    {
-      err = vkResetCommandPool(device, fd->CommandPool, 0);
-      check_vk_result(err);
+    // ImGui_ImplVulkanH_Frame *fd = &this->wd.Frames[this->wd.FrameIndex];
+    // {
+    //   err = vkWaitForFences(
+    //       device, 1, &fd->Fence, VK_TRUE,
+    //       UINT64_MAX); // wait indefinitely instead of periodically
+    //       checking
+    //   check_vk_result(err);
+    //
+    //   err = vkResetFences(device, 1, &fd->Fence);
+    //   check_vk_result(err);
+    // }
+    { // err = vkResetCommandPool(device, fd->CommandPool, 0);
+      // check_vk_result(err);
       VkCommandBufferBeginInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
       info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-      err = vkBeginCommandBuffer(fd->CommandBuffer, &info);
+      auto err = vkBeginCommandBuffer(commandBuffer, &info);
       check_vk_result(err);
     }
+
+    VkClearValue clearValue = {
+        .color =
+            {
+                .float32 =
+                    {
+                        clear_color.x * clear_color.w,
+                        clear_color.y * clear_color.w,
+                        clear_color.z * clear_color.w,
+                        clear_color.w,
+                    },
+            },
+    };
+
     {
       VkRenderPassBeginInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-      info.renderPass = this->wd.RenderPass;
-      info.framebuffer = fd->Framebuffer;
-      info.renderArea.extent.width = this->wd.Width;
-      info.renderArea.extent.height = this->wd.Height;
+      info.renderPass = this->renderPass;
+      info.framebuffer = framebuffer;
+      info.renderArea.extent = extent;
       info.clearValueCount = 1;
-      info.pClearValues = &this->wd.ClearValue;
-      vkCmdBeginRenderPass(fd->CommandBuffer, &info,
-                           VK_SUBPASS_CONTENTS_INLINE);
+      info.pClearValues = &clearValue;
+      vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
     // Record dear imgui primitives into command buffer
-    ImGui_ImplVulkan_RenderDrawData(draw_data, fd->CommandBuffer);
+    ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
 
     // Submit command buffer
-    vkCmdEndRenderPass(fd->CommandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
     {
-      VkPipelineStageFlags wait_stage =
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      VkSubmitInfo info = {};
-      info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-      info.waitSemaphoreCount = 1;
-      info.pWaitSemaphores = &image_acquired_semaphore;
-      info.pWaitDstStageMask = &wait_stage;
-      info.commandBufferCount = 1;
-      info.pCommandBuffers = &fd->CommandBuffer;
-      info.signalSemaphoreCount = 1;
-      info.pSignalSemaphores = &render_complete_semaphore;
+      auto err = vkEndCommandBuffer(commandBuffer);
+      check_vk_result(err);
 
-      err = vkEndCommandBuffer(fd->CommandBuffer);
-      check_vk_result(err);
-      err = vkQueueSubmit(this->queue, 1, &info, fd->Fence);
-      check_vk_result(err);
+      // VkPipelineStageFlags wait_stage =
+      //     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+      // VkSubmitInfo info = {};
+      // info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+      // info.waitSemaphoreCount = 1;
+      // info.pWaitSemaphores = &acquireSemaphore;
+      // info.pWaitDstStageMask = &wait_stage;
+      // info.commandBufferCount = 1;
+      // info.pCommandBuffers = &commandBuffer;
+      // info.signalSemaphoreCount = 1;
+      // info.pSignalSemaphores = &submitSemaphore;
+      //
+      // err = vkQueueSubmit(this->queue, 1, &info, submitFence);
+      // check_vk_result(err);
     }
 
     // FramePresent();
-    if (g_SwapChainRebuild)
-      return;
+    // if (g_SwapChainRebuild)
+    //   return;
 
-    render_complete_semaphore =
-        this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-            .RenderCompleteSemaphore;
-    VkPresentInfoKHR info = {};
-    info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    info.waitSemaphoreCount = 1;
-    info.pWaitSemaphores = &render_complete_semaphore;
-    info.swapchainCount = 1;
-    info.pSwapchains = &this->wd.Swapchain;
-    info.pImageIndices = &this->wd.FrameIndex;
-    err = vkQueuePresentKHR(this->queue, &info);
-    if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
-      g_SwapChainRebuild = true;
-    if (err == VK_ERROR_OUT_OF_DATE_KHR)
-      return;
-    if (err != VK_SUBOPTIMAL_KHR)
-      check_vk_result(err);
-    this->wd.SemaphoreIndex =
-        (this->wd.SemaphoreIndex + 1) %
-        this->wd.SemaphoreCount; // Now we can use the next set of semaphores
+    // render_complete_semaphore =
+    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
+    //         .RenderCompleteSemaphore;
+    // VkPresentInfoKHR info = {};
+    // info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    // info.waitSemaphoreCount = 1;
+    // info.pWaitSemaphores = &render_complete_semaphore;
+    // info.swapchainCount = 1;
+    // info.pSwapchains = &this->wd.Swapchain;
+    // info.pImageIndices = &this->wd.FrameIndex;
+    // err = vkQueuePresentKHR(this->queue, &info);
+    // if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
+    //   g_SwapChainRebuild = true;
+    // if (err == VK_ERROR_OUT_OF_DATE_KHR)
+    //   return;
+    // if (err != VK_SUBOPTIMAL_KHR)
+    //   check_vk_result(err);
+    // this->wd.SemaphoreIndex =
+    //     (this->wd.SemaphoreIndex + 1) %
+    //     this->wd.SemaphoreCount; // Now we can use the next set of semaphores
   }
 };
 
@@ -341,7 +405,7 @@ int main(int, char **) {
   // Create Framebuffers
   auto [w, h] = glfw.framebufferSize();
   ImGuiVulkanResource imvulkan(instance, physicalDevice, device.queueFamily,
-                               device, surface, w, h);
+                               device, surface, swapchain.images.size());
 
   // Load Fonts
   // - If no fonts are loaded, dear imgui will use the default font. You can
@@ -371,6 +435,11 @@ int main(int, char **) {
   bool show_demo_window = true;
   bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
+      swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(
+      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
   // Main loop
   while (glfw.newFrame()) {
@@ -455,7 +524,71 @@ int main(int, char **) {
     const bool is_minimized =
         (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
     if (!is_minimized) {
-      imvulkan.present(clear_color, draw_data);
+
+      auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+      auto acquired = swapchain.acquireNextImage(acquireSemaphore);
+      if (acquired.result == VK_SUCCESS) {
+        auto backbuffer = backbuffers[acquired.imageIndex];
+        if (!backbuffer) {
+          backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
+              device, acquired.image, swapchain.createInfo.imageExtent,
+              swapchain.createInfo.imageFormat, imvulkan.renderPass);
+          backbuffers[acquired.imageIndex] = backbuffer;
+        }
+
+        // All queue submissions get a fence that CPU will wait
+        // on for synchronization purposes.
+        auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+        vkResetCommandBuffer(cmd, 0);
+
+        imvulkan.present(cmd, backbuffer->framebuffer,
+                         swapchain.createInfo.imageExtent, clear_color,
+                         flight.acquireSemaphore, flight.submitSemaphore,
+                         flight.submitFence, draw_data);
+
+        const VkPipelineStageFlags waitStage =
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        VkSubmitInfo info = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .waitSemaphoreCount = static_cast<uint32_t>(
+                acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
+            .pWaitSemaphores = &acquireSemaphore,
+            .pWaitDstStageMask = &waitStage,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &cmd,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &flight.submitSemaphore,
+        };
+        vuloxr::vk::CheckVkResult(
+            vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
+
+        VkPresentInfoKHR present = {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &flight.submitSemaphore,
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain.swapchain,
+            .pImageIndices = &acquired.imageIndex,
+            .pResults = nullptr,
+        };
+        vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
+
+      } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
+                 acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
+        vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
+        vkQueueWaitIdle(swapchain.presentQueue);
+        flightManager.reuseSemaphore(acquireSemaphore);
+        // TODO:
+        // swapchain = {};
+        // return true;
+
+      } else {
+        // error ?
+        vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
+        vkQueueWaitIdle(swapchain.presentQueue);
+        flightManager.reuseSemaphore(acquireSemaphore);
+        break;
+      }
     }
   }
 
