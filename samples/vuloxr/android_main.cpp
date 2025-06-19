@@ -36,6 +36,7 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
 
   vuloxr::vk::Device device;
   device.layers = instance.layers;
+  device.addExtension(*physicalDevice, "VK_KHR_swapchain");
   vuloxr::vk::CheckVkResult(device.create(instance, *physicalDevice,
                                           physicalDevice->graphicsFamilyIndex));
 
@@ -65,7 +66,7 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
           }
         }
       },
-      swapchain, *physicalDevice, device);
+      instance, swapchain, *physicalDevice, device, nullptr);
 
   return true;
 }

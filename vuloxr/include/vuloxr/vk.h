@@ -4,6 +4,7 @@
 #include <chrono>
 #include <climits>
 #include <cstdint>
+#include <list>
 #include <magic_enum/magic_enum.hpp>
 #include <vector>
 #include <vulkan/vulkan.h>
@@ -250,6 +251,15 @@ struct Instance : NonCopyable {
   VkResult create() {
     addExtension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
+    for (auto name : this->layers) {
+      Logger::Info("instance layer: %s", name);
+    }
+    for (auto name : this->extensions) {
+      Logger::Info("instance extension: %s", name);
+      // if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
+      //   this->createInfo.pNext = &this->debugUtilsMessengerCreateInfo;
+      // }
+    }
     create_info.enabledLayerCount =
         static_cast<uint32_t>(std::size(this->layers));
     create_info.ppEnabledLayerNames = this->layers.data();
@@ -356,7 +366,7 @@ struct Device : NonCopyable {
   }
 
   // Create Logical Device (with 1 queue)
-  VkResult create(VkInstance instance, const PhysicalDevice &physicalDevice,
+  VkResult create(VkInstance instance, const VkPhysicalDevice physicalDevice,
                   uint32_t queueFamily) {
     const float queue_priority[] = {1.0f};
     VkDeviceQueueCreateInfo queue_info[1] = {};
@@ -374,9 +384,14 @@ struct Device : NonCopyable {
     create_info.queueCreateInfoCount =
         sizeof(queue_info) / sizeof(queue_info[0]);
     create_info.pQueueCreateInfos = queue_info;
+
+    for (auto name : this->extensions) {
+      Logger::Info("device extension: %s", name);
+    }
     create_info.enabledExtensionCount =
         static_cast<uint32_t>(this->extensions.size());
     create_info.ppEnabledExtensionNames = this->extensions.data();
+
     VkDevice device;
     CheckVkResult(
         vkCreateDevice(physicalDevice, &create_info, nullptr, &device));
@@ -612,6 +627,8 @@ struct Swapchain : public NonCopyable {
       return result;
     }
 
+    Logger::Info("swapchain.format: %s",
+                 magic_enum::enum_name(this->createInfo.imageFormat).data());
     Logger::Info(
         "swapchain.imageSharingMode: %s",
         magic_enum::enum_name(this->createInfo.imageSharingMode).data());
@@ -621,7 +638,7 @@ struct Swapchain : public NonCopyable {
     uint32_t imageCount;
     vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
                             nullptr);
-    Logger::Info("swapchain images: %d\n", imageCount);
+    Logger::Info("swapchain images: %d", imageCount);
     if (imageCount > 0) {
       this->images.resize(imageCount);
       vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
@@ -696,7 +713,7 @@ public:
   FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
                 uint32_t flightCount)
       : device(_device), commandBuffers(flightCount), flights(flightCount) {
-    Logger::Info("frames in flight: %d\n", flightCount);
+    Logger::Info("frames in flight: %d", flightCount);
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |

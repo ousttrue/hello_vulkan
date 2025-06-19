@@ -4,6 +4,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#ifdef ANDROID
+#include <android/log.h>
+#else
+#include <stdarg.h>
+#endif
 
 namespace vuloxr {
 
@@ -41,19 +46,29 @@ struct Logger {
   static std::string tag;
 
 #ifdef ANDROID
-  static void Info(const char *fmt, ...) {
+  template <typename... ARGS> static void Log(int prio, const char *fmt, ...) {
     va_list arg;
     va_start(arg, fmt);
-    __android_log_vprint(ANDROID_LOG_INFO, tag.c_str(), fmt, arg);
+    __android_log_vprint(prio, tag.c_str(), fmt, arg);
     va_end(arg);
   }
-  static void Error(const char *fmt, ...) {
-    va_list arg;
-    va_start(arg, fmt);
-    __android_log_vprint(ANDROID_LOG_ERROR, tag.c_str(), fmt, arg);
-    va_end(arg);
+  template <typename... ARGS> static void Info(const char *fmt, ARGS... args) {
+    Log(ANDROID_LOG_INFO, fmt, args...);
+  }
+  template <typename... ARGS> static void Error(const char *fmt, ARGS... args) {
+    Log(ANDROID_LOG_ERROR, fmt, args...);
   }
 #else
+
+  enum Severity {
+    VERBOSE,
+    INFO,
+    WARN,
+    ERROR,
+  };
+
+  const char *SeverityColors[4] = {};
+
   static void Info(const char *_fmt, ...) {
     auto begin = "\e[0;32m";
     auto end = "\e[0m";

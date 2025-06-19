@@ -31,5 +31,10 @@ else()
 endif()
 
 add_vko_sample(01_clear 01_clear/main_loop.cpp)
-add_vko_sample(04_imgui 04_imgui/main_loop.cpp)
-target_link_libraries(04_imgui PRIVATE vuloxr imgui jsoncpp_static)
+
+if(ANDROID)
+
+else()
+  add_vko_sample(04_imgui 04_imgui/main_loop.cpp)
+  target_link_libraries(04_imgui PRIVATE vuloxr imgui jsoncpp_static)
+endif()

@@ -15,6 +15,7 @@ if(ANDROID)
               android
               log
               vko
+              vuloxr
               vulkan
               shaderc
               glm)

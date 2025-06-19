@@ -1,11 +1,7 @@
-#include <vuloxr/glfw.h>
-
 #include "../main_loop.h"
-
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_vulkan.h"
-
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_vulkan.h>
 #include <json/json.h>
 
 const char gltf[] = {
@@ -210,7 +206,7 @@ void main_loop(const std::function<bool()> &runLoop,
   // ImGui::StyleColorsLight();
 
   // Setup Platform/Renderer backends
-  ImGui_ImplGlfw_InitForVulkan((GLFWwindow*)window, true);
+  ImGui_ImplGlfw_InitForVulkan((GLFWwindow *)window, true);
 
   // Create Framebuffers
   // auto [w, h] = glfw.framebufferSize();

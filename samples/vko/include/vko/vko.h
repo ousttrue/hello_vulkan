@@ -461,14 +461,14 @@ struct Instance : public not_copyable {
   VkResult create() {
     if (this->validationLayers.size() > 0) {
       for (auto name : this->validationLayers) {
-        Logger::Info("instance layer: %s\n", name);
+        Logger::Info("instance layer: %s", name);
       }
       this->createInfo.enabledLayerCount = this->validationLayers.size();
       this->createInfo.ppEnabledLayerNames = this->validationLayers.data();
     }
     if (this->instanceExtensions.size() > 0) {
       for (auto name : this->instanceExtensions) {
-        Logger::Info("instance extension: %s\n", name);
+        Logger::Info("instance extension: %s", name);
         if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
           this->createInfo.pNext = &this->debugUtilsMessengerCreateInfo;
         }
@@ -571,14 +571,14 @@ struct Device : public not_copyable {
                   uint32_t present) {
     if (this->validationLayers.size() > 0) {
       for (auto name : this->validationLayers) {
-        Logger::Info("device layer: %s\n", name);
+        Logger::Info("device layer: %s", name);
       }
       this->createInfo.enabledLayerCount = this->validationLayers.size();
       this->createInfo.ppEnabledLayerNames = this->validationLayers.data();
     }
     if (this->deviceExtensions.size() > 0) {
       for (auto name : this->deviceExtensions) {
-        Logger::Info("device extension: %s\n", name);
+        Logger::Info("device extension: %s", name);
       }
       this->createInfo.enabledExtensionCount = this->deviceExtensions.size();
       this->createInfo.ppEnabledExtensionNames = this->deviceExtensions.data();
@@ -876,7 +876,7 @@ struct Swapchain : public not_copyable {
     uint32_t imageCount;
     vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
                             nullptr);
-    Logger::Info("swapchain images: %d\n", imageCount);
+    Logger::Info("swapchain images: %d", imageCount);
     if (imageCount > 0) {
       this->images.resize(imageCount);
       vkGetSwapchainImagesKHR(this->device, this->swapchain, &imageCount,
@@ -1048,7 +1048,7 @@ public:
   FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
                 uint32_t flightCount)
       : device(_device), commandBuffers(flightCount), flights(flightCount) {
-    Logger::Info("frames in flight: %d\n", flightCount);
+    Logger::Info("frames in flight: %d", flightCount);
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
