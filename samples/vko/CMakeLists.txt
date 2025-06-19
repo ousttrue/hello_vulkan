@@ -33,7 +33,6 @@ else()
 
 endif()
 
-add_vko_sample(01_clear 01_clear/main_loop.cpp)
 add_vko_sample(02_triangle glsl_to_spv.cpp 02_triangle/main_loop.cpp)
 add_vko_sample(02_hellotriangle glsl_to_spv.cpp 02_hellotriangle/main_loop.cpp
                02_hellotriangle/pipeline.cpp)

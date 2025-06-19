@@ -1,25 +1,35 @@
-FetchContent_Populate(
-  imgui URL https://github.com/ocornut/imgui/archive/refs/tags/v1.91.9b.zip)
-set(TARGET_NAME imgui)
-add_library(
-  ${TARGET_NAME} STATIC
-  ${imgui_SOURCE_DIR}/imgui.cpp
-  ${imgui_SOURCE_DIR}/imgui_draw.cpp
-  ${imgui_SOURCE_DIR}/imgui_tables.cpp
-  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-  ${imgui_SOURCE_DIR}/imgui_demo.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
-target_include_directories(${TARGET_NAME} PUBLIC ${imgui_SOURCE_DIR}
-                                                 ${imgui_SOURCE_DIR}/backends)
-target_link_libraries(${TARGET_NAME} PUBLIC Vulkan::Vulkan glfw)
+if(ANDROID)
+  function(add_vuloxr_sample TARGET_NAME)
+    add_library(
+      ${TARGET_NAME} SHARED
+      #
+      android_main.cpp ${ARGV})
+    target_compile_definitions(${TARGET_NAME}
+                               PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
+    target_link_libraries(
+      ${TARGET_NAME}
+      PRIVATE android_native_app_glue
+              android
+              log
+              vuloxr
+              vulkan
+              shaderc
+              glm)
 
-FetchContent_Declare(
-  jsoncpp
-  URL https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.zip
-)
-FetchContent_MakeAvailable(jsoncpp)
+  endfunction()
 
-set(TARGET_NAME vuloxr_sample)
-add_executable(${TARGET_NAME} main.cpp)
-target_link_libraries(${TARGET_NAME} PRIVATE vuloxr imgui jsoncpp_static)
+else()
+  function(add_vuloxr_sample TARGET_NAME)
+    add_executable(
+      ${TARGET_NAME}
+      #
+      main.cpp ${ARGV})
+    target_link_libraries(${TARGET_NAME} PRIVATE vuloxr Vulkan::Vulkan glfw glm
+                                                 shaderc vuloxr)
+  endfunction()
+
+endif()
+
+add_vko_sample(01_clear 01_clear/main_loop.cpp)
+add_vko_sample(04_imgui 04_imgui/main_loop.cpp)
+target_link_libraries(04_imgui PRIVATE vuloxr imgui jsoncpp_static)

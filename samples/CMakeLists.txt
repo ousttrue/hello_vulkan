@@ -19,11 +19,6 @@ add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
 target_compile_definitions(stb INTERFACE STB_IMAGE_IMPLEMENTATION)
 
-FetchContent_Populate(
-  magic_enum
-  URL https://github.com/Neargye/magic_enum/releases/download/v0.9.7/magic_enum-v0.9.7.tar.gz
-)
-
 FetchContent_Declare(
   openxr
   GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
