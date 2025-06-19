@@ -55,9 +55,12 @@ struct Logger {
   }
 #else
   static void Info(const char *_fmt, ...) {
+    auto begin = "\e[0;32m";
+    auto end = "\e[0m";
+
     va_list arg;
     va_start(arg, _fmt);
-    auto fmt = (std::string("INFO: ") + _fmt);
+    auto fmt = (begin + std::string("INFO: ") + _fmt + end);
     if (!fmt.ends_with('\n')) {
       fmt += '\n';
     }
@@ -65,9 +68,12 @@ struct Logger {
     va_end(arg);
   }
   static void Error(const char *_fmt, ...) {
+    auto begin = "\e[0;31m";
+    auto end = "\e[0m";
+
     va_list arg;
     va_start(arg, _fmt);
-    auto fmt = (std::string("ERROR: ") + _fmt);
+    auto fmt = (begin + std::string("ERROR: ") + _fmt + end);
     if (!fmt.ends_with('\n')) {
       fmt += '\n';
     }

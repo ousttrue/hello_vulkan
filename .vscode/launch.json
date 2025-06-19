@@ -30,7 +30,7 @@
             "name": "01",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/vko/01_instance.exe",
+            "program": "${workspaceFolder}/build/samples/vko/01_clear.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

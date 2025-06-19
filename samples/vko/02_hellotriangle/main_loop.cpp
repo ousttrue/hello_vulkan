@@ -3,8 +3,10 @@
 #include "vko/vko.h"
 #include <chrono>
 
-void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
-               vko::PhysicalDevice physicalDevice, const vko::Device &device) {
+void main_loop(const std::function<bool()> &runLoop,
+               vuloxr::vk::Swapchain &swapchain,
+               const vuloxr::vk::PhysicalDevice &physicalDevice,
+               const vuloxr::vk::Device &device) {
 
   std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
       physicalDevice.physicalDevice, device, swapchain.createInfo.imageFormat);
@@ -64,8 +66,7 @@ void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
           .signalSemaphoreCount = 1,
           .pSignalSemaphores = &flight.submitSemaphore,
       };
-      vko::VKO_CHECK(
-          vkQueueSubmit(device.graphicsQueue, 1, &info, flight.submitFence));
+      vko::VKO_CHECK(vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
 
       VkPresentInfoKHR present = {
           .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -76,12 +77,12 @@ void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
           .pImageIndices = &acquired.imageIndex,
           .pResults = nullptr,
       };
-      vko::VKO_CHECK(vkQueuePresentKHR(device.presentQueue, &present));
+      vko::VKO_CHECK(vkQueuePresentKHR(device.queue, &present));
 
     } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
                acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
       vko::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-      vkQueueWaitIdle(device.presentQueue);
+      vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
       // TODO:
       // swapchain = {};
@@ -90,7 +91,7 @@ void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
     } else {
       // error ?
       vko::Logger::Error("Unrecoverable swapchain error.\n");
-      vkQueueWaitIdle(device.presentQueue);
+      vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
       return;
     }

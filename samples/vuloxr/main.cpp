@@ -299,35 +299,27 @@ int main(int, char **) {
     return 1;
   }
 
-  // ImVector<const char *> extensions;
-  uint32_t extensions_count = 0;
-  const char **glfw_extensions =
-      glfwGetRequiredInstanceExtensions(&extensions_count);
-
-  vuloxr::vk::Instance instance;
-  for (uint32_t i = 0; i < extensions_count; i++)
-    instance.extensions.push_back(glfw_extensions[i]);
-  if (instance.create(useDebug) != VK_SUCCESS) {
-    return 2;
-  }
+  auto [instance, physicalDevice, device, swapchain] =
+      glfw.createVulkan(useDebug);
 
   // Select Physical Device (GPU)
-  auto physicalDevice = ImGui_ImplVulkanH_SelectPhysicalDevice(instance);
-  IM_ASSERT(physicalDevice != VK_NULL_HANDLE);
+  // auto physicalDevice = ImGui_ImplVulkanH_SelectPhysicalDevice(instance);
+  // IM_ASSERT(physicalDevice != VK_NULL_HANDLE);
 
   // Select graphics queue family
-  auto queueFamily = ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
-  IM_ASSERT(queueFamily != (uint32_t)-1);
+  // auto queueFamily =
+  // ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
+  // IM_ASSERT(queueFamily != (uint32_t)-1);
 
   // Create Window Surface
   VkSurfaceKHR surface;
   VkResult err = glfwCreateWindowSurface(instance, window, nullptr, &surface);
   vuloxr::vk::CheckVkResult(err);
 
-  vuloxr::vk::Device device;
-  if (device.create(instance, physicalDevice, queueFamily) != VK_SUCCESS) {
-    return 3;
-  }
+  // vuloxr::vk::Device device;
+  // if (device.create(instance, physicalDevice, queueFamily) != VK_SUCCESS) {
+  //   return 3;
+  // }
 
   // Setup Dear ImGui context
   IMGUI_CHECKVERSION();
@@ -348,8 +340,8 @@ int main(int, char **) {
 
   // Create Framebuffers
   auto [w, h] = glfw.framebufferSize();
-  ImGuiVulkanResource imvulkan(instance, physicalDevice, queueFamily, device,
-                               surface, w, h);
+  ImGuiVulkanResource imvulkan(instance, physicalDevice, device.queueFamily,
+                               device, surface, w, h);
 
   // Load Fonts
   // - If no fonts are loaded, dear imgui will use the default font. You can

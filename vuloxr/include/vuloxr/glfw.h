@@ -67,6 +67,53 @@ public:
   bool isIconified() const {
     return glfwGetWindowAttrib(this->window, GLFW_ICONIFIED) != 0;
   }
+
+  std::tuple<vk::Instance, vk::PhysicalDevice, vk::Device, vk::Swapchain>
+  createVulkan(bool useDebug) {
+    vk::Instance instance;
+
+    uint32_t glfwExtensionCount = 0;
+    const char **glfwExtensions;
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    for (uint32_t i = 0; i < glfwExtensionCount; ++i) {
+      instance.addExtension(glfwExtensions[i]);
+    }
+    if (useDebug) {
+      instance.addLayer("VK_LAYER_KHRONOS_validation");
+      if (!instance.addExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+        // fallback:
+        // https://developer.android.com/ndk/guides/graphics/validation-layer
+        instance.addExtension("VK_EXT_debug_report");
+      }
+    }
+    // instance.appInfo.pApplicationName = NAME;
+    // instance.appInfo.pEngineName = "No Engine";
+    vk::CheckVkResult(instance.create());
+
+    VkSurfaceKHR surface;
+    vk::CheckVkResult(
+        glfwCreateWindowSurface(instance, this->window, nullptr, &surface));
+
+    auto [physicalDevice, presentFamilyIndex] =
+        instance.pickPhysicalDevice(surface);
+    assert(physicalDevice);
+    assert(presentFamilyIndex);
+    // vk::Surface surface(instance, _surface, *physicalDevice);
+
+    vk::Device device;
+    device.layers = instance.layers;
+    device.addExtension(*physicalDevice, "VK_KHR_swapchain");
+    vk::CheckVkResult(device.create(instance, *physicalDevice,
+                                    physicalDevice->graphicsFamilyIndex));
+
+    vk::Swapchain swapchain(instance, surface, *physicalDevice,
+                            *presentFamilyIndex, device);
+    swapchain.create(device.queueFamily);
+
+    return {std::move(instance), *physicalDevice, std::move(device),
+            std::move(swapchain)};
+  }
 };
 
 } // namespace glfw

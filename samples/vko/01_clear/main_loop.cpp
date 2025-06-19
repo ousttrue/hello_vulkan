@@ -80,8 +80,9 @@ VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
 }
 
 void main_loop(const std::function<bool()> &runLoop,
-               vko::Swapchain &swapchain, vko::PhysicalDevice physicalDevice,
-               const vko::Device &device) {
+               vuloxr::vk::Swapchain &swapchain,
+               const vuloxr::vk::PhysicalDevice &physicalDevice,
+               const vuloxr::vk::Device &device) {
 
   vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
                                    swapchain.images.size());

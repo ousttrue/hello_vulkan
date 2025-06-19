@@ -1,6 +1,8 @@
 #pragma once
 #include <functional>
-#include <vko/vko.h>
+#include <vuloxr/vk.h>
 
-void main_loop(const std::function<bool()> &runLoop, vko::Swapchain &swapchain,
-               vko::PhysicalDevice picked, const vko::Device &device);
+void main_loop(const std::function<bool()> &runLoop,
+               vuloxr::vk::Swapchain &swapchain,
+               const vuloxr::vk::PhysicalDevice &physicalDevice,
+               const vuloxr::vk::Device &device);
