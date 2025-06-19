@@ -364,8 +364,13 @@ struct Device : NonCopyable {
     queue_info[0].queueFamilyIndex = queueFamily;
     queue_info[0].queueCount = 1;
     queue_info[0].pQueuePriorities = queue_priority;
-    VkDeviceCreateInfo create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    VkPhysicalDeviceFeatures features{
+        .samplerAnisotropy = VK_TRUE,
+    };
+    VkDeviceCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pEnabledFeatures = &features,
+    };
     create_info.queueCreateInfoCount =
         sizeof(queue_info) / sizeof(queue_info[0]);
     create_info.pQueueCreateInfos = queue_info;
@@ -424,10 +429,45 @@ struct Swapchain : public NonCopyable {
             VkDevice _device)
       : instance(_instance), surface(_surface), physicalDevice(_physicalDevice),
         presentFamily(_presentFamily), device(_device) {
-    init();
+    move(nullptr);
   }
 
-  void init() {
+  ~Swapchain() {
+    if (this->swapchain != VK_NULL_HANDLE) {
+      Logger::Info("Swapchain::~Swapchain");
+      vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
+    }
+    if (this->surface != VK_NULL_HANDLE) {
+      vkDestroySurfaceKHR(this->instance, this->surface, nullptr);
+    }
+  }
+
+  Swapchain(Swapchain &&rhs) {
+    this->instance = rhs.instance;
+    this->surface = rhs.surface;
+    this->physicalDevice = rhs.physicalDevice;
+    this->presentFamily = rhs.presentFamily;
+    this->device = rhs.device;
+    move(&rhs);
+  }
+  Swapchain &operator=(Swapchain &&rhs) {
+    this->instance = rhs.instance;
+    this->surface = rhs.surface;
+    this->physicalDevice = rhs.physicalDevice;
+    this->presentFamily = rhs.presentFamily;
+    this->device = rhs.device;
+    move(&rhs);
+    return *this;
+  }
+  void move(Swapchain *src) {
+    if (src) {
+      this->createInfo = src->createInfo;
+      this->swapchain = src->swapchain;
+      src->swapchain = VK_NULL_HANDLE;
+      this->images.swap(src->images);
+      src->surface = VK_NULL_HANDLE;
+    }
+
     vkGetDeviceQueue(this->device, this->presentFamily, 0, &this->presentQueue);
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         this->physicalDevice, this->surface, &this->surfaceCapabilities);
@@ -450,41 +490,6 @@ struct Swapchain : public NonCopyable {
                                                 &presentModeCount,
                                                 this->presentModes.data());
     }
-  }
-
-  ~Swapchain() {
-    if (this->swapchain != VK_NULL_HANDLE) {
-      Logger::Info("Swapchain::~Swapchain");
-      vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
-    }
-    if (this->surface != VK_NULL_HANDLE) {
-      vkDestroySurfaceKHR(this->instance, this->surface, nullptr);
-    }
-  }
-
-  Swapchain(Swapchain &&rhs) {
-    this->swapchain = rhs.swapchain;
-    rhs.swapchain = VK_NULL_HANDLE;
-    this->surface = rhs.surface;
-    rhs.surface = VK_NULL_HANDLE;
-    this->images.swap(rhs.images);
-    this->physicalDevice = rhs.physicalDevice;
-    this->presentFamily = rhs.presentFamily;
-    this->device = rhs.device;
-    this->instance = rhs.instance;
-    init();
-  }
-  Swapchain &operator=(Swapchain &&rhs) {
-    this->swapchain = rhs.swapchain;
-    rhs.swapchain = VK_NULL_HANDLE;
-    this->surface = rhs.surface;
-    rhs.surface = VK_NULL_HANDLE;
-    this->images.swap(rhs.images);
-    this->physicalDevice = rhs.physicalDevice;
-    this->presentFamily = rhs.presentFamily;
-    this->device = rhs.device;
-    init();
-    return *this;
   }
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat() const {

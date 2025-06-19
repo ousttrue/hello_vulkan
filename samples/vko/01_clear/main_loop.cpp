@@ -92,22 +92,18 @@ void main_loop(const std::function<bool()> &runLoop,
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
     vko::VKO_CHECK(acquired.result);
 
-    auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
-    if (oldSemaphore != VK_NULL_HANDLE) {
-      flightManager.reuseSemaphore(oldSemaphore);
-    }
-    vkResetCommandBuffer(cmd, 0);
+    auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
     {
+      vkResetCommandBuffer(cmd, 0);
       auto color =
           getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
       clearImage(cmd, color, acquired.image,
                  physicalDevice.graphicsFamilyIndex);
-
-      vko::VKO_CHECK(device.submit(cmd, acquireSemaphore,
-                                   flight.submitSemaphore, flight.submitFence));
     }
 
+    vko::VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
+                                 flight.submitFence));
     vko::VKO_CHECK(
         swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }

@@ -180,10 +180,7 @@ void main_loop(const std::function<bool()> &runLoop,
     auto result = acquired.result;
     if (result == VK_SUCCESS) {
 
-      auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
-      if (oldSemaphore != VK_NULL_HANDLE) {
-        flightManager.reuseSemaphore(oldSemaphore);
-      }
+      auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)

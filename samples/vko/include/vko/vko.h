@@ -1119,12 +1119,14 @@ public:
     return semaphore;
   }
 
-  std::tuple<VkCommandBuffer, Flight, VkSemaphore>
-  sync(VkSemaphore acquireSemaphore) {
+  std::tuple<VkCommandBuffer, Flight> sync(VkSemaphore acquireSemaphore) {
     auto index = (this->frameCount++) % this->flights.size();
     // keep acquireSemaphore
     auto &flight = this->flights[index];
     auto oldSemaphore = flight.acquireSemaphore;
+    if (oldSemaphore != VK_NULL_HANDLE) {
+      this->reuseSemaphore(oldSemaphore);
+    }
     flight.acquireSemaphore = acquireSemaphore;
 
     // block. ensure oldSemaphore be signaled.
@@ -1133,7 +1135,7 @@ public:
 
     auto cmd = this->commandBuffers[index];
 
-    return {cmd, flight, oldSemaphore};
+    return {cmd, flight};
   }
 
   void reuseSemaphore(VkSemaphore semaphore) {

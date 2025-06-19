@@ -68,10 +68,7 @@ void main_loop(const std::function<bool()> &runLoop,
       images[acquired.imageIndex] = image;
     }
 
-    auto [cmd, flight, oldSemaphore] = flightManager.sync(acquireSemaphore);
-    if (oldSemaphore != VK_NULL_HANDLE) {
-      flightManager.reuseSemaphore(oldSemaphore);
-    }
+    auto [cmd, flight] = flightManager.sync(acquireSemaphore);
     vkResetCommandBuffer(cmd, 0);
 
     {

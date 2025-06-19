@@ -165,7 +165,7 @@ inline VkShaderModule createShaderModule(VkDevice device,
       .codeSize = spv.size() * 4,
       .pCode = spv.data(),
   };
-  VkShaderModule shaderModule;
+  VkShaderModule shaderModule = VK_NULL_HANDLE;
   if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
       VK_SUCCESS) {
     Logger::Error("failed to create shader module!");
@@ -181,9 +181,9 @@ inline std::vector<uint32_t> strToUints(const std::string &src) {
 }
 
 struct ShaderModule : not_copyable {
-  VkDevice device;
+  VkDevice device = VK_NULL_HANDLE;
 
-  VkShaderModule shaderModule;
+  VkShaderModule shaderModule = VK_NULL_HANDLE;
   operator VkShaderModule() const { return shaderModule; }
 
   std::string name;
@@ -202,9 +202,10 @@ struct ShaderModule : not_copyable {
     this->pipelineShaderStageCreateInfo.module = _shaderModule;
     this->pipelineShaderStageCreateInfo.pName = this->name.c_str();
   }
-
   ~ShaderModule() {
-    vkDestroyShaderModule(this->device, this->shaderModule, nullptr);
+    if (this->shaderModule != VK_NULL_HANDLE) {
+      vkDestroyShaderModule(this->device, this->shaderModule, nullptr);
+    }
   }
 
   static ShaderModule createVertexShader(VkDevice device,

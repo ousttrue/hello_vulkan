@@ -358,10 +358,6 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
     return {};
   }
 
-  // Pipeline is baked, we can delete the shader modules now.
-  vkDestroyShaderModule(device, shaderStages[0].module, nullptr);
-  vkDestroyShaderModule(device, shaderStages[1].module, nullptr);
-
   auto ptr = std::shared_ptr<Pipeline>(new Pipeline(
       device, renderPass, pipelineLayout, pipeline, pipelineCache));
 
