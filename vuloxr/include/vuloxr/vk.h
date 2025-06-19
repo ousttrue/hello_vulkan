@@ -395,7 +395,9 @@ struct Device : NonCopyable {
 
   VkResult submit(VkCommandBuffer cmd, VkSemaphore acquireSemaphore,
                   VkSemaphore submitSemaphore, VkFence submitFence) const {
-    VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkPipelineStageFlags waitDstStageMask =
+        VK_PIPELINE_STAGE_TRANSFER_BIT |
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
@@ -498,19 +500,23 @@ struct Swapchain : public NonCopyable {
           .format = VK_FORMAT_UNDEFINED,
       };
     }
+    const VkFormat requestSurfaceImageFormat[] = {
+        // Favor UNORM formats as the samples are not written for sRGB
+        VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM,
+        // VK_FORMAT_A8B8G8R8_UNORM_PACK32
+        // VK_FORMAT_B8G8R8A8_SRGB,
+    };
+    const VkColorSpaceKHR requestSurfaceColorSpace =
+        VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     for (const auto &availableFormat : this->formats) {
-      if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
-          availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-        return availableFormat;
+      if (availableFormat.colorSpace == requestSurfaceColorSpace) {
+        for (auto format : requestSurfaceImageFormat) {
+          if (availableFormat.format == format) {
+            return availableFormat;
+          }
+        }
       }
-      // switch (availableFormat.format) {
-      // // Favor UNORM formats as the samples are not written for sRGB
-      // currently. case VK_FORMAT_R8G8B8A8_UNORM: case
-      // VK_FORMAT_B8G8R8A8_UNORM: case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-      //   return availableFormat;
-      // default:
-      //   break;
-      // }
     }
     return this->formats[0];
   }
@@ -835,8 +841,8 @@ struct SwapchainFramebuffer {
       // depthView
       this->depthViewCreateInfo.image = depth;
       this->depthViewCreateInfo.format = depthFormat;
-      vuloxr::vk::CheckVkResult(vkCreateImageView(this->device, &this->depthViewCreateInfo,
-                                  nullptr, &this->depthView));
+      vuloxr::vk::CheckVkResult(vkCreateImageView(
+          this->device, &this->depthViewCreateInfo, nullptr, &this->depthView));
 
       VkImageView attachments[] = {this->imageView, this->depthView};
       VkFramebufferCreateInfo framebufferInfo{
@@ -848,8 +854,8 @@ struct SwapchainFramebuffer {
           .height = extent.height,
           .layers = 1,
       };
-      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(this->device, &framebufferInfo, nullptr,
-                                    &this->framebuffer));
+      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
+          this->device, &framebufferInfo, nullptr, &this->framebuffer));
     } else {
       VkFramebufferCreateInfo framebufferInfo{
           .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -860,8 +866,8 @@ struct SwapchainFramebuffer {
           .height = extent.height,
           .layers = 1,
       };
-      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(device, &framebufferInfo, nullptr,
-                                    &this->framebuffer));
+      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
+          device, &framebufferInfo, nullptr, &this->framebuffer));
     }
   }
 

@@ -143,65 +143,35 @@ public:
               VkSemaphore acquireSemaphore, VkSemaphore submitSemaphore,
               VkFence submitFence, ImDrawData *draw_data) {
 
-    // FrameRender(draw_data);
-    // VkSemaphore image_acquired_semaphore =
-    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-    //         .ImageAcquiredSemaphore;
-    // VkSemaphore render_complete_semaphore =
-    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-    //         .RenderCompleteSemaphore;
-    // VkResult err = vkAcquireNextImageKHR(device, this->wd.Swapchain,
-    // UINT64_MAX,
-    //                                      image_acquired_semaphore,
-    //                                      VK_NULL_HANDLE,
-    //                                      &this->wd.FrameIndex);
-    // if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
-    //   g_SwapChainRebuild = true;
-    // if (err == VK_ERROR_OUT_OF_DATE_KHR)
-    //   return;
-    // if (err != VK_SUBOPTIMAL_KHR)
-    //   check_vk_result(err);
-
-    // ImGui_ImplVulkanH_Frame *fd = &this->wd.Frames[this->wd.FrameIndex];
-    // {
-    //   err = vkWaitForFences(
-    //       device, 1, &fd->Fence, VK_TRUE,
-    //       UINT64_MAX); // wait indefinitely instead of periodically
-    //       checking
-    //   check_vk_result(err);
-    //
-    //   err = vkResetFences(device, 1, &fd->Fence);
-    //   check_vk_result(err);
-    // }
-    { // err = vkResetCommandPool(device, fd->CommandPool, 0);
-      // check_vk_result(err);
-      VkCommandBufferBeginInfo info = {};
-      info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-      info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    {
+      VkCommandBufferBeginInfo info = {
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+          .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      };
       vuloxr::vk::CheckVkResult(vkBeginCommandBuffer(commandBuffer, &info));
     }
 
-    VkClearValue clearValue = {
-        .color =
-            {
-                .float32 =
-                    {
-                        clear_color.x * clear_color.w,
-                        clear_color.y * clear_color.w,
-                        clear_color.z * clear_color.w,
-                        clear_color.w,
-                    },
-            },
-    };
-
     {
-      VkRenderPassBeginInfo info = {};
-      info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-      info.renderPass = this->renderPass;
-      info.framebuffer = framebuffer;
-      info.renderArea.extent = extent;
-      info.clearValueCount = 1;
-      info.pClearValues = &clearValue;
+      VkClearValue clearValue = {
+          .color =
+              {
+                  .float32 =
+                      {
+                          clear_color.x * clear_color.w,
+                          clear_color.y * clear_color.w,
+                          clear_color.z * clear_color.w,
+                          clear_color.w,
+                      },
+              },
+      };
+      VkRenderPassBeginInfo info = {
+          .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+          .renderPass = this->renderPass,
+          .framebuffer = framebuffer,
+          .renderArea = {.extent = extent},
+          .clearValueCount = 1,
+          .pClearValues = &clearValue,
+      };
       vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
@@ -210,49 +180,7 @@ public:
 
     // Submit command buffer
     vkCmdEndRenderPass(commandBuffer);
-    {
-      vuloxr::vk::CheckVkResult(vkEndCommandBuffer(commandBuffer));
-
-      // VkPipelineStageFlags wait_stage =
-      //     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      // VkSubmitInfo info = {};
-      // info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-      // info.waitSemaphoreCount = 1;
-      // info.pWaitSemaphores = &acquireSemaphore;
-      // info.pWaitDstStageMask = &wait_stage;
-      // info.commandBufferCount = 1;
-      // info.pCommandBuffers = &commandBuffer;
-      // info.signalSemaphoreCount = 1;
-      // info.pSignalSemaphores = &submitSemaphore;
-      //
-      // err = vkQueueSubmit(this->queue, 1, &info, submitFence);
-      // check_vk_result(err);
-    }
-
-    // FramePresent();
-    // if (g_SwapChainRebuild)
-    //   return;
-
-    // render_complete_semaphore =
-    //     this->wd.FrameSemaphores[this->wd.SemaphoreIndex]
-    //         .RenderCompleteSemaphore;
-    // VkPresentInfoKHR info = {};
-    // info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    // info.waitSemaphoreCount = 1;
-    // info.pWaitSemaphores = &render_complete_semaphore;
-    // info.swapchainCount = 1;
-    // info.pSwapchains = &this->wd.Swapchain;
-    // info.pImageIndices = &this->wd.FrameIndex;
-    // err = vkQueuePresentKHR(this->queue, &info);
-    // if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
-    //   g_SwapChainRebuild = true;
-    // if (err == VK_ERROR_OUT_OF_DATE_KHR)
-    //   return;
-    // if (err != VK_SUBOPTIMAL_KHR)
-    //   check_vk_result(err);
-    // this->wd.SemaphoreIndex =
-    //     (this->wd.SemaphoreIndex + 1) %
-    //     this->wd.SemaphoreCount; // Now we can use the next set of semaphores
+    vuloxr::vk::CheckVkResult(vkEndCommandBuffer(commandBuffer));
   }
 };
 
@@ -279,36 +207,6 @@ int main(int, char **) {
     auto [instance, physicalDevice, device, swapchain] =
         glfw.createVulkan(useDebug);
 
-    // Select Physical Device (GPU)
-    // auto physicalDevice = ImGui_ImplVulkanH_SelectPhysicalDevice(instance);
-    // IM_ASSERT(physicalDevice != VK_NULL_HANDLE);
-
-    // Select graphics queue family
-    // auto queueFamily =
-    // ImGui_ImplVulkanH_SelectQueueFamilyIndex(physicalDevice);
-    // IM_ASSERT(queueFamily != (uint32_t)-1);
-
-    // Create Window Surface
-    // VkSurfaceKHR surface;
-    // VkResult err = glfwCreateWindowSurface(instance, window, nullptr,
-    // &surface); vuloxr::vk::CheckVkResult(err);
-
-    // Select Surface Format
-    // const VkFormat requestSurfaceImageFormat[] = {
-    //     VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM,
-    //     VK_FORMAT_B8G8R8_UNORM, VK_FORMAT_R8G8B8_UNORM};
-    // const VkColorSpaceKHR requestSurfaceColorSpace =
-    //     VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-    // auto surfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
-    //     physicalDevice, surface, requestSurfaceImageFormat,
-    //     (size_t)IM_ARRAYSIZE(requestSurfaceImageFormat),
-    //     requestSurfaceColorSpace);
-
-    // vuloxr::vk::Device device;
-    // if (device.create(instance, physicalDevice, queueFamily) != VK_SUCCESS) {
-    //   return 3;
-    // }
-
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -332,30 +230,6 @@ int main(int, char **) {
                                  device, swapchain.createInfo.imageFormat,
                                  swapchain.images.size());
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can
-    // also load multiple fonts and use ImGui::PushFont()/PopFont() to select
-    // them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you
-    // need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return a nullptr.
-    // Please handle those errors in your application (e.g. use an assertion, or
-    // display an error and quit).
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use
-    // Freetype for higher quality font rendering.
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string
-    // literal you need to write a double backslash \\ !
-    // style.FontSizeBase = 20.0f;
-    // io.Fonts->AddFontDefault();
-    // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf");
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf");
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf");
-    // io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf");
-    // ImFont* font =
-    // io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf");
-    // IM_ASSERT(font != nullptr);
-
     // Our state
     bool show_demo_window = true;
     bool show_another_window = false;
@@ -368,19 +242,6 @@ int main(int, char **) {
 
     // Main loop
     while (glfw.newFrame()) {
-      // Poll and handle events (inputs, window resize, etc.)
-      // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-      // tell if dear imgui wants to use your inputs.
-      // - When io.WantCaptureMouse is true, do not dispatch mouse input data to
-      // your main application, or clear/overwrite your copy of the mouse data.
-      // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-      // data to your main application, or clear/overwrite your copy of the
-      // keyboard data. Generally you may always pass all inputs to dear imgui,
-      // and hide them from your application based on those two flags.
-
-      // Resize swap chain?
-      // auto [fb_width, fb_height] = glfw.framebufferSize();
-      // imvulkan.newFrame(fb_width, fb_height);
       if (glfw.isIconified()) {
         ImGui_ImplGlfw_Sleep(10);
         continue;
