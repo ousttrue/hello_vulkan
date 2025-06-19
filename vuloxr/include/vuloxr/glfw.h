@@ -68,8 +68,13 @@ public:
     return glfwGetWindowAttrib(this->window, GLFW_ICONIFIED) != 0;
   }
 
-  std::tuple<vk::Instance, vk::PhysicalDevice, vk::Device, vk::Swapchain>
-  createVulkan(bool useDebug) {
+  struct VulkanResources {
+    vk::Instance instance;
+    vk::PhysicalDevice physicalDevice;
+    vk::Device device;
+    vk::Swapchain swapchain;
+  };
+  VulkanResources createVulkan(bool useDebug) {
     vk::Instance instance;
 
     uint32_t glfwExtensionCount = 0;

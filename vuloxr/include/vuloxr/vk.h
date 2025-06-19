@@ -454,7 +454,7 @@ struct Swapchain : public NonCopyable {
 
   ~Swapchain() {
     if (this->swapchain != VK_NULL_HANDLE) {
-      Logger::Info("Swapchain::~Swapchain: %x", this->swapchain);
+      Logger::Info("Swapchain::~Swapchain");
       vkDestroySwapchainKHR(this->device, this->swapchain, nullptr);
     }
     if (this->surface != VK_NULL_HANDLE) {
@@ -471,6 +471,7 @@ struct Swapchain : public NonCopyable {
     this->physicalDevice = rhs.physicalDevice;
     this->presentFamily = rhs.presentFamily;
     this->device = rhs.device;
+    this->instance = rhs.instance;
     init();
   }
   Swapchain &operator=(Swapchain &&rhs) {
