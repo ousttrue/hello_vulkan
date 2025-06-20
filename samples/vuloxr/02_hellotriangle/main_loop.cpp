@@ -131,12 +131,6 @@ void main_loop(const std::function<bool()> &runLoop,
         // We will add draw commands in the same command buffer.
         vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
-        // Signal the underlying context that we're using this backbuffer now.
-        // This will also wait for all fences associated with this swapchain
-        // image to complete first. When submitting command buffer that writes
-        // to swapchain, we need to wait for this semaphore first. Also, delete
-        // the older semaphore. auto oldSemaphore = backbuffer->beginFrame(cmd,
-        // acquireSemaphore);
         pipeline->render(cmd, backbuffer->framebuffer,
                          swapchain.createInfo.imageExtent);
 
@@ -150,32 +144,10 @@ void main_loop(const std::function<bool()> &runLoop,
         }
       }
 
-      const VkPipelineStageFlags waitStage =
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      VkSubmitInfo info = {
-          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-          .waitSemaphoreCount =
-              static_cast<uint32_t>(acquireSemaphore != VK_NULL_HANDLE ? 1 : 0),
-          .pWaitSemaphores = &acquireSemaphore,
-          .pWaitDstStageMask = &waitStage,
-          .commandBufferCount = 1,
-          .pCommandBuffers = &cmd,
-          .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &flight.submitSemaphore,
-      };
+      vuloxr::vk::CheckVkResult(device.submit(
+          cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
       vuloxr::vk::CheckVkResult(
-          vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
-
-      VkPresentInfoKHR present = {
-          .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-          .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &flight.submitSemaphore,
-          .swapchainCount = 1,
-          .pSwapchains = &swapchain.swapchain,
-          .pImageIndices = &acquired.imageIndex,
-          .pResults = nullptr,
-      };
-      vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
+          swapchain.present(acquired.imageIndex, flight.submitSemaphore));
 
     } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
                acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {

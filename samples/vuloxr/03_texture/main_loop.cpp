@@ -236,25 +236,8 @@ void main_loop(const std::function<bool()> &runLoop,
         uniformBuffers[acquired.imageIndex]->memory->assign(ubo);
       }
 
-      // submit command
-      VkPipelineStageFlags waitStages[] = {
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-      };
-      VkSubmitInfo submitInfo{
-          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-          .waitSemaphoreCount = 1,
-          .pWaitSemaphores = &acquireSemaphore,
-          .pWaitDstStageMask = waitStages,
-          .commandBufferCount = 1,
-          .pCommandBuffers = &cmd,
-          // specify which semaphore to signal once command buffer has finished
-          .signalSemaphoreCount = 1,
-          .pSignalSemaphores = &flight.submitSemaphore,
-      };
-      if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, flight.submitFence) !=
-          VK_SUCCESS) {
-        throw std::runtime_error("failed to submit draw command buffer!");
-      }
+      vuloxr::vk::CheckVkResult(device.submit(
+          cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
 
       // * 3. Returns the image to the swap chain for presentation.
       result = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
