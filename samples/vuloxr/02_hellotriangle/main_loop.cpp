@@ -3,6 +3,7 @@
 #include "vuloxr/vk.h"
 #include "vuloxr/vk/buffer.h"
 #include "vuloxr/vk/pipeline.h"
+#include <vulkan/vulkan_core.h>
 
 const char VS[] = {
 #embed "triangle.vert"
@@ -97,8 +98,9 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::FrameCounter counter;
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-    if (acquired.result == VK_SUCCESS) {
+    auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
+
+    if (res == VK_SUCCESS) {
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
         backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
@@ -121,27 +123,28 @@ void main_loop(const std::function<bool()> &runLoop,
 
       vuloxr::vk::CheckVkResult(device.submit(
           cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
-      vuloxr::vk::CheckVkResult(
-          swapchain.present(acquired.imageIndex, flight.submitSemaphore));
 
-    } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
-               acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
-      vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
-      vkQueueWaitIdle(swapchain.presentQueue);
-      flightManager.reuseSemaphore(acquireSemaphore);
-      // TODO:
-      // swapchain = {};
-      // return true;
-
+      res = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
     } else {
-      // error ?
-      vuloxr::Logger::Error("Unrecoverable swapchain error.");
-      vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
-      return;
     }
 
-    counter.frameEnd();
+    if (res == VK_SUCCESS) {
+      counter.frameEnd();
+
+    } else {
+      if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
+        vuloxr::Logger::Warn("VK_ERROR_OUT_OF_DATE_KHR || VK_SUBOPTIMAL_KHR");
+        vkQueueWaitIdle(swapchain.presentQueue);
+        swapchain.create();
+        backbuffers.clear();
+        backbuffers.resize(swapchain.images.size());
+        continue;
+      }
+
+      // throw
+      vuloxr::vk::CheckVkResult(res);
+    }
   }
 
   vkDeviceWaitIdle(device);

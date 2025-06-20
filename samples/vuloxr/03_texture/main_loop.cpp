@@ -177,9 +177,8 @@ void main_loop(const std::function<bool()> &runLoop,
   while (runLoop()) {
     // * 1. Aquires an image from the swap chain
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-    auto result = acquired.result;
-    if (result == VK_SUCCESS) {
+    auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
+    if (res == VK_SUCCESS) {
 
       auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
@@ -240,12 +239,12 @@ void main_loop(const std::function<bool()> &runLoop,
           cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
 
       // * 3. Returns the image to the swap chain for presentation.
-      result = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
+      res = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
     }
 
     // check if the swap chain is no longer adaquate for presentation
-    if (result != VK_SUCCESS) {
-      if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (res != VK_SUCCESS) {
+      if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
         // https://developer.android.com/games/optimize/vulkan-prerotation
         // rotate device
         vkDeviceWaitIdle(device);
@@ -257,6 +256,7 @@ void main_loop(const std::function<bool()> &runLoop,
         //     swapchain->extent(), swapchain->imageCount(),
         //     pipeline->descriptorSetLayout());
         // pipeline->createGraphicsPipeline(swapchain->extent());
+        swapchain.create();
       } else {
         throw std::runtime_error("failed to aquire/prsent swap chain image!");
       }

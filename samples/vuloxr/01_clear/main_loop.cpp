@@ -66,8 +66,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-    vuloxr::vk::CheckVkResult(acquired.result);
+    auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
+    vuloxr::vk::CheckVkResult(res);
 
     auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 

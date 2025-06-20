@@ -19,10 +19,16 @@ int main(int argc, char **argv) {
   vuloxr::glfw::Glfw glfw;
   auto window = glfw.createWindow(640, 480, NAME);
 
-  auto [instance, physicalDevice, device, swapchain] =
-      glfw.createVulkan(useDebug);
-  main_loop([&glfw]() { return glfw.newFrame(); }, instance, swapchain,
-            physicalDevice, device, window);
+  try {
+    auto [instance, physicalDevice, device, swapchain] =
+        glfw.createVulkan(useDebug);
+    main_loop([&glfw]() { return glfw.newFrame(); }, instance, swapchain,
+              physicalDevice, device, window);
+  } catch (const std::exception &ex) {
+    vuloxr::Logger::Error("%s", ex.what());
+  } catch (...) {
+    vuloxr::Logger::Error("Unknown Error");
+  }
 
   return 0;
 }

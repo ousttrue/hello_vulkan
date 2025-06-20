@@ -555,12 +555,14 @@ struct Swapchain : public NonCopyable {
   VkSurfaceCapabilitiesKHR surfaceCapabilities;
   VkQueue presentQueue;
   std::vector<VkPresentModeKHR> presentModes;
+  uint32_t graphicsFamily;
 
   Swapchain(VkInstance _instance, VkSurfaceKHR _surface,
             VkPhysicalDevice _physicalDevice, uint32_t _presentFamily,
-            VkDevice _device)
+            VkDevice _device, uint32_t _graphicsFamily)
       : instance(_instance), surface(_surface), physicalDevice(_physicalDevice),
-        presentFamily(_presentFamily), device(_device) {
+        presentFamily(_presentFamily), device(_device),
+        graphicsFamily(_graphicsFamily) {
     move(nullptr);
   }
 
@@ -580,6 +582,7 @@ struct Swapchain : public NonCopyable {
     this->physicalDevice = rhs.physicalDevice;
     this->presentFamily = rhs.presentFamily;
     this->device = rhs.device;
+    this->graphicsFamily = rhs.graphicsFamily;
     move(&rhs);
   }
   Swapchain &operator=(Swapchain &&rhs) {
@@ -588,6 +591,7 @@ struct Swapchain : public NonCopyable {
     this->physicalDevice = rhs.physicalDevice;
     this->presentFamily = rhs.presentFamily;
     this->device = rhs.device;
+    this->graphicsFamily = rhs.graphicsFamily;
     move(&rhs);
     return *this;
   }
@@ -695,11 +699,9 @@ struct Swapchain : public NonCopyable {
       .clipped = VK_TRUE,
   };
 
-  VkResult create(uint32_t graphicsFamily,
-                  VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE) {
-    auto surfaceFormat = chooseSwapSurfaceFormat();
+  VkResult create() {
 
-    this->createInfo.surface = surface;
+    this->createInfo.surface = this->surface;
     // Determine the number of VkImage's to use in the swapchain.
     // Ideally, we desire to own 1 image at a time, the rest of the images can
     // either be rendered to and/or
@@ -710,11 +712,18 @@ struct Swapchain : public NonCopyable {
     //   // Application must settle for fewer images than desired.
     //   desiredSwapchainImages = surfaceProperties.maxImageCount;
     // }
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        this->physicalDevice, this->surface, &this->surfaceCapabilities);
     this->createInfo.minImageCount =
         this->surfaceCapabilities.minImageCount + 1;
+    this->createInfo.imageExtent = this->surfaceCapabilities.currentExtent;
+    this->createInfo.preTransform = this->surfaceCapabilities.currentTransform;
+
+    auto surfaceFormat = chooseSwapSurfaceFormat();
     this->createInfo.imageFormat = surfaceFormat.format;
     this->createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    this->createInfo.imageExtent = this->surfaceCapabilities.currentExtent;
+
     if (graphicsFamily == this->presentFamily) {
       this->createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       this->createInfo.queueFamilyIndexCount = 0;     // Optional
@@ -733,15 +742,26 @@ struct Swapchain : public NonCopyable {
     //   preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     // else
     //   preTransform = surfaceProperties.currentTransform;
-    this->createInfo.preTransform = this->surfaceCapabilities.currentTransform;
     this->createInfo.presentMode = chooseSwapPresentMode();
+
+    auto oldSwapchain = this->swapchain;
     this->createInfo.oldSwapchain = oldSwapchain;
+
     auto result = vkCreateSwapchainKHR(this->device, &this->createInfo, nullptr,
                                        &this->swapchain);
+
+    if (oldSwapchain != VK_NULL_HANDLE) {
+      Logger::Info("Swapchain::~Swapchain");
+      vkDestroySwapchainKHR(this->device, oldSwapchain, nullptr);
+    }
+
     if (result != VK_SUCCESS) {
       return result;
     }
 
+    Logger::Info("swapchain.extent: %d x %d",
+                 this->createInfo.imageExtent.width,
+                 this->createInfo.imageExtent.height);
     Logger::Info("swapchain.format: %s",
                  magic_enum::enum_name(this->createInfo.imageFormat).data());
     Logger::Info(
@@ -764,19 +784,19 @@ struct Swapchain : public NonCopyable {
   }
 
   struct AcquiredImage {
-    VkResult result;
     int64_t presentTimeNano;
     uint32_t imageIndex;
     VkImage image;
   };
 
-  AcquiredImage acquireNextImage(VkSemaphore imageAvailableSemaphore) {
+  std::tuple<VkResult, AcquiredImage>
+  acquireNextImage(VkSemaphore imageAvailableSemaphore) {
     uint32_t imageIndex;
     auto result = vkAcquireNextImageKHR(this->device, this->swapchain,
                                         UINT64_MAX, imageAvailableSemaphore,
                                         VK_NULL_HANDLE, &imageIndex);
     if (result != VK_SUCCESS) {
-      return {result};
+      return {result, {}};
     }
 
     auto now = std::chrono::system_clock::now();
@@ -787,9 +807,11 @@ struct Swapchain : public NonCopyable {
 
     return {
         result,
-        epoch_time_nano,
-        imageIndex,
-        this->images[imageIndex],
+        {
+            epoch_time_nano,
+            imageIndex,
+            this->images[imageIndex],
+        },
     };
   }
 

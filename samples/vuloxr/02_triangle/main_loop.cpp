@@ -52,7 +52,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-    auto acquired = swapchain.acquireNextImage(acquireSemaphore);
+    auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
     auto image = images[acquired.imageIndex];
     if (!image) {

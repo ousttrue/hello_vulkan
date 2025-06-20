@@ -296,8 +296,8 @@ void main_loop(const std::function<bool()> &runLoop,
     if (!is_minimized) {
 
       auto acquireSemaphore = flightManager.getOrCreateSemaphore();
-      auto acquired = swapchain.acquireNextImage(acquireSemaphore);
-      if (acquired.result == VK_SUCCESS) {
+      auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
+      if (res == VK_SUCCESS) {
         auto backbuffer = backbuffers[acquired.imageIndex];
         if (!backbuffer) {
           backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
@@ -343,8 +343,7 @@ void main_loop(const std::function<bool()> &runLoop,
         };
         vuloxr::vk::CheckVkResult(vkQueuePresentKHR(device.queue, &present));
 
-      } else if (acquired.result == VK_SUBOPTIMAL_KHR ||
-                 acquired.result == VK_ERROR_OUT_OF_DATE_KHR) {
+      } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
         vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
         vkQueueWaitIdle(swapchain.presentQueue);
         flightManager.reuseSemaphore(acquireSemaphore);

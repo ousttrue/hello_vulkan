@@ -113,8 +113,8 @@ public:
                                     physicalDevice->graphicsFamilyIndex));
 
     vk::Swapchain swapchain(instance, surface, *physicalDevice,
-                            *presentFamilyIndex, device);
-    swapchain.create(device.queueFamily);
+                            *presentFamilyIndex, device, device.queueFamily);
+    swapchain.create();
 
     return {std::move(instance), *physicalDevice, std::move(device),
             std::move(swapchain)};
