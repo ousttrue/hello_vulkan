@@ -1,33 +1,13 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
 #include "scene.h"
-#include "vko/vko.h"
-#include "vko/vko_pipeline.h"
+#include "vuloxr/vk.h"
+#include "vuloxr/vk/pipeline.h"
+#include <vulkan/vulkan_core.h>
 
-auto VS = R"(#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(binding = 0) uniform UniformBufferObject
-{
-    mat4 model;
-    mat4 view;
-    mat4 proj;
-} ubo;
-
-layout(location = 0) in vec2 inPosition;
-layout(location = 1) in vec3 inColor;
-layout(location = 2) in vec2 inTexCoord;
-
-layout(location = 0) out vec3 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
-
-void main()
-{
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 0.0, 1.0); 
-    fragColor = inColor; 
-    fragTexCoord = inTexCoord;
-}
-)";
+const char VS[] = {
+#embed "texture.vert"
+    , 0, 0, 0, 0};
 
 #include <glm/fwd.hpp>
 #define GLM_FORCE_RADIANS
@@ -63,21 +43,9 @@ struct UniformBufferObject {
   }
 };
 
-auto FS = R"(#version 450
-#extension GL_ARB_separate_shader_objects : enable
-
-layout(binding = 1) uniform sampler2D texSampler;
-
-layout(location = 0) in vec3 fragColor;
-layout(location = 1) in vec2 fragTexCoord;
-
-layout(location = 0) out vec4 outColor;
-
-void main()
-{
-    outColor = texture(texSampler, fragTexCoord);
-}
-)";
+const char FS[] = {
+#embed "texture.frag"
+    , 0, 0, 0, 0};
 
 void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Instance &instance,
@@ -124,8 +92,8 @@ void main_loop(const std::function<bool()> &runLoop,
           },
       });
 
-  auto renderPass =
-      vko::createColorRenderPass(device, swapchain.createInfo.imageFormat);
+  auto renderPass = vuloxr::vk::createColorRenderPass(
+      device, swapchain.createInfo.imageFormat);
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       //
@@ -136,43 +104,28 @@ void main_loop(const std::function<bool()> &runLoop,
       .pPushConstantRanges = nullptr,
   };
   VkPipelineLayout pipelineLayout;
-  vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                        &pipelineLayout));
+  vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutInfo,
+                                                   nullptr, &pipelineLayout));
 
-  auto vs =
-      vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
-  auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
-                                                    "main");
+  auto vs = vuloxr::vk::ShaderModule::createVertexShader(
+      device, glsl_vs_to_spv(VS), "main");
+  auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+      device, glsl_fs_to_spv(FS), "main");
 
-  vko::PipelineBuilder builder;
+  vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   auto pipeline = builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
-      scene.mesh.inputBindingDescriptions, scene.mesh.attributeDescriptions,
-      {{
-          .x = 0.0f,
-          .y = 0.0f,
-          .width = static_cast<float>(swapchain.createInfo.imageExtent.width),
-          .height = static_cast<float>(swapchain.createInfo.imageExtent.height),
-          .minDepth = 0.0f,
-          .maxDepth = 1.0f,
-      }},
-      {{
-          .offset = {0, 0},
-          .extent = swapchain.createInfo.imageExtent,
-      }});
-  ;
+      scene.mesh.inputBindingDescriptions, scene.mesh.attributeDescriptions);
 
-  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> backbuffers(
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
-  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   swapchain.images.size());
-
-  VkClearValue clearColor = {0.0f, 0.0f, 0.0f, 1.0f};
+  vuloxr::vk::FlightManager flightManager(
+      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
   while (runLoop()) {
     // * 1. Aquires an image from the swap chain
@@ -208,17 +161,17 @@ void main_loop(const std::function<bool()> &runLoop,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             });
 
-        backbuffer = std::make_shared<vko::SwapchainFramebuffer>(
+        backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
             swapchain.createInfo.imageFormat, pipeline.renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
 
         {
-          vko::CommandBufferRecording recording(
-              cmd, pipeline.renderPass, pipeline.graphicsPipeline,
-              backbuffer->framebuffer, swapchain.createInfo.imageExtent,
-              clearColor, pipelineLayout, descriptorSet);
-          recording.drawIndexed(scene.mesh);
+          vuloxr::vk::RenderPassRecording recording(
+              cmd, pipeline.renderPass, backbuffer->framebuffer,
+              swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
+              pipelineLayout, descriptorSet);
+          // recording.drawIndexed(scene.mesh);
         }
       }
 
@@ -245,21 +198,14 @@ void main_loop(const std::function<bool()> &runLoop,
     // check if the swap chain is no longer adaquate for presentation
     if (res != VK_SUCCESS) {
       if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
-        // https://developer.android.com/games/optimize/vulkan-prerotation
-        // rotate device
         vkDeviceWaitIdle(device);
-        // swapchain = Swapchain::createSwapchain(surface, res.physicalDevice,
-        //                                        res.device,
-        //                                        res.graphicsFamily,
-        //                                        res.presetnFamily, swapchain);
-        // swapchainCommand->createSwapchainDependent(
-        //     swapchain->extent(), swapchain->imageCount(),
-        //     pipeline->descriptorSetLayout());
-        // pipeline->createGraphicsPipeline(swapchain->extent());
         swapchain.create();
-      } else {
-        throw std::runtime_error("failed to aquire/prsent swap chain image!");
+        backbuffers.clear();
+        backbuffers.resize(swapchain.images.size());
+        continue;
       }
+
+      vuloxr::vk::CheckVkResult(res);
     }
   }
 

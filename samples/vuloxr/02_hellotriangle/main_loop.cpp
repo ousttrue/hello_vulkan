@@ -44,28 +44,27 @@ void main_loop(const std::function<bool()> &runLoop,
   VkPhysicalDeviceMemoryProperties props;
   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &props);
 
-  auto mesh =
-      vuloxr::vk::Mesh::create(physicalDevice, device, data, sizeof(data));
-  mesh.vertexCount = std::size(data);
-  mesh.bindings = {{
-      .binding = 0,
-      .stride = sizeof(Vertex),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  }};
-  mesh.attributes = {
-      {
-          .location = 0,
+  auto mesh = vuloxr::vk::Mesh::create<Vertex>(
+      physicalDevice, device, data,
+      {{
           .binding = 0,
-          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-          .offset = 0,
-      },
+          .stride = sizeof(Vertex),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      }},
       {
-          .location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-          .offset = offsetof(Vertex, color), // 4 * sizeof(float),
-      },
-  };
+          {
+              .location = 0,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+              .offset = 0,
+          },
+          {
+              .location = 1,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+              .offset = offsetof(Vertex, color), // 4 * sizeof(float),
+          },
+      });
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
@@ -76,8 +75,6 @@ void main_loop(const std::function<bool()> &runLoop,
       device, glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, glsl_fs_to_spv(FS), "main");
-
-  ;
 
   vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -131,7 +128,6 @@ void main_loop(const std::function<bool()> &runLoop,
 
     if (res == VK_SUCCESS) {
       counter.frameEnd();
-
     } else {
       if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
         vuloxr::Logger::Warn("VK_ERROR_OUT_OF_DATE_KHR || VK_SUBOPTIMAL_KHR");
@@ -141,7 +137,6 @@ void main_loop(const std::function<bool()> &runLoop,
         backbuffers.resize(swapchain.images.size());
         continue;
       }
-
       // throw
       vuloxr::vk::CheckVkResult(res);
     }
