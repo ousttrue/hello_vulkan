@@ -1,7 +1,6 @@
 #include "../main_loop.h"
 #include "pipeline.hpp"
-#include "vuloxr/vk.h"
-#include <chrono>
+#include "vuloxr/vk/pipeline.h"
 
 void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Instance &instance,
@@ -9,16 +8,78 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  std::shared_ptr<class Pipeline> pipeline = Pipeline::create(
-      physicalDevice.physicalDevice, device, swapchain.createInfo.imageFormat);
+  //
+  // RenderPass
+  //
+  // Finally, create the renderpass.
+  VkAttachmentDescription attachment = {
+      // Backbuffer format.
+      .format = swapchain.createInfo.imageFormat,
+      // Not multisampled.
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      // When starting the frame, we want tiles to be cleared.
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      // When ending the frame, we want tiles to be written out.
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      // Don't care about stencil since we're not using it.
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+
+      // The image layout will be undefined when the render pass begins.
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      // After the render pass is complete, we will transition to
+      // PRESENT_SRC_KHR
+      // layout.
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
+
+  VkAttachmentReference colorRef = {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
+
+  VkSubpassDescription subpass = {
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &colorRef,
+  };
+
+  VkSubpassDependency dependency = {
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      // Since we changed the image layout, we need to make the memory visible
+      // to color attachment to modify.
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+  };
+
+  VkRenderPassCreateInfo rpInfo = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .attachmentCount = 1,
+      .pAttachments = &attachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 1,
+      .pDependencies = &dependency,
+  };
+  VkRenderPass renderPass;
+  vuloxr::vk::CheckVkResult(
+      vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass));
+
+  auto pipelineLayout = vuloxr::vk::createEmptyPipelineLayout(device);
+
+  auto pipeline = Pipeline::create(physicalDevice.physicalDevice, device,
+                                   renderPass, pipelineLayout);
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
   vuloxr::vk::FlightManager flightManager(
       device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
-  unsigned frameCount = 0;
-  auto startTime = std::chrono::high_resolution_clock::now();
+  vuloxr::FrameCounter counter;
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto acquired = swapchain.acquireNextImage(acquireSemaphore);
@@ -27,7 +88,7 @@ void main_loop(const std::function<bool()> &runLoop,
       if (!backbuffer) {
         backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
-            swapchain.createInfo.imageFormat, pipeline->renderPass());
+            swapchain.createInfo.imageFormat, renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
       }
 
@@ -35,21 +96,59 @@ void main_loop(const std::function<bool()> &runLoop,
       // on for synchronization purposes.
       auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
-      // We will only submit this once before it's recycled.
-      VkCommandBufferBeginInfo beginInfo = {
-          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-          .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-      };
-      vkBeginCommandBuffer(cmd, &beginInfo);
+      {
+        // We will only submit this once before it's recycled.
+        VkCommandBufferBeginInfo beginInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        };
+        vkBeginCommandBuffer(cmd, &beginInfo);
 
-      // Signal the underlying context that we're using this backbuffer now.
-      // This will also wait for all fences associated with this swapchain
-      // image to complete first. When submitting command buffer that writes
-      // to swapchain, we need to wait for this semaphore first. Also, delete
-      // the older semaphore. auto oldSemaphore = backbuffer->beginFrame(cmd,
-      // acquireSemaphore);
-      pipeline->render(cmd, backbuffer->framebuffer,
-                       swapchain.createInfo.imageExtent);
+        // Set clear color values.
+        VkClearValue clearValue{
+            .color =
+                {
+                    .float32 =
+                        {
+                            0.1f,
+                            0.1f,
+                            0.2f,
+                            1.0f,
+                        },
+                },
+        };
+
+        // Begin the render pass.
+        VkRenderPassBeginInfo rpBegin = {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = renderPass,
+            .framebuffer = backbuffer->framebuffer,
+            .renderArea = {.extent = swapchain.createInfo.imageExtent},
+            .clearValueCount = 1,
+            .pClearValues = &clearValue,
+        };
+
+        // We will add draw commands in the same command buffer.
+        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+        // Signal the underlying context that we're using this backbuffer now.
+        // This will also wait for all fences associated with this swapchain
+        // image to complete first. When submitting command buffer that writes
+        // to swapchain, we need to wait for this semaphore first. Also, delete
+        // the older semaphore. auto oldSemaphore = backbuffer->beginFrame(cmd,
+        // acquireSemaphore);
+        pipeline->render(cmd, backbuffer->framebuffer,
+                         swapchain.createInfo.imageExtent);
+
+        // Complete render pass.
+        vkCmdEndRenderPass(cmd);
+
+        // Complete the command buffer.
+        if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+          vuloxr::Logger::Error("vkEndCommandBuffer");
+          abort();
+        }
+      }
 
       const VkPipelineStageFlags waitStage =
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -89,24 +188,13 @@ void main_loop(const std::function<bool()> &runLoop,
 
     } else {
       // error ?
-      vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
+      vuloxr::Logger::Error("Unrecoverable swapchain error.");
       vkQueueWaitIdle(swapchain.presentQueue);
       flightManager.reuseSemaphore(acquireSemaphore);
       return;
     }
 
-    frameCount++;
-    if (frameCount == 1000) {
-      auto endTime = std::chrono::high_resolution_clock::now();
-      // vko::Logger::Info(
-      //     "FPS: %.3f\n",
-      //     (1000.0f * frameCount) /
-      //         std::chrono::duration_cast<std::chrono::milliseconds>(endTime -
-      //                                                               startTime)
-      //             .count());
-      frameCount = 0;
-      startTime = endTime;
-    }
+    counter.frameEnd();
   }
 
   vkDeviceWaitIdle(device);

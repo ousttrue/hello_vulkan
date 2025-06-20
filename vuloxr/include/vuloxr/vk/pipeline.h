@@ -6,6 +6,18 @@ namespace vuloxr {
 
 namespace vk {
 
+inline VkPipelineLayout createEmptyPipelineLayout(VkDevice device) {
+  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 0,
+      .pushConstantRangeCount = 0,
+  };
+  VkPipelineLayout pipelineLayout;
+  CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                       &pipelineLayout));
+  return pipelineLayout;
+}
+
 inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
   VkAttachmentDescription colorAttachments[] = {
       {

@@ -100,85 +100,23 @@ private:
 ///
 /// Pipeline
 ///
-Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass,
-                   VkPipelineLayout pipelineLayout, VkPipeline pipeline,
-                   VkPipelineCache pipelineCache)
-    : _device(device), _renderPass(renderPass), _pipelineLayout(pipelineLayout),
-      _pipeline(pipeline), _pipelineCache(pipelineCache) {}
+Pipeline::Pipeline(VkDevice device, VkPipelineLayout pipelineLayout,
+                   VkPipeline pipeline, VkPipelineCache pipelineCache)
+    : _device(device), _pipelineLayout(pipelineLayout), _pipeline(pipeline),
+      _pipelineCache(pipelineCache) {}
 
 Pipeline::~Pipeline() {
   _vertexBuffer = {};
 
   vkDestroyPipelineCache(_device, _pipelineCache, nullptr);
   vkDestroyPipeline(_device, _pipeline, nullptr);
-  vkDestroyRenderPass(_device, _renderPass, nullptr);
   vkDestroyPipelineLayout(_device, _pipelineLayout, nullptr);
 }
 
 std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
-                                           VkDevice device, VkFormat format) {
-  //
-  // RenderPass
-  //
-  // Finally, create the renderpass.
-  VkAttachmentDescription attachment = {
-      // Backbuffer format.
-      .format = format,
-      // Not multisampled.
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      // When starting the frame, we want tiles to be cleared.
-      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-      // When ending the frame, we want tiles to be written out.
-      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-      // Don't care about stencil since we're not using it.
-      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-
-      // The image layout will be undefined when the render pass begins.
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      // After the render pass is complete, we will transition to
-      // PRESENT_SRC_KHR
-      // layout.
-      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-  };
-
-  VkAttachmentReference colorRef = {
-      .attachment = 0,
-      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  };
-
-  VkSubpassDescription subpass = {
-      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-      .colorAttachmentCount = 1,
-      .pColorAttachments = &colorRef,
-  };
-
-  VkSubpassDependency dependency = {
-      .srcSubpass = VK_SUBPASS_EXTERNAL,
-      .dstSubpass = 0,
-      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-      // Since we changed the image layout, we need to make the memory visible
-      // to color attachment to modify.
-      .srcAccessMask = 0,
-      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-  };
-
-  VkRenderPassCreateInfo rpInfo = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .attachmentCount = 1,
-      .pAttachments = &attachment,
-      .subpassCount = 1,
-      .pSubpasses = &subpass,
-      .dependencyCount = 1,
-      .pDependencies = &dependency,
-  };
-  VkRenderPass renderPass;
-  if (vkCreateRenderPass(device, &rpInfo, nullptr, &renderPass) != VK_SUCCESS) {
-    vko::Logger::Error("vkCreateRenderPass");
-    abort();
-  }
+                                           VkDevice device,
+                                           VkRenderPass renderPass,
+                                           VkPipelineLayout pipelineLayout) {
 
   //
   // Pipeline
@@ -316,18 +254,6 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
       .pDynamicStates = dynamics,
   };
 
-  // Create a blank pipeline layout.
-  // We are not binding any resources to the pipeline in this first sample.
-  VkPipelineLayout pipelineLayout;
-  VkPipelineLayoutCreateInfo layoutInfo = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-  };
-  if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) !=
-      VK_SUCCESS) {
-    vko::Logger::Error("vkCreatePipelineLayout");
-    abort();
-  }
-
   // Specify we will use triangle lists to draw geometry.
   VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -358,8 +284,8 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
     return {};
   }
 
-  auto ptr = std::shared_ptr<Pipeline>(new Pipeline(
-      device, renderPass, pipelineLayout, pipeline, pipelineCache));
+  auto ptr = std::shared_ptr<Pipeline>(
+      new Pipeline(device, pipelineLayout, pipeline, pipelineCache));
 
   VkPhysicalDeviceMemoryProperties props;
   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &props);
@@ -370,33 +296,6 @@ std::shared_ptr<Pipeline> Pipeline::create(VkPhysicalDevice physicalDevice,
 
 void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
                       VkExtent2D size) {
-
-  // Set clear color values.
-  VkClearValue clearValue{
-      .color =
-          {
-              .float32 =
-                  {
-                      0.1f,
-                      0.1f,
-                      0.2f,
-                      1.0f,
-                  },
-          },
-  };
-
-  // Begin the render pass.
-  VkRenderPassBeginInfo rpBegin = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = _renderPass,
-      .framebuffer = framebuffer,
-      .renderArea = {.extent = size},
-      .clearValueCount = 1,
-      .pClearValues = &clearValue,
-  };
-
-  // We will add draw commands in the same command buffer.
-  vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
   // Bind the graphics pipeline.
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
@@ -423,15 +322,6 @@ void Pipeline::render(VkCommandBuffer cmd, VkFramebuffer framebuffer,
 
   // Draw three vertices with one instance.
   vkCmdDraw(cmd, 3, 1, 0, 0);
-
-  // Complete render pass.
-  vkCmdEndRenderPass(cmd);
-
-  // Complete the command buffer.
-  if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
-    vko::Logger::Error("vkEndCommandBuffer");
-    abort();
-  }
 }
 
 void Pipeline::initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props) {

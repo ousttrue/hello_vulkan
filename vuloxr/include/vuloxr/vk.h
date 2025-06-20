@@ -205,6 +205,69 @@ struct Instance : NonCopyable {
   operator VkInstance() const { return this->instance; }
   std::vector<PhysicalDevice> physicalDevices;
 
+  // VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+  VkDebugUtilsMessengerEXT debugUtilsMessenger = VK_NULL_HANDLE;
+  VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                         VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+      .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      .pfnUserCallback =
+          [](VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+             VkDebugUtilsMessageTypeFlagsEXT message_types,
+             const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
+             void *user_data) {
+            if (message_severity &
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+              Logger::Error("%s %s\n", callback_data->pMessageIdName,
+                            callback_data->pMessage);
+            } else if (message_severity &
+                       VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+              Logger::Warn("%s %s\n", callback_data->pMessageIdName,
+                           callback_data->pMessage);
+            } else if (message_severity &
+                       VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+              Logger::Info("%s %s\n", callback_data->pMessageIdName,
+                           callback_data->pMessage);
+            } else /*if(message_severity &
+                      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)*/
+            {
+              Logger::Verbose("%s %s\n", callback_data->pMessageIdName,
+                              callback_data->pMessage);
+            }
+
+            // }
+            return VK_FALSE;
+          },
+  };
+  static VkResult CreateDebugUtilsMessengerEXT(
+      VkInstance instance,
+      const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
+      const VkAllocationCallbacks *pAllocator,
+      VkDebugUtilsMessengerEXT *pDebugMessenger) {
+    Logger::Info(VK_EXT_DEBUG_UTILS_EXTENSION_NAME
+                 " => vkCreateDebugUtilsMessengerEXT");
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+        instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+      return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    } else {
+      return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+  }
+  static void
+  DestroyDebugUtilsMessengerEXT(VkInstance instance,
+                                VkDebugUtilsMessengerEXT debugMessenger,
+                                const VkAllocationCallbacks *pAllocator) {
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+        instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr) {
+      func(instance, debugMessenger, pAllocator);
+    }
+  }
+
   // VK_EXT_debug_report
   VkDebugReportCallbackEXT debugReport = VK_NULL_HANDLE;
   VkDebugReportCallbackCreateInfoEXT debug_report_ci = {
@@ -224,10 +287,30 @@ struct Instance : NonCopyable {
     (void)messageCode;
     (void)pUserData;
     (void)pLayerPrefix; // Unused arguments
-    fprintf(stderr,
-            "[vulkan] Debug report from ObjectType: %i\nMessage: %s\n\n",
-            objectType, pMessage);
+    Logger::Error("[vulkan] Debug report from ObjectType: %i\nMessage: %s\n\n",
+                  objectType, pMessage);
     return VK_FALSE;
+  }
+  static VkResult
+  CreateDebugReportCallbackEXT(VkInstance instance,
+                               const VkDebugReportCallbackCreateInfoEXT *ci,
+                               VkDebugReportCallbackEXT *debugReport) {
+    Logger::Info("VK_EXT_debug_report => vkCreateDebugReportCallbackEXT()");
+    auto f_vkCreateDebugReportCallbackEXT =
+        (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
+            instance, "vkCreateDebugReportCallbackEXT");
+    assert(f_vkCreateDebugReportCallbackEXT);
+    return f_vkCreateDebugReportCallbackEXT(
+        instance, ci, nullptr /*g_Allocator*/, debugReport);
+  }
+  static void
+  DestroyDebugReportCallbackEXT(VkInstance instance,
+                                VkDebugReportCallbackEXT debugReport) {
+    // Remove the debug report callback
+    auto f_vkDestroyDebugReportCallbackEXT =
+        (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+            instance, "vkDestroyDebugReportCallbackEXT");
+    f_vkDestroyDebugReportCallbackEXT(instance, debugReport, nullptr);
   }
 
   Instance() {
@@ -250,24 +333,28 @@ struct Instance : NonCopyable {
   }
   ~Instance() {
     if (this->debugReport != VK_NULL_HANDLE) {
-      // Remove the debug report callback
-      auto f_vkDestroyDebugReportCallbackEXT =
-          (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
-              instance, "vkDestroyDebugReportCallbackEXT");
-      f_vkDestroyDebugReportCallbackEXT(instance, this->debugReport, nullptr);
+      DestroyDebugReportCallbackEXT(this->instance, this->debugReport);
+    }
+    if (this->debugUtilsMessenger != VK_NULL_HANDLE) {
+      DestroyDebugUtilsMessengerEXT(this->instance, this->debugUtilsMessenger,
+                                    nullptr);
     }
     if (this->instance != VK_NULL_HANDLE) {
-      Logger::Info("Instance::~Instance: %x", this->instance);
+      Logger::Info("Instance::~Instance: 0x%x", this->instance);
       vkDestroyInstance(instance, nullptr);
     }
   }
   Instance(Instance &&rhs) {
+    this->debugUtilsMessenger = rhs.debugUtilsMessenger;
+    rhs.debugUtilsMessenger = VK_NULL_HANDLE;
     this->debugReport = rhs.debugReport;
     rhs.debugReport = VK_NULL_HANDLE;
     this->reset(rhs.instance);
     rhs.instance = VK_NULL_HANDLE;
   }
   Instance &operator=(Instance &&rhs) {
+    this->debugUtilsMessenger = rhs.debugUtilsMessenger;
+    rhs.debugUtilsMessenger = VK_NULL_HANDLE;
     this->debugReport = rhs.debugReport;
     rhs.debugReport = VK_NULL_HANDLE;
     this->reset(rhs.instance);
@@ -283,9 +370,9 @@ struct Instance : NonCopyable {
     }
     for (auto name : this->extensions) {
       Logger::Info("instance extension: %s", name);
-      // if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
-      //   this->createInfo.pNext = &this->debugUtilsMessengerCreateInfo;
-      // }
+      if (strcmp(name, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0) {
+        this->create_info.pNext = &this->debugUtilsMessengerCreateInfo;
+      }
     }
     this->create_info.enabledLayerCount =
         static_cast<uint32_t>(std::size(this->layers));
@@ -320,16 +407,17 @@ struct Instance : NonCopyable {
       }
     }
 
-    // Setup the debug report callback
+    // extensions
     if (find_name(this->extensions, "VK_EXT_debug_report") &&
         this->debugReport == VK_NULL_HANDLE) {
-      auto f_vkCreateDebugReportCallbackEXT =
-          (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
-              this->instance, "vkCreateDebugReportCallbackEXT");
-      assert(f_vkCreateDebugReportCallbackEXT);
-      CheckVkResult(f_vkCreateDebugReportCallbackEXT(
-          this->instance, &this->debug_report_ci, nullptr /*g_Allocator*/,
-          &this->debugReport));
+      CheckVkResult(CreateDebugReportCallbackEXT(
+          this->instance, &this->debug_report_ci, &this->debugReport));
+    }
+    if (find_name(this->extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) &&
+        this->debugUtilsMessenger == VK_NULL_HANDLE) {
+      CheckVkResult(CreateDebugUtilsMessengerEXT(
+          this->instance, &this->debugUtilsMessengerCreateInfo, nullptr,
+          &this->debugUtilsMessenger));
     }
   }
 
@@ -378,7 +466,7 @@ struct Device : NonCopyable {
   Device() {}
   ~Device() {
     if (this->device != VK_NULL_HANDLE) {
-      Logger::Info("Device::~Device: %x", this->device);
+      Logger::Info("Device::~Device: 0x%x", this->device);
       vkDestroyDevice(this->device, nullptr);
     }
   }

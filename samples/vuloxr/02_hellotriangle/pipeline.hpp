@@ -7,22 +7,21 @@
 
 class Pipeline {
   VkDevice _device;
-  VkRenderPass _renderPass;
   VkPipelineLayout _pipelineLayout;
   VkPipeline _pipeline;
   VkPipelineCache _pipelineCache;
 
   std::shared_ptr<class Buffer> _vertexBuffer;
 
-  Pipeline(VkDevice device, VkRenderPass renderPass,
-           VkPipelineLayout pipelineLayout, VkPipeline pipeline,
-           VkPipelineCache pipelineCache);
+  Pipeline(VkDevice device, VkPipelineLayout pipelineLayout,
+           VkPipeline pipeline, VkPipelineCache pipelineCache);
 
 public:
   ~Pipeline();
   static std::shared_ptr<Pipeline> create(VkPhysicalDevice physicalDevice,
-                                          VkDevice device, VkFormat format);
-  VkRenderPass renderPass() const { return _renderPass; }
+                                          VkDevice device,
+                                          VkRenderPass renderPass,
+                                          VkPipelineLayout pipelineLayout);
   void render(VkCommandBuffer cmd, VkFramebuffer framebuffer, VkExtent2D size);
 
   void initVertexBuffer(const VkPhysicalDeviceMemoryProperties &props);

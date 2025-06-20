@@ -27,14 +27,7 @@ void main_loop(const std::function<bool()> &runLoop,
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, glsl_fs_to_spv(FS), "main");
 
-  VkPipelineLayoutCreateInfo pipelineLayoutInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 0,
-      .pushConstantRangeCount = 0,
-  };
-  VkPipelineLayout pipelineLayout;
-  vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutInfo,
-                                                   nullptr, &pipelineLayout));
+  auto pipelineLayout = vuloxr::vk::createEmptyPipelineLayout(device);
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);

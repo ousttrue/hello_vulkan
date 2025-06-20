@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <memory>
 #include <stdarg.h>
 #include <stdexcept>
@@ -123,6 +124,29 @@ struct NonCopyable {
   ~NonCopyable() = default;
   NonCopyable(const NonCopyable &) = delete;
   NonCopyable &operator=(const NonCopyable &) = delete;
+};
+
+struct FrameCounter {
+  unsigned frameCount = 0;
+  std::chrono::time_point<std::chrono::steady_clock> startTime;
+
+  FrameCounter() {
+    this->startTime = std::chrono::high_resolution_clock::now();
+  }
+
+  void frameEnd() {
+    this->frameCount++;
+    if (this->frameCount == 1000) {
+      auto endTime = std::chrono::high_resolution_clock::now();
+      Logger::Verbose("FPS: %.3f",
+                      (1000.0f * frameCount) /
+                          std::chrono::duration_cast<std::chrono::milliseconds>(
+                              endTime - startTime)
+                              .count());
+      frameCount = 0;
+      startTime = endTime;
+    }
+  }
 };
 
 } // namespace vuloxr
