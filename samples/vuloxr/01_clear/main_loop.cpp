@@ -7,24 +7,8 @@
 
 static void clearImage(VkCommandBuffer commandBuffer,
                        VkClearColorValue clearColorValue, VkImage image,
+                       const VkImageSubresourceRange &subResourceRange,
                        uint32_t graphicsQueueFamilyIndex) {
-
-  VkCommandBufferBeginInfo CommandBufferBeginInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .pNext = nullptr,
-      .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-      .pInheritanceInfo = nullptr,
-  };
-  vuloxr::vk::CheckVkResult(
-      vkBeginCommandBuffer(commandBuffer, &CommandBufferBeginInfo));
-
-  VkImageSubresourceRange subResourceRange = {
-      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-  };
 
   VkImageMemoryBarrier presentToClearBarrier = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -41,16 +25,9 @@ static void clearImage(VkCommandBuffer commandBuffer,
                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &presentToClearBarrier);
 
-  VkImageSubresourceRange imageSubresourceRange{
-      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-      .baseMipLevel = 0,
-      .levelCount = 1,
-      .baseArrayLayer = 0,
-      .layerCount = 1,
-  };
   vkCmdClearColorImage(commandBuffer, image,
                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColorValue,
-                       1, &imageSubresourceRange);
+                       1, &subResourceRange);
 
   VkImageMemoryBarrier clearToPresentBarrier = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -66,8 +43,6 @@ static void clearImage(VkCommandBuffer commandBuffer,
   vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
                        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
                        nullptr, 1, &clearToPresentBarrier);
-
-  vuloxr::vk::CheckVkResult(vkEndCommandBuffer(commandBuffer));
 }
 
 VkClearColorValue getColorForTime(std::chrono::nanoseconds nano) {
@@ -98,10 +73,28 @@ void main_loop(const std::function<bool()> &runLoop,
 
     {
       vkResetCommandBuffer(cmd, 0);
-      auto color =
-          getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
-      clearImage(cmd, color, acquired.image,
-                 physicalDevice.graphicsFamilyIndex);
+      VkCommandBufferBeginInfo CommandBufferBeginInfo{
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+          .pNext = nullptr,
+          .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+          .pInheritanceInfo = nullptr,
+      };
+      vuloxr::vk::CheckVkResult(
+          vkBeginCommandBuffer(cmd, &CommandBufferBeginInfo));
+      {
+        auto color =
+            getColorForTime(std::chrono::nanoseconds(acquired.presentTimeNano));
+        clearImage(cmd, color, acquired.image,
+                   VkImageSubresourceRange{
+                       .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                       .baseMipLevel = 0,
+                       .levelCount = 1,
+                       .baseArrayLayer = 0,
+                       .layerCount = 1,
+                   },
+                   physicalDevice.graphicsFamilyIndex);
+      }
+      vuloxr::vk::CheckVkResult(vkEndCommandBuffer(cmd));
     }
 
     vuloxr::vk::CheckVkResult(device.submit(

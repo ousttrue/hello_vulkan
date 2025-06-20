@@ -72,6 +72,10 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
 }
 
 void android_main(android_app *app) {
+  vuloxr::Logger::Verbose("Verbose");
+  vuloxr::Logger::Info("Info");
+  vuloxr::Logger::Warn("Warn");
+  vuloxr::Logger::Error("Error");
 #if NDEBUG
   bool useDebug = false;
   vuloxr::Logger::Info("## NDEBUG ##");

@@ -29,7 +29,7 @@ inline VkResult CheckVkResult(VkResult res, const char *originator = nullptr,
   return res;
 }
 
-struct Platform {
+struct Platform : NonCopyable {
   std::vector<VkLayerProperties> layerProperties;
   std::vector<VkExtensionProperties> instanceExtensionProperties;
 

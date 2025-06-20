@@ -1,8 +1,9 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
-#include "vko/vko_pipeline.h"
+#include "vuloxr/vk.h"
 #include <assert.h>
 #include <vulkan/vulkan_core.h>
+#include <vuloxr/vk/pipeline.h>
 
 const char VS[] = {
 #embed "shader.vert"
@@ -21,10 +22,10 @@ void main_loop(const std::function<bool()> &runLoop,
   // pipeline
   //
   vuloxr::Logger::Info("convert glsl to spv and create shader module...");
-  auto vs =
-      vko::ShaderModule::createVertexShader(device, glsl_vs_to_spv(VS), "main");
-  auto fs = vko::ShaderModule::createFragmentShader(device, glsl_fs_to_spv(FS),
-                                                    "main");
+  auto vs = vuloxr::vk::ShaderModule::createVertexShader(
+      device, glsl_vs_to_spv(VS), "main");
+  auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+      device, glsl_fs_to_spv(FS), "main");
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -32,13 +33,13 @@ void main_loop(const std::function<bool()> &runLoop,
       .pushConstantRangeCount = 0,
   };
   VkPipelineLayout pipelineLayout;
-  vko::VKO_CHECK(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
-                                        &pipelineLayout));
+  vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutInfo,
+                                                   nullptr, &pipelineLayout));
 
-  auto renderPass =
-      vko::createColorRenderPass(device, swapchain.createInfo.imageFormat);
+  auto renderPass = vuloxr::vk::createColorRenderPass(
+      device, swapchain.createInfo.imageFormat);
 
-  auto pipeline = vko::PipelineBuilder().create(
+  auto pipeline = vuloxr::vk::PipelineBuilder().create(
       device, renderPass, pipelineLayout,
       {
           vs.pipelineShaderStageCreateInfo,
@@ -50,11 +51,11 @@ void main_loop(const std::function<bool()> &runLoop,
   // swapchain
   //
 
-  std::vector<std::shared_ptr<vko::SwapchainFramebuffer>> images(
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> images(
       swapchain.images.size());
 
-  vko::FlightManager flightManager(device, physicalDevice.graphicsFamilyIndex,
-                                   swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(
+      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
@@ -62,7 +63,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
     auto image = images[acquired.imageIndex];
     if (!image) {
-      image = std::make_shared<vko::SwapchainFramebuffer>(
+      image = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
           device, acquired.image, swapchain.createInfo.imageExtent,
           swapchain.createInfo.imageFormat, pipeline.renderPass);
       images[acquired.imageIndex] = image;
@@ -75,15 +76,15 @@ void main_loop(const std::function<bool()> &runLoop,
       VkClearValue clearColor = {
           .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
       };
-      vko::CommandBufferRecording recording(
+      vuloxr::vk::RenderPassRecording recording(
           cmd, pipeline.renderPass, pipeline.graphicsPipeline,
           image->framebuffer, swapchain.createInfo.imageExtent, clearColor);
       recording.draw(3);
     }
 
-    vko::VKO_CHECK(device.submit(cmd, acquireSemaphore, flight.submitSemaphore,
-                                 flight.submitFence));
-    vko::VKO_CHECK(
+    vuloxr::vk::CheckVkResult(device.submit(
+        cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
+    vuloxr::vk::CheckVkResult(
         swapchain.present(acquired.imageIndex, flight.submitSemaphore));
   }
 
