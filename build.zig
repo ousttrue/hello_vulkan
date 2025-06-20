@@ -138,13 +138,13 @@ pub fn build(b: *std.Build) void {
             .package_name = "com.arm.vulkansdk.hellotriangle",
             .apk_name = "hellotriangle",
             .contents = .{
-                .android_manifest = b.path("samples/vko/02_hellotriangle/AndroidManifest.xml"),
-                .resource_directory = b.path("samples/vko/02_hellotriangle/res"),
+                .android_manifest = b.path("samples/vuloxr/02_hellotriangle/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/vuloxr/02_hellotriangle/res"),
                 // .assets_directory = b.path("samples/hellotriangle/android/assets"),
                 .appends = &.{
                     .{
                         .path = .{
-                            .src = so.build_dir.path(b, "samples/vko/lib02_hellotriangle.so"),
+                            .src = so.build_dir.path(b, "samples/vuloxr/lib02_hellotriangle.so"),
                             .dst = "lib/arm64-v8a/lib02_hellotriangle.so",
                         },
                     },

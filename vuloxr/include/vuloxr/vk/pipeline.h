@@ -2,6 +2,7 @@
 #include "../vk.h"
 #include "vuloxr.h"
 #include <span>
+#include <vulkan/vulkan_core.h>
 
 namespace vuloxr {
 
@@ -84,14 +85,20 @@ inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
 
 struct RenderPassRecording : NonCopyable {
   VkCommandBuffer commandBuffer;
+
+  struct ClearColor {
+    float r, g, b, a;
+  };
+
   RenderPassRecording(VkCommandBuffer _commandBuffer, VkRenderPass renderPass,
-                      VkPipeline pipeline, VkFramebuffer framebuffer,
-                      VkExtent2D extent, VkClearValue clearColor,
+                      VkFramebuffer framebuffer, VkExtent2D extent,
+                      const ClearColor &clearColor,
                       VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
                       VkDescriptorSet descriptorSet = VK_NULL_HANDLE)
       : commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        // .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
     CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
 
@@ -101,19 +108,16 @@ struct RenderPassRecording : NonCopyable {
         .framebuffer = framebuffer,
         .renderArea = {.offset = {0, 0}, .extent = extent},
         .clearValueCount = 1,
-        .pClearValues = &clearColor,
+        .pClearValues = reinterpret_cast<const VkClearValue *>(&clearColor),
     };
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
                          VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline);
-
     VkViewport viewport{
         .x = 0.0f,
         .y = 0.0f,
-        .width = (float)extent.width,
-        .height = (float)extent.height,
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
@@ -132,11 +136,21 @@ struct RenderPassRecording : NonCopyable {
                               pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
     }
   }
+
   ~RenderPassRecording() {
     vkCmdEndRenderPass(this->commandBuffer);
     CheckVkResult(vkEndCommandBuffer(this->commandBuffer));
   }
-  void draw(uint32_t vertexCount) {
+
+  void draw(VkPipeline pipeline, VkBuffer buffer, uint32_t vertexCount) {
+    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      pipeline);
+
+    if (buffer != VK_NULL_HANDLE) {
+      VkDeviceSize offset = 0;
+      vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &buffer, &offset);
+    }
+
     vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
   }
 

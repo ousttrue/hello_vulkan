@@ -3,7 +3,6 @@
 #include "vuloxr/vk.h"
 #include "vuloxr/vk/pipeline.h"
 
-// Load our SPIR-V shaders.
 const char VS[] = {
 #embed "triangle.vert"
     , 0, 0, 0, 0};
@@ -16,6 +15,7 @@ struct Vertex {
   float position[4];
   float color[4];
 };
+
 // A simple counter-clockwise triangle.
 // We specify the positions directly in clip space.
 static const Vertex data[] = {
@@ -35,10 +35,10 @@ static const Vertex data[] = {
 
 class Buffer {
   VkDevice _device;
-  VkBuffer _buffer;
   VkDeviceMemory _memory;
 
 public:
+  VkBuffer _buffer;
   Buffer(VkDevice device, const VkPhysicalDeviceMemoryProperties &props,
          const void *pInitialData, size_t size, VkFlags usage)
       : _device(device) {
@@ -194,77 +194,10 @@ void main_loop(const std::function<bool()> &runLoop,
       auto [cmd, flight] = flightManager.sync(acquireSemaphore);
 
       {
-        // We will only submit this once before it's recycled.
-        VkCommandBufferBeginInfo beginInfo = {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        };
-        vkBeginCommandBuffer(cmd, &beginInfo);
-
-        // Set clear color values.
-        VkClearValue clearValue{
-            .color =
-                {
-                    .float32 =
-                        {
-                            0.1f,
-                            0.1f,
-                            0.2f,
-                            1.0f,
-                        },
-                },
-        };
-
-        // Begin the render pass.
-        VkRenderPassBeginInfo rpBegin = {
-            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-            .renderPass = renderPass,
-            .framebuffer = backbuffer->framebuffer,
-            .renderArea = {.extent = swapchain.createInfo.imageExtent},
-            .clearValueCount = 1,
-            .pClearValues = &clearValue,
-        };
-
-        // We will add draw commands in the same command buffer.
-        vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
-
-        // pipeline->render(cmd, backbuffer->framebuffer,
-        //                  swapchain.createInfo.imageExtent);
-        // Bind the graphics pipeline.
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-        // Set up dynamic state.
-        // Viewport
-        VkViewport vp = {
-            .x = 0.0f,
-            .y = 0.0f,
-            .width = float(swapchain.createInfo.imageExtent.width),
-            .height = float(swapchain.createInfo.imageExtent.height),
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-        vkCmdSetViewport(cmd, 0, 1, &vp);
-
-        // Scissor box
-        VkRect2D scissor{
-            .extent = swapchain.createInfo.imageExtent,
-        };
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        // Bind vertex buffer.
-        vertexBuffer->bind(cmd, 0);
-
-        // Draw three vertices with one instance.
-        vkCmdDraw(cmd, 3, 1, 0, 0);
-
-        // Complete render pass.
-        vkCmdEndRenderPass(cmd);
-
-        // Complete the command buffer.
-        if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
-          vuloxr::Logger::Error("vkEndCommandBuffer");
-          abort();
-        }
+        vuloxr::vk::RenderPassRecording recording(
+            cmd, pipeline.renderPass, backbuffer->framebuffer,
+            swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
+        recording.draw(pipeline, vertexBuffer->_buffer, 3);
       }
 
       vuloxr::vk::CheckVkResult(device.submit(

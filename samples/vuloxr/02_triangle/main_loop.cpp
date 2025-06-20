@@ -66,13 +66,10 @@ void main_loop(const std::function<bool()> &runLoop,
     vkResetCommandBuffer(cmd, 0);
 
     {
-      VkClearValue clearColor = {
-          .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
-      };
       vuloxr::vk::RenderPassRecording recording(
-          cmd, pipeline.renderPass, pipeline.graphicsPipeline,
-          image->framebuffer, swapchain.createInfo.imageExtent, clearColor);
-      recording.draw(3);
+          cmd, pipeline.renderPass, image->framebuffer,
+          swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f});
+      recording.draw(pipeline.graphicsPipeline, nullptr, 3);
     }
 
     vuloxr::vk::CheckVkResult(device.submit(
