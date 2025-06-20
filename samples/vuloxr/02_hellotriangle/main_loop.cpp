@@ -1,6 +1,7 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
 #include "vuloxr/vk.h"
+#include "vuloxr/vk/buffer.h"
 #include "vuloxr/vk/pipeline.h"
 
 const char VS[] = {
@@ -33,91 +34,6 @@ static const Vertex data[] = {
     },
 };
 
-class Buffer {
-  VkDevice _device;
-  VkDeviceMemory _memory;
-
-public:
-  VkBuffer _buffer;
-  Buffer(VkDevice device, const VkPhysicalDeviceMemoryProperties &props,
-         const void *pInitialData, size_t size, VkFlags usage)
-      : _device(device) {
-    VkBufferCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = size,
-        .usage = usage,
-    };
-
-    vuloxr::vk::CheckVkResult(vkCreateBuffer(device, &info, nullptr, &_buffer));
-
-    // Ask device about its memory requirements.
-    VkMemoryRequirements memReqs;
-    vkGetBufferMemoryRequirements(device, _buffer, &memReqs);
-
-    VkMemoryAllocateInfo alloc = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = memReqs.size,
-        // We want host visible and coherent memory to simplify things.
-        .memoryTypeIndex = findMemoryTypeFromRequirements(
-            props, memReqs.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-    };
-
-    // Allocate memory.
-    vuloxr::vk::CheckVkResult(
-        vkAllocateMemory(device, &alloc, nullptr, &_memory));
-
-    // Buffers are not backed by memory, so bind our memory explicitly to the
-    // buffer.
-    vkBindBufferMemory(device, _buffer, _memory, 0);
-
-    // Map the memory and dump data in there.
-    if (pInitialData) {
-      void *pData;
-      if (vkMapMemory(device, _memory, 0, size, 0, &pData) != VK_SUCCESS) {
-        vuloxr::Logger::Error("vkMapMemory");
-        abort();
-      }
-      memcpy(pData, pInitialData, size);
-      vkUnmapMemory(device, _memory);
-    }
-  }
-
-  ~Buffer() {
-    vkFreeMemory(_device, _memory, nullptr);
-    vkDestroyBuffer(_device, _buffer, nullptr);
-  }
-
-  void bind(VkCommandBuffer cmd, VkDeviceSize offset) {
-    vkCmdBindVertexBuffers(cmd, 0, 1, &_buffer, &offset);
-  }
-
-private:
-  // To create a buffer, both the device and application have requirements from
-  // the buffer object.
-  // Vulkan exposes the different types of buffers the device can allocate, and
-  // we have to find a suitable one. deviceRequirements is a bitmask expressing
-  // which memory types can be used for a buffer object. The different memory
-  // types' properties must match with what the application wants.
-  static uint32_t
-  findMemoryTypeFromRequirements(const VkPhysicalDeviceMemoryProperties &props,
-                                 uint32_t deviceRequirements,
-                                 uint32_t hostRequirements) {
-    for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
-      if (deviceRequirements & (1u << i)) {
-        if ((props.memoryTypes[i].propertyFlags & hostRequirements) ==
-            hostRequirements) {
-          return i;
-        }
-      }
-    }
-
-    vuloxr::Logger::Error("Failed to obtain suitable memory type.\n");
-    abort();
-  }
-};
-
 void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
@@ -126,8 +42,29 @@ void main_loop(const std::function<bool()> &runLoop,
 
   VkPhysicalDeviceMemoryProperties props;
   vkGetPhysicalDeviceMemoryProperties(physicalDevice, &props);
-  auto vertexBuffer = std::make_shared<Buffer>(
-      device, props, data, sizeof(data), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+  auto mesh =
+      vuloxr::vk::Mesh::create(physicalDevice, device, data, sizeof(data));
+  mesh.vertexCount = std::size(data);
+  mesh.bindings = {{
+      .binding = 0,
+      .stride = sizeof(Vertex),
+      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  }};
+  mesh.attributes = {
+      {
+          .location = 0,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+          .offset = 0,
+      },
+      {
+          .location = 1,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+          .offset = offsetof(Vertex, color), // 4 * sizeof(float),
+      },
+  };
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
@@ -139,26 +76,7 @@ void main_loop(const std::function<bool()> &runLoop,
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, glsl_fs_to_spv(FS), "main");
 
-  VkVertexInputBindingDescription bindings[] = {{
-      .binding = 0,
-      .stride = sizeof(Vertex),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  }};
-
-  VkVertexInputAttributeDescription attributes[] = {
-      {
-          .location = 0,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-          .offset = 0,
-      },
-      {
-          .location = 1,
-          .binding = 0,
-          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-          .offset = 4 * sizeof(float),
-      },
-  };
+  ;
 
   vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -168,7 +86,7 @@ void main_loop(const std::function<bool()> &runLoop,
                          vs.pipelineShaderStageCreateInfo,
                          fs.pipelineShaderStageCreateInfo,
                      },
-                     bindings, attributes, {}, {},
+                     mesh.bindings, mesh.attributes, {}, {},
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
@@ -197,7 +115,8 @@ void main_loop(const std::function<bool()> &runLoop,
         vuloxr::vk::RenderPassRecording recording(
             cmd, pipeline.renderPass, backbuffer->framebuffer,
             swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
-        recording.draw(pipeline, vertexBuffer->_buffer, 3);
+        // recording.draw(pipeline, vertexBuffer->_buffer, 3);
+        mesh.draw(cmd, pipeline);
       }
 
       vuloxr::vk::CheckVkResult(device.submit(
