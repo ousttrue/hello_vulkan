@@ -81,22 +81,22 @@ struct Logger {
   }
   template <typename... ARGS>
   static void Verbose(const char *fmt, ARGS... args) {
-    Log("\e[0m" // default
+    Log("\e[38;5;241m" // default
         "VERBOSE: ",
         fmt, args...);
   }
   template <typename... ARGS> static void Info(const char *fmt, ARGS... args) {
-    Log("\e[0;32m" // green
+    Log("\e[38;5;120m" // green
         "INFO   : ",
         fmt, args...);
   }
   template <typename... ARGS> static void Warn(const char *fmt, ARGS... args) {
-    Log("\e[0;33m" // yellow
+    Log("\e[38;5;202m" // yellow
         "WARN   : ",
         fmt, args...);
   }
   template <typename... ARGS> static void Error(const char *fmt, ARGS... args) {
-    Log("\e[0;31m" // red
+    Log("\e[38;5;196m" // red
         "ERROR  : ",
         fmt, args...);
   }

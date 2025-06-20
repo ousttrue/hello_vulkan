@@ -4,9 +4,13 @@
 auto NAME = "vuloxr";
 
 int main(int argc, char **argv) {
+  vuloxr::Logger::Verbose("Verbose");
+  vuloxr::Logger::Info("Info");
+  vuloxr::Logger::Warn("Warn");
+  vuloxr::Logger::Error("Error");
 #if NDEBUG
   bool useDebug = false;
-  vulolxr::Logger::Info("## NDEBUG ##");
+  vuloxr::Logger::Info("## NDEBUG ##");
 #else
   bool useDebug = true;
   vuloxr::Logger::Info("## DEBUG ##");

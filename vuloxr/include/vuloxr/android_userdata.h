@@ -1,4 +1,5 @@
 #pragma once
+#include "../vuloxr.h"
 #include <android/log.h>
 #include <android_native_app_glue.h>
 
@@ -53,34 +54,27 @@ struct UserData {
     auto *userdata = static_cast<UserData *>(pApp->userData);
     switch (cmd) {
     case APP_CMD_RESUME:
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName, "# %s",
-                          cmd_name(cmd));
+      Logger::Verbose("# %s", cmd_name(cmd));
       userdata->_active = true;
       break;
 
     case APP_CMD_INIT_WINDOW:
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName, "# %s",
-                          cmd_name(cmd));
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName,
-                          "# APP_CMD_RESUME");
+      Logger::Verbose("# %s", cmd_name(cmd));
       userdata->_window = pApp->window;
       break;
 
     case APP_CMD_PAUSE:
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName, "# %s",
-                          cmd_name(cmd));
+      Logger::Verbose("# %s", cmd_name(cmd));
       userdata->_active = false;
       break;
 
     case APP_CMD_TERM_WINDOW:
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName, "# %s",
-                          cmd_name(cmd));
+      Logger::Verbose("# %s", cmd_name(cmd));
       userdata->_window = nullptr;
       break;
 
     default:
-      __android_log_print(ANDROID_LOG_INFO, userdata->_appName,
-                          "# %s: not handled", cmd_name(cmd));
+      Logger::Verbose("# %s: not handled", cmd_name(cmd));
       break;
     }
   }

@@ -2,7 +2,7 @@
 #include "options.h"
 #include "xr_vulkan_session.h"
 #include <cstddef>
-#include <vko/android_userdata.h>
+#include <vuloxr/android_userdata.h>
 #include <xro/xro.h>
 
 auto APP_NAME = "hello_xr";
@@ -28,12 +28,12 @@ void _android_main(struct android_app *app) {
                       "#### [debug][android_main] ####");
 #endif
 
-  vko::UserData userdata{
+  vuloxr::android::UserData userdata{
       .pApp = app,
       ._appName = APP_NAME,
   };
   app->userData = &userdata;
-  app->onAppCmd = vko::UserData::on_app_cmd;
+  app->onAppCmd = vuloxr::android::UserData::on_app_cmd;
   app->onInputEvent = [](android_app *, AInputEvent *) { return 0; };
 
   JNIEnv *Env;
@@ -103,7 +103,7 @@ void _android_main(struct android_app *app) {
               // If the timeout is negative, waits indefinitely until an event
               // appears.
               const int timeoutMilliseconds =
-                  (!((vko::UserData *)app->userData)->_active &&
+                  (!((vuloxr::android::UserData *)app->userData)->_active &&
                    !isSessionRunning && app->destroyRequested == 0)
                       ? -1
                       : 0;

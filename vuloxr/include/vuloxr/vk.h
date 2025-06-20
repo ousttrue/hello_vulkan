@@ -188,8 +188,18 @@ struct Instance : NonCopyable {
     }
   }
 
+  VkApplicationInfo appInfo{
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "VULOXR",
+      .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+      .pEngineName = "No Engine",
+      .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+      .apiVersion = VK_API_VERSION_1_0,
+  };
+
   VkInstanceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pApplicationInfo = &this->appInfo,
   };
   VkInstance instance = VK_NULL_HANDLE;
   operator VkInstance() const { return this->instance; }
@@ -220,7 +230,24 @@ struct Instance : NonCopyable {
     return VK_FALSE;
   }
 
-  Instance() {}
+  Instance() {
+    // https://developer.android.com/games/develop/vulkan/native-engine-support
+    uint32_t version;
+    CheckVkResult(vkEnumerateInstanceVersion(&version));
+    if (version >= VK_API_VERSION_1_3) {
+      Logger::Info("VULKAN_1_3");
+      this->appInfo.apiVersion = VK_API_VERSION_1_3;
+    } else if (version >= VK_API_VERSION_1_2) {
+      Logger::Info("VULKAN_1_2");
+      this->appInfo.apiVersion = VK_API_VERSION_1_2;
+    } else if (version >= VK_API_VERSION_1_1) {
+      Logger::Info("VULKAN_1_1");
+      this->appInfo.apiVersion = VK_API_VERSION_1_1;
+    } else {
+      Logger::Info("VULKAN_1_0");
+      this->appInfo.apiVersion = VK_API_VERSION_1_0;
+    }
+  }
   ~Instance() {
     if (this->debugReport != VK_NULL_HANDLE) {
       // Remove the debug report callback
@@ -260,12 +287,12 @@ struct Instance : NonCopyable {
       //   this->createInfo.pNext = &this->debugUtilsMessengerCreateInfo;
       // }
     }
-    create_info.enabledLayerCount =
+    this->create_info.enabledLayerCount =
         static_cast<uint32_t>(std::size(this->layers));
-    create_info.ppEnabledLayerNames = this->layers.data();
-    create_info.enabledExtensionCount =
+    this->create_info.ppEnabledLayerNames = this->layers.data();
+    this->create_info.enabledExtensionCount =
         static_cast<uint32_t>(std::size(this->extensions));
-    create_info.ppEnabledExtensionNames = this->extensions.data();
+    this->create_info.ppEnabledExtensionNames = this->extensions.data();
 
     VkInstance instance;
     auto err = vkCreateInstance(&this->create_info, nullptr /*g_Allocator*/,

@@ -74,7 +74,7 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
 void android_main(android_app *app) {
 #if NDEBUG
   bool useDebug = false;
-  vulolxr::Logger::Info("## NDEBUG ##");
+  vuloxr::Logger::Info("## NDEBUG ##");
 #else
   bool useDebug = true;
   vuloxr::Logger::Info("## DEBUG ##");

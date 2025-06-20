@@ -23,6 +23,6 @@ else()
 
 endif()
 
-target_link_libraries(hello_xr PRIVATE vko xro OpenXR::openxr_loader shaderc)
+target_link_libraries(hello_xr PRIVATE vko vuloxr xro OpenXR::openxr_loader shaderc)
 target_sources(hello_xr PRIVATE # logger.cpp
                                 GetXrReferenceSpaceCreateInfo.cpp options.cpp)
