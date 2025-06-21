@@ -232,8 +232,20 @@ struct Vertex {
   Vec2 texCoord;
 };
 
-struct Scene {
-  VkDevice device;
+void main_loop(const std::function<bool()> &runLoop,
+               const vuloxr::vk::Instance &instance,
+               vuloxr::vk::Swapchain &swapchain,
+               const vuloxr::vk::PhysicalDevice &physicalDevice,
+               const vuloxr::vk::Device &device, void *) {
+
+  uint8_t pixels[] = {
+      255, 0,   0,   255, // R
+      0,   255, 0,   255, // G
+      0,   0,   255, 255, // B
+      255, 255, 255, 255, // WHITE
+  };
+  auto texture = std::make_shared<Texture>(
+      physicalDevice, device, physicalDevice.graphicsFamilyIndex, 2, 2, pixels);
 
   vko::IndexedMesh mesh = {
       .inputBindingDescriptions =
@@ -267,73 +279,45 @@ struct Scene {
               .offset = offsetof(Vertex, texCoord),
           },
       }};
-
-  std::shared_ptr<Texture> texture;
-
-  Scene(VkPhysicalDevice physicalDevice, VkDevice _device,
-        uint32_t graphicsQueueFamilyIndex)
-      : device(_device) {
-
-    uint8_t pixels[] = {
-        255, 0,   0,   255, // R
-        0,   255, 0,   255, // G
-        0,   0,   255, 255, // B
-        255, 255, 255, 255, // WHITE
+  {
+    // Interleaving vertex attributes - includes position AND color
+    // attributes!
+    const std::vector<Vertex> vertices = {
+        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // top-left and RED
+        {{0.5f, -0.5f},
+         {0.0f, 1.0f, 0.0f},
+         {1.0f, 0.0f}}, // top-right and GREEN
+        {{0.5f, 0.5f},
+         {0.0f, 0.0f, 1.0f},
+         {1.0f, 1.0f}}, // bottom-right and BLUE
+        {{-0.5f, 0.5f},
+         {1.0f, 1.0f, 1.0f},
+         {0.0f, 1.0f}} // bottom-left and WHITE
     };
-    this->texture = std::make_shared<Texture>(
-        physicalDevice, _device, graphicsQueueFamilyIndex, 2, 2, pixels);
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+    mesh.vertexBuffer = std::make_shared<vko::Buffer>(
+        physicalDevice, device, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    {
-      // Interleaving vertex attributes - includes position AND color
-      // attributes!
-      const std::vector<Vertex> vertices = {
-          {{-0.5f, -0.5f},
-           {1.0f, 0.0f, 0.0f},
-           {0.0f, 0.0f}}, // top-left and RED
-          {{0.5f, -0.5f},
-           {0.0f, 1.0f, 0.0f},
-           {1.0f, 0.0f}}, // top-right and GREEN
-          {{0.5f, 0.5f},
-           {0.0f, 0.0f, 1.0f},
-           {1.0f, 1.0f}}, // bottom-right and BLUE
-          {{-0.5f, 0.5f},
-           {1.0f, 1.0f, 1.0f},
-           {0.0f, 1.0f}} // bottom-left and WHITE
-      };
-      VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-      this->mesh.vertexBuffer = std::make_shared<vko::Buffer>(
-          physicalDevice, device, bufferSize,
-          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-      vko::copyBytesToBufferCommand(
-          physicalDevice, device, graphicsQueueFamilyIndex, vertices.data(),
-          bufferSize, this->mesh.vertexBuffer->buffer);
-    }
-
-    {
-      const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-      this->mesh.indexDrawCount = indices.size();
-      VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-      this->mesh.indexBuffer = std::make_shared<vko::Buffer>(
-          physicalDevice, device, bufferSize,
-          VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-      vko::copyBytesToBufferCommand(physicalDevice, device,
-                                    graphicsQueueFamilyIndex, indices.data(),
-                                    bufferSize, this->mesh.indexBuffer->buffer);
-    }
+    vko::copyBytesToBufferCommand(
+        physicalDevice, device, physicalDevice.graphicsFamilyIndex,
+        vertices.data(), bufferSize, mesh.vertexBuffer->buffer);
   }
-};
 
-void main_loop(const std::function<bool()> &runLoop,
-               const vuloxr::vk::Instance &instance,
-               vuloxr::vk::Swapchain &swapchain,
-               const vuloxr::vk::PhysicalDevice &physicalDevice,
-               const vuloxr::vk::Device &device, void *) {
+  {
+    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
+    mesh.indexDrawCount = indices.size();
+    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+    mesh.indexBuffer = std::make_shared<vko::Buffer>(
+        physicalDevice, device, bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-  Scene scene(physicalDevice, device, physicalDevice.graphicsFamilyIndex);
+    vko::copyBytesToBufferCommand(
+        physicalDevice, device, physicalDevice.graphicsFamilyIndex,
+        indices.data(), bufferSize, mesh.indexBuffer->buffer);
+  }
 
   VkQueue graphicsQueue;
   vkGetDeviceQueue(device, physicalDevice.graphicsFamilyIndex, 0,
@@ -397,8 +381,8 @@ void main_loop(const std::function<bool()> &runLoop,
   auto pipeline = builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
-      scene.mesh.inputBindingDescriptions, scene.mesh.attributeDescriptions, {},
-      {}, {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
+      mesh.inputBindingDescriptions, mesh.attributeDescriptions, {}, {},
+      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
@@ -437,8 +421,8 @@ void main_loop(const std::function<bool()> &runLoop,
                 .range = sizeof(UniformBufferObject),
             },
             VkDescriptorImageInfo{
-                .sampler = scene.texture->sampler,
-                .imageView = scene.texture->imageView,
+                .sampler = texture->sampler,
+                .imageView = texture->imageView,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             });
 
@@ -452,9 +436,7 @@ void main_loop(const std::function<bool()> &runLoop,
               cmd, pipeline.renderPass, backbuffer->framebuffer,
               swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
               pipelineLayout, descriptorSet);
-          // recording.drawIndexed(scene.mesh);
           vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-          auto mesh = scene.mesh;
           if (mesh.vertexBuffer->buffer != VK_NULL_HANDLE) {
             VkBuffer vertexBuffers[] = {mesh.vertexBuffer->buffer};
             VkDeviceSize offsets[] = {0};
