@@ -91,8 +91,9 @@ void main_loop(const std::function<bool()> &runLoop,
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
   vuloxr::FrameCounter counter;
   while (runLoop()) {
@@ -110,11 +111,13 @@ void main_loop(const std::function<bool()> &runLoop,
 
       // All queue submissions get a fence that CPU will wait
       // on for synchronization purposes.
-      auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+      auto [index, flight] = flightManager.sync(acquireSemaphore);
+      auto cmd = pool.commandBuffers[index];
 
       {
         vuloxr::vk::RenderPassRecording recording(
-            cmd, pipeline.renderPass, backbuffer->framebuffer,
+            cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            pipeline.renderPass, backbuffer->framebuffer,
             swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
         mesh.draw(cmd, pipeline);
       }

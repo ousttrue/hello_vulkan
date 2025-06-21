@@ -47,8 +47,9 @@ void main_loop(const std::function<bool()> &runLoop,
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> images(
       swapchain.images.size());
 
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
@@ -62,13 +63,15 @@ void main_loop(const std::function<bool()> &runLoop,
       images[acquired.imageIndex] = image;
     }
 
-    auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+    auto [index, flight] = flightManager.sync(acquireSemaphore);
+    auto cmd = pool.commandBuffers[index];
     vkResetCommandBuffer(cmd, 0);
 
     {
       vuloxr::vk::RenderPassRecording recording(
-          cmd, pipeline.renderPass, image->framebuffer,
-          swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f});
+          cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, pipeline.renderPass,
+          image->framebuffer, swapchain.createInfo.imageExtent,
+          {0.0f, 0.0f, 0.0f, 1.0f});
       recording.draw(pipeline.graphicsPipeline, nullptr, 3);
     }
 

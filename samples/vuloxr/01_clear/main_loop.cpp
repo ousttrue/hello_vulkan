@@ -61,15 +61,17 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
   while (runLoop()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
     vuloxr::vk::CheckVkResult(res);
 
-    auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+    auto [index, flight] = flightManager.sync(acquireSemaphore);
+    auto cmd = pool.commandBuffers[index];
 
     {
       vkResetCommandBuffer(cmd, 0);

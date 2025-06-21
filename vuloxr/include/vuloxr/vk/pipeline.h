@@ -90,7 +90,8 @@ struct RenderPassRecording : NonCopyable {
     float r, g, b, a;
   };
 
-  RenderPassRecording(VkCommandBuffer _commandBuffer, VkRenderPass renderPass,
+  RenderPassRecording(VkCommandBuffer _commandBuffer,
+                      VkCommandBufferUsageFlags flags, VkRenderPass renderPass,
                       VkFramebuffer framebuffer, VkExtent2D extent,
                       const ClearColor &clearColor,
                       VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
@@ -98,7 +99,7 @@ struct RenderPassRecording : NonCopyable {
       : commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        // .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .flags = flags, // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
     CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
 

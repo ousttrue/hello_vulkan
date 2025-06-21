@@ -221,8 +221,9 @@ void main_loop(const std::function<bool()> &runLoop,
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
   // Main loop
   while (runLoop()) {
@@ -308,7 +309,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
         // All queue submissions get a fence that CPU will wait
         // on for synchronization purposes.
-        auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+        auto [index, flight] = flightManager.sync(acquireSemaphore);
+        auto cmd = pool.commandBuffers[index];
         vkResetCommandBuffer(cmd, 0);
 
         imvulkan.render(cmd, backbuffer->framebuffer,

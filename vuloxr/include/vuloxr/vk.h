@@ -916,21 +916,14 @@ struct Flight {
   VkSemaphore acquireSemaphore;
 };
 
-struct FlightManager {
-  VkDevice device = VK_NULL_HANDLE;
+struct CommandBufferPool : NonCopyable {
+  VkDevice device;
   VkCommandPool pool = VK_NULL_HANDLE;
   std::vector<VkCommandBuffer> commandBuffers;
-  std::vector<Flight> flights;
-  uint32_t frameCount = 0;
 
-  std::list<VkSemaphore> acquireSemaphoresOwn;
-  std::list<VkSemaphore> acquireSemaphoresReuse;
-
-public:
-  FlightManager(VkDevice _device, uint32_t graphicsQueueIndex,
-                uint32_t flightCount)
-      : device(_device), commandBuffers(flightCount), flights(flightCount) {
-    Logger::Verbose("frames in flight: %d", flightCount);
+  CommandBufferPool(VkDevice _device, uint32_t graphicsQueueIndex,
+                    uint32_t poolSize)
+      : device(_device), commandBuffers(poolSize) {
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
@@ -944,11 +937,35 @@ public:
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = this->pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = flightCount,
+        .commandBufferCount = poolSize,
     };
     CheckVkResult(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
                                            this->commandBuffers.data()));
+  }
 
+  ~CommandBufferPool() {
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+    }
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+};
+
+struct FlightManager : NonCopyable {
+  VkDevice device = VK_NULL_HANDLE;
+
+  std::vector<Flight> flights;
+  uint32_t frameCount = 0;
+
+  std::list<VkSemaphore> acquireSemaphoresOwn;
+  std::list<VkSemaphore> acquireSemaphoresReuse;
+
+public:
+  FlightManager(VkDevice _device, uint32_t flightCount)
+      : device(_device), flights(flightCount) {
+    Logger::Verbose("frames in flight: %d", flightCount);
     for (auto &flight : this->flights) {
       VkFenceCreateInfo fenceInfo = {
           .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -974,13 +991,6 @@ public:
       vkDestroyFence(this->device, flight.submitFence, nullptr);
       vkDestroySemaphore(this->device, flight.submitSemaphore, nullptr);
     }
-
-    if (this->commandBuffers.size()) {
-      vkFreeCommandBuffers(this->device, this->pool,
-                           this->commandBuffers.size(),
-                           this->commandBuffers.data());
-    }
-    vkDestroyCommandPool(this->device, this->pool, nullptr);
   }
 
   VkSemaphore getOrCreateSemaphore() {
@@ -1001,7 +1011,7 @@ public:
     return semaphore;
   }
 
-  std::tuple<VkCommandBuffer, Flight> sync(VkSemaphore acquireSemaphore) {
+  std::tuple<uint32_t, Flight> sync(VkSemaphore acquireSemaphore) {
     auto index = (this->frameCount++) % this->flights.size();
     // keep acquireSemaphore
     auto &flight = this->flights[index];
@@ -1015,9 +1025,7 @@ public:
     vkWaitForFences(this->device, 1, &flight.submitFence, true, UINT64_MAX);
     vkResetFences(this->device, 1, &flight.submitFence);
 
-    auto cmd = this->commandBuffers[index];
-
-    return {cmd, flight};
+    return {index, flight};
   }
 
   void reuseSemaphore(VkSemaphore semaphore) {

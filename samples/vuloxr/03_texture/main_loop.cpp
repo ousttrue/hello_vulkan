@@ -299,8 +299,9 @@ void main_loop(const std::function<bool()> &runLoop,
   std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
       swapchain.images.size());
 
-  vuloxr::vk::FlightManager flightManager(
-      device, physicalDevice.graphicsFamilyIndex, swapchain.images.size());
+  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
+                                     swapchain.images.size());
 
   while (runLoop()) {
     // * 1. Aquires an image from the swap chain
@@ -308,11 +309,12 @@ void main_loop(const std::function<bool()> &runLoop,
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
     if (res == VK_SUCCESS) {
 
-      auto [cmd, flight] = flightManager.sync(acquireSemaphore);
+      auto [index, flight] = flightManager.sync(acquireSemaphore);
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
       auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
+      auto cmd = pool.commandBuffers[acquired.imageIndex];
 
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
@@ -338,7 +340,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
         {
           vuloxr::vk::RenderPassRecording recording(
-              cmd, pipeline.renderPass, backbuffer->framebuffer,
+              cmd, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+              pipeline.renderPass, backbuffer->framebuffer,
               swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
               pipelineLayout, descriptorSet);
 
