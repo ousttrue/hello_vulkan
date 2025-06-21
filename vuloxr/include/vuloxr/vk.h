@@ -183,20 +183,23 @@ struct PhysicalDevice {
     return str;
   }
 
-  struct MemoryRequirement {
-    VkDeviceSize size;
+  struct SizeAndTypeIndex {
+    VkDeviceSize requiredSize;
     uint32_t memoryTypeIndex;
   };
 
-  MemoryRequirement findMemoryTypeIndex(VkDevice device, VkBuffer buffer,
-                                        uint32_t hostRequirements) const {
-    VkMemoryRequirements memReqs;
-    vkGetBufferMemoryRequirements(device, buffer, &memReqs);
+  SizeAndTypeIndex
+  findMemoryTypeIndex(VkDevice device,
+                      const VkMemoryRequirements &memoryRequirements,
+                      uint32_t hostRequirements) const {
     for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
-      if (memReqs.memoryTypeBits & (1u << i)) {
+      if (memoryRequirements.memoryTypeBits & (1u << i)) {
         if ((this->memoryProps.memoryTypes[i].propertyFlags &
              hostRequirements)) {
-          return {.size = memReqs.size, .memoryTypeIndex = i};
+          return {
+              .requiredSize = memoryRequirements.size,
+              .memoryTypeIndex = i,
+          };
         }
       }
     }
@@ -208,22 +211,38 @@ struct PhysicalDevice {
                                             const void *src,
                                             uint32_t srcSize) const {
     // alloc
-    auto memReq =
-        this->findMemoryTypeIndex(device, buffer,
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
+    auto [requiredSize, typeIndex] =
+        this->findMemoryTypeIndex(device, memoryRequirements,
                                   // for map
                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    assert(memReq.size >= srcSize);
-    auto memory = createBindMemory(device, memReq.size, memReq.memoryTypeIndex);
+    assert(requiredSize >= srcSize);
+    auto memory = createBindMemory(device, requiredSize, typeIndex);
     // bind
     vkBindBufferMemory(device, buffer, memory, 0);
+    // map & copy
     {
-      // map & copy
       void *dst;
       CheckVkResult(vkMapMemory(device, memory, 0, srcSize, 0, &dst));
       memcpy(dst, src, srcSize);
       vkUnmapMemory(device, memory);
     }
+    return memory;
+  }
+
+  VkDeviceMemory allocMemoryForImage(VkDevice device, VkImage image) const {
+    // alloc
+    VkMemoryRequirements memoryRequirements;
+    vkGetImageMemoryRequirements(device, image, &memoryRequirements);
+    auto [requiredSize, typeIndex] =
+        this->findMemoryTypeIndex(device, memoryRequirements,
+                                  // for copy command
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    auto memory = createBindMemory(device, requiredSize, typeIndex);
+    // bind
+    vkBindImageMemory(device, image, memory, 0);
     return memory;
   }
 };

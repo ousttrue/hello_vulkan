@@ -2,6 +2,7 @@
 #include "../glsl_to_spv.h"
 #include <vko/vko_pipeline.h>
 #include <vuloxr/vk.h>
+#include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/pipeline.h>
 
 const char VS[] = {
@@ -114,107 +115,6 @@ static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-struct Texture {
-  VkDevice device;
-  vko::Image image;
-  VkImageView imageView = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
-
-  Texture(VkPhysicalDevice physicalDevice, VkDevice _device,
-          uint32_t graphicsQueueFamilyIndex, uint32_t width, uint32_t height,
-          const uint8_t *pixels)
-      : device(_device),
-        image(physicalDevice, _device, width, height, VK_FORMAT_R8G8B8A8_SRGB,
-              VK_IMAGE_TILING_OPTIMAL,
-              VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-              VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-
-    int texChannels = 4;
-    VkDeviceSize imageSize = width * height * 4;
-
-    auto stagingBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->memory->assign(pixels, imageSize);
-
-    vko::CommandPool commandPool(device, graphicsQueueFamilyIndex);
-
-    vko::executeCommandSync(
-        device, commandPool.queue, commandPool,
-        [self = this](auto commandBuffer) {
-          transitionImageLayout(
-              commandBuffer, self->image.image, VK_FORMAT_R8G8B8_SRGB,
-              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        });
-
-    vko::executeCommandSync(
-        device, commandPool.queue, commandPool,
-
-        [self = this, stagingBuffer, width, height](auto commandBuffer) {
-          copyBufferToImage(commandBuffer, stagingBuffer->buffer,
-                            self->image.image, static_cast<uint32_t>(width),
-                            static_cast<uint32_t>(height));
-        });
-
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [self = this](auto commandBuffer) {
-                              transitionImageLayout(
-                                  commandBuffer, self->image.image,
-                                  VK_FORMAT_R8G8B8A8_SRGB,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                            });
-
-    {
-      VkImageViewCreateInfo viewInfo{
-          .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-          .image = this->image.image,
-          .viewType = VK_IMAGE_VIEW_TYPE_2D,
-          .format = VK_FORMAT_R8G8B8A8_SRGB, // format;
-          .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                               .baseMipLevel = 0,
-                               .levelCount = 1,
-                               .baseArrayLayer = 0,
-                               .layerCount = 1},
-      };
-      vko::VKO_CHECK(
-          vkCreateImageView(device, &viewInfo, nullptr, &this->imageView));
-    }
-    {
-      VkSamplerCreateInfo samplerInfo{
-          .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-          // next two lines describe how to interpolate texels that are
-          // magnified or minified
-          .magFilter = VK_FILTER_LINEAR,
-          .minFilter = VK_FILTER_LINEAR,
-          // note: image axes are UVW (rather than XYZ)
-          .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-          // repeat the texture when out of bounds
-          .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-          .mipLodBias = 0.0f,
-          .anisotropyEnable = VK_TRUE,
-          .maxAnisotropy = 16.0f,
-          .compareEnable = VK_FALSE,
-          .compareOp = VK_COMPARE_OP_ALWAYS,
-          .minLod = 0.0f,
-          .maxLod = 0.0f,
-          .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-          .unnormalizedCoordinates = VK_FALSE,
-      };
-      vko::VKO_CHECK(
-          vkCreateSampler(device, &samplerInfo, nullptr, &this->sampler));
-    }
-  }
-
-  ~Texture() {
-    vkDestroySampler(this->device, this->sampler, nullptr);
-    vkDestroyImageView(this->device, this->imageView, nullptr);
-  }
-};
-
 struct Vec2 {
   float x;
   float y;
@@ -238,14 +138,55 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  uint8_t pixels[] = {
-      255, 0,   0,   255, // R
-      0,   255, 0,   255, // G
-      0,   0,   255, 255, // B
-      255, 255, 255, 255, // WHITE
-  };
-  auto texture = std::make_shared<Texture>(
-      physicalDevice, device, physicalDevice.graphicsFamilyIndex, 2, 2, pixels);
+  vuloxr::vk::Texture texture(device, 2, 2);
+  auto textureMemory =
+      physicalDevice.allocMemoryForImage(device, texture.image);
+  texture.setMemory(textureMemory);
+
+  {
+    // upload image
+    uint8_t pixels[] = {
+        255, 0,   0,   255, // R
+        0,   255, 0,   255, // G
+        0,   0,   255, 255, // B
+        255, 255, 255, 255, // WHITE
+    };
+    VkDeviceSize imageSize = 2 * 2 * 4;
+
+    auto stagingBuffer = std::make_shared<vko::Buffer>(
+        physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    stagingBuffer->memory->assign(pixels, imageSize);
+
+    vko::CommandPool commandPool(device, physicalDevice.graphicsFamilyIndex);
+
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+                            [image = texture.image](auto commandBuffer) {
+                              transitionImageLayout(
+                                  commandBuffer, image, VK_FORMAT_R8G8B8_SRGB,
+                                  VK_IMAGE_LAYOUT_UNDEFINED,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                            });
+
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+
+                            [image = texture.image, stagingBuffer, width = 2,
+                             height = 2](auto commandBuffer) {
+                              copyBufferToImage(commandBuffer,
+                                                stagingBuffer->buffer, image,
+                                                static_cast<uint32_t>(width),
+                                                static_cast<uint32_t>(height));
+                            });
+
+    vko::executeCommandSync(device, commandPool.queue, commandPool,
+                            [image = texture.image](auto commandBuffer) {
+                              transitionImageLayout(
+                                  commandBuffer, image, VK_FORMAT_R8G8B8A8_SRGB,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                            });
+  }
 
   vko::IndexedMesh mesh = {
       .inputBindingDescriptions =
@@ -318,10 +259,6 @@ void main_loop(const std::function<bool()> &runLoop,
         physicalDevice, device, physicalDevice.graphicsFamilyIndex,
         indices.data(), bufferSize, mesh.indexBuffer->buffer);
   }
-
-  VkQueue graphicsQueue;
-  vkGetDeviceQueue(device, physicalDevice.graphicsFamilyIndex, 0,
-                   &graphicsQueue);
 
   vko::DescriptorSets descriptorSets(
       device,
@@ -413,18 +350,13 @@ void main_loop(const std::function<bool()> &runLoop,
                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         uniformBuffers[acquired.imageIndex] = ubo;
 
-        descriptorSets.update(
-            acquired.imageIndex,
-            VkDescriptorBufferInfo{
-                .buffer = ubo->buffer,
-                .offset = 0,
-                .range = sizeof(UniformBufferObject),
-            },
-            VkDescriptorImageInfo{
-                .sampler = texture->sampler,
-                .imageView = texture->imageView,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            });
+        descriptorSets.update(acquired.imageIndex,
+                              VkDescriptorBufferInfo{
+                                  .buffer = ubo->buffer,
+                                  .offset = 0,
+                                  .range = sizeof(UniformBufferObject),
+                              },
+                              texture.descriptorInfo);
 
         backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
             device, acquired.image, swapchain.createInfo.imageExtent,
