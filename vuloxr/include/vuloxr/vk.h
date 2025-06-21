@@ -72,6 +72,18 @@ public:
   }
 };
 
+inline VkDeviceMemory createBindMemory(VkDevice device, uint32_t reqSize,
+                                       uint32_t memoryTypeIndex) {
+  VkMemoryAllocateInfo alloc = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = reqSize,
+      .memoryTypeIndex = memoryTypeIndex,
+  };
+  VkDeviceMemory memory;
+  vuloxr::vk::CheckVkResult(vkAllocateMemory(device, &alloc, nullptr, &memory));
+  return memory;
+}
+
 struct PhysicalDevice {
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   operator VkPhysicalDevice() const { return this->physicalDevice; }
@@ -81,6 +93,7 @@ struct PhysicalDevice {
   VkPhysicalDeviceFeatures features = {};
   std::vector<VkQueueFamilyProperties> queueFamilyProperties;
   uint32_t graphicsFamilyIndex = UINT_MAX;
+  VkPhysicalDeviceMemoryProperties memoryProps = {};
 
   // PhysicalDevice() {}
   PhysicalDevice(VkPhysicalDevice _physicalDevice)
@@ -110,6 +123,9 @@ struct PhysicalDevice {
     vkEnumerateDeviceExtensionProperties(
         this->physicalDevice, nullptr, &properties_count,
         this->deviceExtensionProperties.data());
+
+    vkGetPhysicalDeviceMemoryProperties(this->physicalDevice,
+                                        &this->memoryProps);
   }
   ~PhysicalDevice() {}
 
@@ -152,6 +168,7 @@ struct PhysicalDevice {
               .c_str());
     }
   }
+
   static std::string queueFlagBitsStr(VkQueueFlags f, const char *enable,
                                       const char *disable) {
     std::string str;
@@ -164,6 +181,50 @@ struct PhysicalDevice {
     str += f & VK_QUEUE_VIDEO_ENCODE_BIT_KHR ? enable : disable;
     str += f & VK_QUEUE_OPTICAL_FLOW_BIT_NV ? enable : disable;
     return str;
+  }
+
+  struct MemoryRequirement {
+    VkDeviceSize size;
+    uint32_t memoryTypeIndex;
+  };
+
+  MemoryRequirement findMemoryTypeIndex(VkDevice device, VkBuffer buffer,
+                                        uint32_t hostRequirements) const {
+    VkMemoryRequirements memReqs;
+    vkGetBufferMemoryRequirements(device, buffer, &memReqs);
+    for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++) {
+      if (memReqs.memoryTypeBits & (1u << i)) {
+        if ((this->memoryProps.memoryTypes[i].propertyFlags &
+             hostRequirements)) {
+          return {.size = memReqs.size, .memoryTypeIndex = i};
+        }
+      }
+    }
+    vuloxr::Logger::Error("Failed to obtain suitable memory type.\n");
+    abort();
+  }
+
+  VkDeviceMemory allocAndMapMemoryForBuffer(VkDevice device, VkBuffer buffer,
+                                            const void *src,
+                                            uint32_t srcSize) const {
+    // alloc
+    auto memReq =
+        this->findMemoryTypeIndex(device, buffer,
+                                  // for map
+                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    assert(memReq.size >= srcSize);
+    auto memory = createBindMemory(device, memReq.size, memReq.memoryTypeIndex);
+    // bind
+    vkBindBufferMemory(device, buffer, memory, 0);
+    {
+      // map & copy
+      void *dst;
+      CheckVkResult(vkMapMemory(device, memory, 0, srcSize, 0, &dst));
+      memcpy(dst, src, srcSize);
+      vkUnmapMemory(device, memory);
+    }
+    return memory;
   }
 };
 

@@ -35,17 +35,16 @@ static const Vertex data[] = {
     },
 };
 
+struct MapMemory {};
+
 void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  VkPhysicalDeviceMemoryProperties props;
-  vkGetPhysicalDeviceMemoryProperties(physicalDevice, &props);
-
-  auto mesh = vuloxr::vk::Mesh::create<Vertex>(
-      physicalDevice, device, data,
+  auto mesh = vuloxr::vk::Mesh::create(
+      device, sizeof(data),
       {{
           .binding = 0,
           .stride = sizeof(Vertex),
@@ -65,6 +64,9 @@ void main_loop(const std::function<bool()> &runLoop,
               .offset = offsetof(Vertex, color), // 4 * sizeof(float),
           },
       });
+
+  auto meshMemory = physicalDevice.allocAndMapMemoryForBuffer(
+      device, mesh.vertices, data, sizeof(data));
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
@@ -114,8 +116,7 @@ void main_loop(const std::function<bool()> &runLoop,
         vuloxr::vk::RenderPassRecording recording(
             cmd, pipeline.renderPass, backbuffer->framebuffer,
             swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
-        // recording.draw(pipeline, vertexBuffer->_buffer, 3);
-        mesh.draw(cmd, pipeline);
+        mesh.draw(cmd, pipeline, 3);
       }
 
       vuloxr::vk::CheckVkResult(device.submit(
