@@ -36,8 +36,7 @@ target_link_libraries(02_triangle PRIVATE vko)
 add_vuloxr_sample(02_hellotriangle glsl_to_spv.cpp
                   02_hellotriangle/main_loop.cpp)
 target_link_libraries(02_hellotriangle PRIVATE vko)
-add_vuloxr_sample(03_texture glsl_to_spv.cpp 03_texture/main_loop.cpp
-                  03_texture/scene.cpp)
+add_vuloxr_sample(03_texture glsl_to_spv.cpp 03_texture/main_loop.cpp)
 target_link_libraries(03_texture PRIVATE vko)
 
 if(ANDROID)
