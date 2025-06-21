@@ -139,9 +139,7 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Device &device, void *) {
 
   vuloxr::vk::Texture texture(device, 2, 2);
-  auto textureMemory =
-      physicalDevice.allocMemoryForImage(device, texture.image);
-  texture.setMemory(textureMemory);
+  texture.setMemory(physicalDevice.allocMemoryForImage(device, texture.image));
 
   {
     // upload image
@@ -188,16 +186,22 @@ void main_loop(const std::function<bool()> &runLoop,
                             });
   }
 
-  vko::IndexedMesh mesh = {
-      .inputBindingDescriptions =
+  Vertex vertices[] = {
+      {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // top-left and RED
+      {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},  // top-right and GREEN
+      {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom-right and BLUE
+      {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}} // bottom-left and WHITE
+  };
+  auto vertexBuffer = vuloxr::vk::VertexBuffer::create(
+      device, sizeof(vertices), std::size(vertices),
+      {
           {
-              {
-                  .binding = 0,
-                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
-                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-              },
+              .binding = 0,
+              .stride = static_cast<uint32_t>(sizeof(Vertex)),
+              .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
           },
-      .attributeDescriptions = {
+      },
+      {
           // describes position
           {
               .location = 0,
@@ -219,46 +223,15 @@ void main_loop(const std::function<bool()> &runLoop,
               .format = VK_FORMAT_R32G32_SFLOAT,
               .offset = offsetof(Vertex, texCoord),
           },
-      }};
-  {
-    // Interleaving vertex attributes - includes position AND color
-    // attributes!
-    const std::vector<Vertex> vertices = {
-        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // top-left and RED
-        {{0.5f, -0.5f},
-         {0.0f, 1.0f, 0.0f},
-         {1.0f, 0.0f}}, // top-right and GREEN
-        {{0.5f, 0.5f},
-         {0.0f, 0.0f, 1.0f},
-         {1.0f, 1.0f}}, // bottom-right and BLUE
-        {{-0.5f, 0.5f},
-         {1.0f, 1.0f, 1.0f},
-         {0.0f, 1.0f}} // bottom-left and WHITE
-    };
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-    mesh.vertexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+      });
+  vertexBuffer.memory = physicalDevice.allocAndMapMemoryForBuffer(
+      device, vertexBuffer.buffer, vertices, sizeof(vertices));
 
-    vko::copyBytesToBufferCommand(
-        physicalDevice, device, physicalDevice.graphicsFamilyIndex,
-        vertices.data(), bufferSize, mesh.vertexBuffer->buffer);
-  }
-
-  {
-    const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-    mesh.indexDrawCount = indices.size();
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-    mesh.indexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vko::copyBytesToBufferCommand(
-        physicalDevice, device, physicalDevice.graphicsFamilyIndex,
-        indices.data(), bufferSize, mesh.indexBuffer->buffer);
-  }
+  uint16_t indices[] = {0, 1, 2, 2, 3, 0};
+  auto indexBuffer = vuloxr::vk::IndexBuffer::create(
+      device, sizeof(indices), std::size(indices), VK_INDEX_TYPE_UINT16);
+  indexBuffer.memory = physicalDevice.allocAndMapMemoryForBuffer(
+      device, indexBuffer.buffer, indices, sizeof(indices));
 
   vko::DescriptorSets descriptorSets(
       device,
@@ -318,7 +291,7 @@ void main_loop(const std::function<bool()> &runLoop,
   auto pipeline = builder.create(
       device, renderPass, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
-      mesh.inputBindingDescriptions, mesh.attributeDescriptions, {}, {},
+      vertexBuffer.bindings, vertexBuffer.attributes, {}, {},
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
@@ -368,17 +341,8 @@ void main_loop(const std::function<bool()> &runLoop,
               cmd, pipeline.renderPass, backbuffer->framebuffer,
               swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
               pipelineLayout, descriptorSet);
-          vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-          if (mesh.vertexBuffer->buffer != VK_NULL_HANDLE) {
-            VkBuffer vertexBuffers[] = {mesh.vertexBuffer->buffer};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-          }
-          if (mesh.indexBuffer->buffer != VK_NULL_HANDLE) {
-            vkCmdBindIndexBuffer(cmd, mesh.indexBuffer->buffer, 0,
-                                 VK_INDEX_TYPE_UINT16);
-          }
-          vkCmdDrawIndexed(cmd, mesh.indexDrawCount, 1, 0, 0, 0);
+
+          indexBuffer.draw(cmd, pipeline, vertexBuffer.buffer);
         }
       }
 

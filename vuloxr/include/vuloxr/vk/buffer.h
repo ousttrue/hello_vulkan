@@ -7,43 +7,84 @@ namespace vuloxr {
 
 namespace vk {
 
-inline VkBuffer createVertexBuffer(VkDevice device, uint32_t bufferSize) {
-  VkBufferCreateInfo info = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = bufferSize,
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-  };
-  VkBuffer buffer;
-  CheckVkResult(vkCreateBuffer(device, &info, nullptr, &buffer));
-  return buffer;
-}
-
-struct Mesh : NonCopyable {
+struct VertexBuffer : NonCopyable {
   VkDevice device;
-  VkBuffer vertices;
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  uint32_t drawCount = 0;
   std::vector<VkVertexInputBindingDescription> bindings;
   std::vector<VkVertexInputAttributeDescription> attributes;
 
-  ~Mesh() { vkDestroyBuffer(this->device, this->vertices, nullptr); }
+  ~VertexBuffer() {
+    vkFreeMemory(this->device, this->memory, nullptr);
+    vkDestroyBuffer(this->device, this->buffer, nullptr);
+  }
 
-  static Mesh
-  create(VkDevice device, uint32_t bufferSize,
+  static VertexBuffer
+  create(VkDevice device, uint32_t bufferSize, uint32_t drawCount,
          const std::vector<VkVertexInputBindingDescription> &bindings,
          const std::vector<VkVertexInputAttributeDescription> &attributes) {
-    auto buffer = createVertexBuffer(device, bufferSize);
+    VkBufferCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = bufferSize,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+    };
+    VkBuffer buffer;
+    CheckVkResult(vkCreateBuffer(device, &info, nullptr, &buffer));
+
     return {
         .device = device,
-        .vertices = buffer,
+        .buffer = buffer,
+        .drawCount = drawCount,
         .bindings = bindings,
         .attributes = attributes,
     };
   }
 
-  void draw(VkCommandBuffer cmd, VkPipeline pipeline, uint32_t vertexCount) {
+  void draw(VkCommandBuffer cmd, VkPipeline pipeline) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &this->vertices, &offset);
-    vkCmdDraw(cmd, vertexCount, 1, 0, 0);
+    vkCmdBindVertexBuffers(cmd, 0, 1, &this->buffer, &offset);
+    vkCmdDraw(cmd, this->drawCount, 1, 0, 0);
+  }
+};
+
+struct IndexBuffer : NonCopyable {
+  VkDevice device = VK_NULL_HANDLE;
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  uint32_t drawCount;
+  VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+
+  ~IndexBuffer() {
+    vkFreeMemory(this->device, this->memory, nullptr);
+    vkDestroyBuffer(this->device, this->buffer, nullptr);
+  }
+
+  static IndexBuffer create(VkDevice device, uint32_t bufferSize,
+                            uint32_t drawCount, VkIndexType indexType) {
+    VkBufferCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = bufferSize,
+        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+    };
+    VkBuffer buffer;
+    CheckVkResult(vkCreateBuffer(device, &info, nullptr, &buffer));
+
+    return {
+        .device = device,
+        .buffer = buffer,
+        .drawCount = drawCount,
+        .indexType = indexType,
+    };
+  }
+
+  void draw(VkCommandBuffer cmd, VkPipeline pipeline, VkBuffer vertices) {
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &vertices, &offset);
+    vkCmdBindIndexBuffer(cmd, this->buffer, 0, this->indexType);
+    vkCmdDrawIndexed(cmd, this->drawCount, 1, 0, 0, 0);
   }
 };
 
@@ -78,11 +119,9 @@ struct Texture : NonCopyable {
     };
     CheckVkResult(
         vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
-
   }
 
-  void setMemory(VkDeviceMemory memory)
-  {
+  void setMemory(VkDeviceMemory memory) {
     this->memory = memory;
 
     VkImageViewCreateInfo viewInfo{

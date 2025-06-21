@@ -43,8 +43,8 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  auto mesh = vuloxr::vk::Mesh::create(
-      device, sizeof(data),
+  auto mesh = vuloxr::vk::VertexBuffer::create(
+      device, sizeof(data), std::size(data),
       {{
           .binding = 0,
           .stride = sizeof(Vertex),
@@ -66,7 +66,7 @@ void main_loop(const std::function<bool()> &runLoop,
       });
 
   auto meshMemory = physicalDevice.allocAndMapMemoryForBuffer(
-      device, mesh.vertices, data, sizeof(data));
+      device, mesh.buffer, data, sizeof(data));
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
@@ -116,7 +116,7 @@ void main_loop(const std::function<bool()> &runLoop,
         vuloxr::vk::RenderPassRecording recording(
             cmd, pipeline.renderPass, backbuffer->framebuffer,
             swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
-        mesh.draw(cmd, pipeline, 3);
+        mesh.draw(cmd, pipeline);
       }
 
       vuloxr::vk::CheckVkResult(device.submit(
