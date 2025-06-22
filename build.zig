@@ -184,6 +184,33 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
+
+    // E:\repos\github.com\ousttrue\hello_vulkan\samples\android_openxr_gles\gl2triOXR
+    build_apk(
+        b,
+        tools,
+        so,
+        .{
+            .package_name = "com.example.gl2triOXR",
+            .apk_name = "gl2triOXR",
+            .contents = .{
+                .android_manifest = b.path("samples/android_openxr_gles/gl2triOXR/AndroidManifest.xml"),
+                // .assets_directory = shaders_wf.getDirectory(),
+                .appends = &.{
+                    .{ .path = .{
+                        .src = so.build_dir.path(b, "samples/android_openxr_gles/gl2triOXR/libgl2triOXR.so"),
+                        .dst = "lib/arm64-v8a/libgl2triOXR.so",
+                    } },
+                    .{
+                        .path = .{
+                            .src = so.build_dir.path(b, "_deps/openxr-build/src/loader/libopenxr_loader.so"),
+                            .dst = "lib/arm64-v8a/libopenxr_loader.so",
+                        },
+                    },
+                },
+            },
+        },
+    );
 }
 
 const ApkOpts = struct {

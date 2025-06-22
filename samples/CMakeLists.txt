@@ -70,7 +70,7 @@ if(ANDROID_NDK)
   FetchContent_MakeAvailable(glslang)
 
   # https://developer.android.com/ndk/guides/graphics/shader-compilers
-  subdirs(ovr_openxr_mobile_sdk)
+  subdirs(ovr_openxr_mobile_sdk android_openxr_gles)
 else()
   FetchContent_Declare(zlib URL https://zlib.net/zlib-1.3.1.tar.gz)
   FetchContent_MakeAvailable(zlib)

@@ -24,7 +24,6 @@ find_package(
 
 include(FetchContent)
 if(ANDROID)
-
 else()
   set(BUILD_SHARED_LIBS OFF)
   set(GLFW_BUILD_EXAMPLES OFF)
@@ -59,7 +58,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(magic_enum)
 
-set(JSONCPP_WITH_TESTS OFF) 
+set(JSONCPP_WITH_TESTS OFF)
 FetchContent_Declare(
   jsoncpp
   URL https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.zip
