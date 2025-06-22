@@ -122,7 +122,7 @@ void _android_main(struct android_app *app) {
           xr_instance.instance, xr_instance.systemId, session, appSpace,
           options.Parsed.EnvironmentBlendMode, clearColor,
           options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
-          instance, physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
       // session scope
     }

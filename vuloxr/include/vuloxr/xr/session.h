@@ -33,11 +33,11 @@ struct Session : NonCopyable {
     // Select a swapchain format.
     uint32_t swapchainFormatCount;
     CheckXrResult(xrEnumerateSwapchainFormats(this->session, 0,
-                                          &swapchainFormatCount, nullptr));
+                                              &swapchainFormatCount, nullptr));
     this->formats.resize(swapchainFormatCount);
-    CheckXrResult(xrEnumerateSwapchainFormats(this->session, swapchainFormatCount,
-                                          &swapchainFormatCount,
-                                          (int64_t *)formats.data()));
+    CheckXrResult(xrEnumerateSwapchainFormats(
+        this->session, swapchainFormatCount, &swapchainFormatCount,
+        (int64_t *)formats.data()));
   }
   ~Session() {
     Logger::Info("xro::Session::~Session ...");
@@ -72,7 +72,7 @@ struct Session : NonCopyable {
         if (selected) {
           swapchainFormatsString += "[";
         }
-        swapchainFormatsString += std::to_string(format);
+        swapchainFormatsString += magic_enum::enum_name(format);
         if (selected) {
           swapchainFormatsString += "]";
         }
@@ -213,7 +213,7 @@ public:
         const auto &instanceLossPending =
             *reinterpret_cast<const XrEventDataInstanceLossPending *>(event);
         Logger::Error("XrEventDataInstanceLossPending by %lld",
-                           instanceLossPending.lossTime);
+                      instanceLossPending.lossTime);
         return {true, true, m_sessionRunning};
       }
 
@@ -269,11 +269,11 @@ private:
     const XrSessionState oldState = m_sessionState;
     m_sessionState = stateChangedEvent.state;
 
-    // Logger::Info("XrEventDataSessionStateChanged: state %s->%s
-    // session=%lld "
-    //                   "time=%lld",
-    //                   to_string(oldState), to_string(m_sessionState),
-    //                   stateChangedEvent.session, stateChangedEvent.time);
+    Logger::Info("XrEventDataSessionStateChanged: state %s->%s session = % lld "
+                 "time=%lld",
+                 magic_enum::enum_name(oldState).data(),
+                 magic_enum::enum_name(m_sessionState).data(),
+                 stateChangedEvent.session, stateChangedEvent.time);
 
     if ((stateChangedEvent.session != XR_NULL_HANDLE) &&
         (stateChangedEvent.session != m_session)) {
@@ -347,15 +347,16 @@ struct InputState {
       str_cpy(actionSetInfo.actionSetName, "gameplay");
       str_cpy(actionSetInfo.localizedActionSetName, "Gameplay");
       actionSetInfo.priority = 0;
-      CheckXrResult(xrCreateActionSet(instance, &actionSetInfo, &this->actionSet));
+      CheckXrResult(
+          xrCreateActionSet(instance, &actionSetInfo, &this->actionSet));
     }
 
     // Get the XrPath for the left and right hands - we will use them as
     // subaction paths.
     CheckXrResult(xrStringToPath(instance, "/user/hand/left",
-                             &this->handSubactionPath[Side::LEFT]));
+                                 &this->handSubactionPath[Side::LEFT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/right",
-                             &this->handSubactionPath[Side::RIGHT]));
+                                 &this->handSubactionPath[Side::RIGHT]));
 
     // Create actions.
     {
@@ -411,47 +412,56 @@ struct InputState {
     std::array<XrPath, Side::COUNT> bClickPath;
     std::array<XrPath, Side::COUNT> triggerValuePath;
     CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/select/click",
-                             &selectPath[Side::LEFT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/select/click",
-                             &selectPath[Side::RIGHT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/squeeze/value",
-                             &squeezeValuePath[Side::LEFT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/squeeze/value",
-                             &squeezeValuePath[Side::RIGHT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/squeeze/force",
-                             &squeezeForcePath[Side::LEFT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/squeeze/force",
-                             &squeezeForcePath[Side::RIGHT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/squeeze/click",
-                             &squeezeClickPath[Side::LEFT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/squeeze/click",
-                             &squeezeClickPath[Side::RIGHT]));
+                                 &selectPath[Side::LEFT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/right/input/select/click",
+                                 &selectPath[Side::RIGHT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/left/input/squeeze/value",
+                                 &squeezeValuePath[Side::LEFT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/right/input/squeeze/value",
+                                 &squeezeValuePath[Side::RIGHT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/left/input/squeeze/force",
+                                 &squeezeForcePath[Side::LEFT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/right/input/squeeze/force",
+                                 &squeezeForcePath[Side::RIGHT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/left/input/squeeze/click",
+                                 &squeezeClickPath[Side::LEFT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/right/input/squeeze/click",
+                                 &squeezeClickPath[Side::RIGHT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/grip/pose",
-                             &posePath[Side::LEFT]));
+                                 &posePath[Side::LEFT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/grip/pose",
-                             &posePath[Side::RIGHT]));
+                                 &posePath[Side::RIGHT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/left/output/haptic",
-                             &hapticPath[Side::LEFT]));
+                                 &hapticPath[Side::LEFT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/right/output/haptic",
-                             &hapticPath[Side::RIGHT]));
+                                 &hapticPath[Side::RIGHT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/menu/click",
-                             &menuClickPath[Side::LEFT]));
+                                 &menuClickPath[Side::LEFT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/menu/click",
-                             &menuClickPath[Side::RIGHT]));
+                                 &menuClickPath[Side::RIGHT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/b/click",
-                             &bClickPath[Side::LEFT]));
+                                 &bClickPath[Side::LEFT]));
     CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/b/click",
-                             &bClickPath[Side::RIGHT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/left/input/trigger/value",
-                             &triggerValuePath[Side::LEFT]));
-    CheckXrResult(xrStringToPath(instance, "/user/hand/right/input/trigger/value",
-                             &triggerValuePath[Side::RIGHT]));
+                                 &bClickPath[Side::RIGHT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/left/input/trigger/value",
+                                 &triggerValuePath[Side::LEFT]));
+    CheckXrResult(xrStringToPath(instance,
+                                 "/user/hand/right/input/trigger/value",
+                                 &triggerValuePath[Side::RIGHT]));
     // Suggest bindings for KHR Simple.
     {
       XrPath khrSimpleInteractionProfilePath;
-      CheckXrResult(xrStringToPath(instance,
-                               "/interaction_profiles/khr/simple_controller",
-                               &khrSimpleInteractionProfilePath));
+      CheckXrResult(xrStringToPath(
+          instance, "/interaction_profiles/khr/simple_controller",
+          &khrSimpleInteractionProfilePath));
       std::vector<XrActionSuggestedBinding> bindings{
           {// Fall back to a click input for the grab action.
            {this->grabAction, selectPath[Side::LEFT]},
@@ -473,9 +483,9 @@ struct InputState {
     // Suggest bindings for the Oculus Touch.
     {
       XrPath oculusTouchInteractionProfilePath;
-      CheckXrResult(xrStringToPath(instance,
-                               "/interaction_profiles/oculus/touch_controller",
-                               &oculusTouchInteractionProfilePath));
+      CheckXrResult(xrStringToPath(
+          instance, "/interaction_profiles/oculus/touch_controller",
+          &oculusTouchInteractionProfilePath));
       std::vector<XrActionSuggestedBinding> bindings{
           {{this->grabAction, squeezeValuePath[Side::LEFT]},
            {this->grabAction, squeezeValuePath[Side::RIGHT]},
@@ -496,8 +506,8 @@ struct InputState {
     {
       XrPath viveControllerInteractionProfilePath;
       CheckXrResult(xrStringToPath(instance,
-                               "/interaction_profiles/htc/vive_controller",
-                               &viveControllerInteractionProfilePath));
+                                   "/interaction_profiles/htc/vive_controller",
+                                   &viveControllerInteractionProfilePath));
       std::vector<XrActionSuggestedBinding> bindings{
           {{this->grabAction, triggerValuePath[Side::LEFT]},
            {this->grabAction, triggerValuePath[Side::RIGHT]},
@@ -520,9 +530,9 @@ struct InputState {
     // Suggest bindings for the Valve Index Controller.
     {
       XrPath indexControllerInteractionProfilePath;
-      CheckXrResult(xrStringToPath(instance,
-                               "/interaction_profiles/valve/index_controller",
-                               &indexControllerInteractionProfilePath));
+      CheckXrResult(xrStringToPath(
+          instance, "/interaction_profiles/valve/index_controller",
+          &indexControllerInteractionProfilePath));
       std::vector<XrActionSuggestedBinding> bindings{
           {{this->grabAction, squeezeForcePath[Side::LEFT]},
            {this->grabAction, squeezeForcePath[Side::RIGHT]},
@@ -571,10 +581,10 @@ struct InputState {
     actionSpaceInfo.poseInActionSpace.orientation.w = 1.f;
     actionSpaceInfo.subactionPath = this->handSubactionPath[Side::LEFT];
     CheckXrResult(xrCreateActionSpace(this->session, &actionSpaceInfo,
-                                  &this->hands[Side::LEFT].space));
+                                      &this->hands[Side::LEFT].space));
     actionSpaceInfo.subactionPath = this->handSubactionPath[Side::RIGHT];
     CheckXrResult(xrCreateActionSpace(this->session, &actionSpaceInfo,
-                                  &this->hands[Side::RIGHT].space));
+                                      &this->hands[Side::RIGHT].space));
 
     XrSessionActionSetsAttachInfo attachInfo{
         XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
@@ -603,8 +613,8 @@ struct InputState {
         XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO};
     getInfo.action = action;
     uint32_t pathCount = 0;
-    CheckXrResult(xrEnumerateBoundSourcesForAction(session, &getInfo, 0, &pathCount,
-                                               nullptr));
+    CheckXrResult(xrEnumerateBoundSourcesForAction(session, &getInfo, 0,
+                                                   &pathCount, nullptr));
     std::vector<XrPath> paths(pathCount);
     CheckXrResult(xrEnumerateBoundSourcesForAction(
         session, &getInfo, uint32_t(paths.size()), &pathCount, paths.data()));
@@ -629,8 +639,8 @@ struct InputState {
       }
       std::vector<char> grabSource(size);
       CheckXrResult(xrGetInputSourceLocalizedName(session, &nameInfo,
-                                              uint32_t(grabSource.size()),
-                                              &size, grabSource.data()));
+                                                  uint32_t(grabSource.size()),
+                                                  &size, grabSource.data()));
       if (!sourceName.empty()) {
         sourceName += " and ";
       }
@@ -640,7 +650,7 @@ struct InputState {
     }
 
     Logger::Info("%s action is bound to %s", actionName.c_str(),
-                      ((!sourceName.empty()) ? sourceName.c_str() : "nothing"));
+                 ((!sourceName.empty()) ? sourceName.c_str() : "nothing"));
   }
 
   void PollActions() {
@@ -675,8 +685,9 @@ struct InputState {
           XrHapticActionInfo hapticActionInfo{XR_TYPE_HAPTIC_ACTION_INFO};
           hapticActionInfo.action = this->vibrateAction;
           hapticActionInfo.subactionPath = this->handSubactionPath[hand];
-          CheckXrResult(xrApplyHapticFeedback(this->session, &hapticActionInfo,
-                                          (XrHapticBaseHeader *)&vibration));
+          CheckXrResult(
+              xrApplyHapticFeedback(this->session, &hapticActionInfo,
+                                    (XrHapticBaseHeader *)&vibration));
         }
       }
 
@@ -709,10 +720,9 @@ struct Swapchain {
             int64_t format) {
 
     Logger::Info("Creating swapchain for view %d with dimensions "
-                      "Width=%d Height=%d SampleCount=%d",
-                      i, vp.recommendedImageRectWidth,
-                      vp.recommendedImageRectHeight,
-                      vp.recommendedSwapchainSampleCount);
+                 "Width=%d Height=%d SampleCount=%d",
+                 i, vp.recommendedImageRectWidth, vp.recommendedImageRectHeight,
+                 vp.recommendedSwapchainSampleCount);
 
     // Create the swapchain.
     this->swapchainCreateInfo = {
@@ -729,7 +739,7 @@ struct Swapchain {
         .mipCount = 1,
     };
     CheckXrResult(xrCreateSwapchain(session, &this->swapchainCreateInfo,
-                                &this->swapchain));
+                                    &this->swapchain));
 
     uint32_t imageCount;
     CheckXrResult(
@@ -742,7 +752,7 @@ struct Swapchain {
       pointers.push_back((XrSwapchainImageBaseHeader *)&image);
     }
     CheckXrResult(xrEnumerateSwapchainImages(this->swapchain, imageCount,
-                                         &imageCount, pointers[0]));
+                                             &imageCount, pointers[0]));
   }
 
   ~Swapchain() { xrDestroySwapchain(this->swapchain); }
@@ -754,7 +764,7 @@ struct Swapchain {
     };
     uint32_t swapchainImageIndex;
     CheckXrResult(xrAcquireSwapchainImage(this->swapchain, &acquireInfo,
-                                      &swapchainImageIndex));
+                                          &swapchainImageIndex));
 
     XrSwapchainImageWaitInfo waitInfo{
         .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
