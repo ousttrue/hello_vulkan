@@ -2,20 +2,21 @@
 #include "options.h"
 #include "xr_vulkan_session.h"
 #include <thread>
-#include <vko/vko.h>
+#include <vuloxr/xr.h>
 #include <xro/xro.h>
 
 void ShowHelp() {
-  xro::Logger::Info(
+  vuloxr::Logger::Info(
       "HelloXr [--formfactor|-ff <Form factor>] "
       "[--viewconfig|-vc <View config>] "
       "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]");
-  xro::Logger::Info("Graphics APIs:            D3D11, D3D12, "
-                    "OpenGLES, OpenGL, Vulkan2, Vulkan, Metal");
-  xro::Logger::Info("Form factors:             Hmd, Handheld");
-  xro::Logger::Info("View configurations:      Mono, Stereo");
-  xro::Logger::Info("Environment blend modes:  Opaque, Additive, AlphaBlend");
-  xro::Logger::Info("Spaces:                   View, Local, Stage");
+  vuloxr::Logger::Info("Graphics APIs:            D3D11, D3D12, "
+                       "OpenGLES, OpenGL, Vulkan2, Vulkan, Metal");
+  vuloxr::Logger::Info("Form factors:             Hmd, Handheld");
+  vuloxr::Logger::Info("View configurations:      Mono, Stereo");
+  vuloxr::Logger::Info(
+      "Environment blend modes:  Opaque, Additive, AlphaBlend");
+  vuloxr::Logger::Info("Spaces:                   View, Local, Stage");
 }
 
 int main(int argc, char *argv[]) {
@@ -29,13 +30,13 @@ int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
   static bool quitKeyPressed = false;
   auto exitPollingThread = std::thread{[] {
-    xro::Logger::Info("Press [enter key] to shutdown...");
+    vuloxr::Logger::Info("Press [enter key] to shutdown...");
     (void)getchar();
     quitKeyPressed = true;
   }};
   exitPollingThread.detach();
 
-  xro::Instance xr_instance;
+  vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
   if (xr_instance.create(nullptr) != XR_SUCCESS) {

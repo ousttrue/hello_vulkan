@@ -41,8 +41,8 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
                                           physicalDevice->graphicsFamilyIndex));
 
   vuloxr::vk::Swapchain swapchain(instance, surface, *physicalDevice,
-                                  *presentFamily, device);
-  swapchain.create(device.queueFamily);
+                                  *presentFamily, device, device.queueFamily);
+  swapchain.create();
 
   main_loop(
       [userdata, app]() {
