@@ -84,6 +84,35 @@ inline VkDeviceMemory createBindMemory(VkDevice device, uint32_t reqSize,
   return memory;
 }
 
+struct Memory : NonCopyable {
+  VkDevice device;
+  VkDeviceMemory memory;
+  Memory(VkDevice _device, VkDeviceMemory _memory = VK_NULL_HANDLE)
+      : device(_device), memory(_memory) {}
+  ~Memory() {
+    if (this->memory != VK_NULL_HANDLE) {
+      vkFreeMemory(this->device, this->memory, nullptr);
+    }
+  }
+  Memory(Memory &&rhs) {
+    this->device = rhs.device;
+    this->memory = rhs.memory;
+    rhs.memory = VK_NULL_HANDLE;
+  }
+  Memory &operator=(Memory &&rhs) {
+    this->device = rhs.device;
+    this->memory = rhs.memory;
+    rhs.memory = VK_NULL_HANDLE;
+    return *this;
+  }
+  void mapWrite(const void *src, uint32_t srcSize) const {
+    void *dst;
+    CheckVkResult(vkMapMemory(device, memory, 0, srcSize, 0, &dst));
+    memcpy(dst, src, srcSize);
+    vkUnmapMemory(device, memory);
+  }
+};
+
 struct PhysicalDevice {
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   operator VkPhysicalDevice() const { return this->physicalDevice; }
@@ -207,9 +236,7 @@ struct PhysicalDevice {
     abort();
   }
 
-  VkDeviceMemory allocAndMapMemoryForBuffer(VkDevice device, VkBuffer buffer,
-                                            const void *src,
-                                            uint32_t srcSize) const {
+  Memory allocForMap(VkDevice device, VkBuffer buffer) const {
     // alloc
     VkMemoryRequirements memoryRequirements;
     vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
@@ -218,21 +245,27 @@ struct PhysicalDevice {
                                   // for map
                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    assert(requiredSize >= srcSize);
     auto memory = createBindMemory(device, requiredSize, typeIndex);
     // bind
     vkBindBufferMemory(device, buffer, memory, 0);
-    // map & copy
-    {
-      void *dst;
-      CheckVkResult(vkMapMemory(device, memory, 0, srcSize, 0, &dst));
-      memcpy(dst, src, srcSize);
-      vkUnmapMemory(device, memory);
-    }
-    return memory;
+    return {device, memory};
   }
 
-  VkDeviceMemory allocMemoryForImage(VkDevice device, VkImage image) const {
+  Memory allocForTransfer(VkDevice device, VkBuffer buffer) const {
+    // alloc
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
+    auto [requiredSize, typeIndex] =
+        this->findMemoryTypeIndex(device, memoryRequirements,
+                                  // for map
+                                  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    auto memory = createBindMemory(device, requiredSize, typeIndex);
+    // bind
+    vkBindBufferMemory(device, buffer, memory, 0);
+    return {device, memory};
+  }
+
+  Memory allocForTransfer(VkDevice device, VkImage image) const {
     // alloc
     VkMemoryRequirements memoryRequirements;
     vkGetImageMemoryRequirements(device, image, &memoryRequirements);
@@ -243,7 +276,7 @@ struct PhysicalDevice {
     auto memory = createBindMemory(device, requiredSize, typeIndex);
     // bind
     vkBindImageMemory(device, image, memory, 0);
-    return memory;
+    return {device, memory};
   }
 };
 
@@ -603,21 +636,31 @@ struct Device : NonCopyable {
     vkGetDeviceQueue(this->device, this->queueFamily, 0, &this->queue);
   }
 
-  VkResult submit(VkCommandBuffer cmd, VkSemaphore acquireSemaphore,
-                  VkSemaphore submitSemaphore, VkFence submitFence) const {
+  VkResult submit(VkCommandBuffer cmd,
+                  VkSemaphore acquireSemaphore = VK_NULL_HANDLE,
+                  VkSemaphore submitSemaphore = VK_NULL_HANDLE,
+                  VkFence submitFence = VK_NULL_HANDLE) const {
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 0,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &cmd,
+    };
+
     VkPipelineStageFlags waitDstStageMask =
         VK_PIPELINE_STAGE_TRANSFER_BIT |
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &acquireSemaphore,
-        .pWaitDstStageMask = &waitDstStageMask,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &cmd,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &submitSemaphore,
-    };
+    if (acquireSemaphore != VK_NULL_HANDLE) {
+      submitInfo.waitSemaphoreCount = 1;
+      submitInfo.pWaitSemaphores = &acquireSemaphore;
+      submitInfo.pWaitDstStageMask = &waitDstStageMask;
+    }
+
+    if (submitSemaphore != VK_NULL_HANDLE) {
+      submitInfo.signalSemaphoreCount = 1;
+      submitInfo.pSignalSemaphores = &submitSemaphore;
+    }
+
     return vkQueueSubmit(this->queue, 1, &submitInfo, submitFence);
   }
 };
@@ -795,8 +838,7 @@ struct Swapchain : public NonCopyable {
 
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         this->physicalDevice, this->surface, &this->surfaceCapabilities);
-    this->createInfo.minImageCount =
-        this->surfaceCapabilities.minImageCount + 1;
+    this->createInfo.minImageCount = this->surfaceCapabilities.minImageCount;
     this->createInfo.imageExtent = this->surfaceCapabilities.currentExtent;
     this->createInfo.preTransform = this->surfaceCapabilities.currentTransform;
 
@@ -921,13 +963,14 @@ struct CommandBufferPool : NonCopyable {
   VkCommandPool pool = VK_NULL_HANDLE;
   std::vector<VkCommandBuffer> commandBuffers;
 
-  CommandBufferPool(VkDevice _device, uint32_t graphicsQueueIndex,
-                    uint32_t poolSize)
+  CommandBufferPool(
+      VkDevice _device, uint32_t graphicsQueueIndex, uint32_t poolSize,
+      uint32_t flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
       : device(_device), commandBuffers(poolSize) {
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
-                 VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags = flags,
         .queueFamilyIndex = graphicsQueueIndex,
     };
     CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
@@ -950,6 +993,98 @@ struct CommandBufferPool : NonCopyable {
                            this->commandBuffers.data());
     }
     vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+};
+
+struct CommandRecording : NonCopyable {
+  VkCommandBuffer commandBuffer;
+
+  CommandRecording(VkCommandBuffer _commandBuffer,
+                   VkCommandBufferUsageFlags flags =
+                       VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+      : commandBuffer(_commandBuffer) {
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = flags,
+    };
+    CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
+  }
+
+  ~CommandRecording() {
+    CheckVkResult(vkEndCommandBuffer(this->commandBuffer));
+  }
+
+  const CommandRecording &transitionImageLayout(VkImage image, VkFormat format,
+                                                VkImageLayout oldLayout,
+                                                VkImageLayout newLayout) const {
+
+    VkImageMemoryBarrier barrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        // can also use VK_IMAGE_LAYOUT_UNDEFINED if we don't care about the
+        // existing contents of image!
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+
+    VkPipelineStageFlags sourceStage;
+    VkPipelineStageFlags destinationStage;
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+        newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+      barrier.srcAccessMask = 0;
+      barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+      sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+      destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+               newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+      barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+      sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+      destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else {
+      throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0,
+                         nullptr, 0, nullptr, 1, &barrier);
+
+    return *this;
+  }
+
+  const CommandRecording &copyBufferToImage(VkBuffer buffer, VkImage image,
+                                            uint32_t width,
+                                            uint32_t height) const {
+    VkBufferImageCopy region{
+        .bufferOffset = 0,
+        // functions as "padding" for the image destination
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {width, height, 1},
+    };
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    return *this;
   }
 };
 

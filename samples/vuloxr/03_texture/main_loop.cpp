@@ -9,6 +9,10 @@ const char VS[] = {
 #embed "texture.vert"
     , 0, 0, 0, 0};
 
+const char FS[] = {
+#embed "texture.frag"
+    , 0, 0, 0, 0};
+
 #include <glm/fwd.hpp>
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -43,78 +47,6 @@ struct UniformBufferObject {
   }
 };
 
-const char FS[] = {
-#embed "texture.frag"
-    , 0, 0, 0, 0};
-
-static void transitionImageLayout(VkCommandBuffer commandBuffer, VkImage image,
-                                  VkFormat format, VkImageLayout oldLayout,
-                                  VkImageLayout newLayout) {
-
-  VkImageMemoryBarrier barrier{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      // can also use VK_IMAGE_LAYOUT_UNDEFINED if we don't care about the
-      // existing contents of image!
-      .oldLayout = oldLayout,
-      .newLayout = newLayout,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = image,
-      .subresourceRange =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .baseMipLevel = 0,
-              .levelCount = 1,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-  };
-
-  VkPipelineStageFlags sourceStage;
-  VkPipelineStageFlags destinationStage;
-  if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-    sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  } else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-             newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-  } else {
-    throw std::invalid_argument("unsupported layout transition!");
-  }
-
-  vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0,
-                       nullptr, 0, nullptr, 1, &barrier);
-}
-
-static void copyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer,
-                              VkImage image, uint32_t width, uint32_t height) {
-  VkBufferImageCopy region{
-      .bufferOffset = 0,
-      // functions as "padding" for the image destination
-      .bufferRowLength = 0,
-      .bufferImageHeight = 0,
-      .imageSubresource =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .mipLevel = 0,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-      .imageOffset = {0, 0, 0},
-      .imageExtent = {width, height, 1},
-  };
-  vkCmdCopyBufferToImage(commandBuffer, buffer, image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-}
-
 struct Vec2 {
   float x;
   float y;
@@ -139,7 +71,7 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::Device &device, void *) {
 
   vuloxr::vk::Texture texture(device, 2, 2);
-  texture.setMemory(physicalDevice.allocMemoryForImage(device, texture.image));
+  texture.setMemory(physicalDevice.allocForTransfer(device, texture.image));
 
   {
     // upload image
@@ -151,39 +83,28 @@ void main_loop(const std::function<bool()> &runLoop,
     };
     VkDeviceSize imageSize = 2 * 2 * 4;
 
-    auto stagingBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    stagingBuffer->memory->assign(pixels, imageSize);
+    vuloxr::vk::Buffer stagingBuffer(device, imageSize,
+                                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    auto stagingMemory = physicalDevice.allocForMap(device, stagingBuffer);
+    stagingMemory.mapWrite(pixels, imageSize);
 
-    vko::CommandPool commandPool(device, physicalDevice.graphicsFamilyIndex);
+    vuloxr::vk::CommandBufferPool pool(device,
+                                       physicalDevice.graphicsFamilyIndex, 1);
+    auto cmd = pool.commandBuffers[0];
 
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [image = texture.image](auto commandBuffer) {
-                              transitionImageLayout(
-                                  commandBuffer, image, VK_FORMAT_R8G8B8_SRGB,
-                                  VK_IMAGE_LAYOUT_UNDEFINED,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                            });
+    {
+      vuloxr::vk::CommandRecording(cmd)
+          .transitionImageLayout(texture.image, VK_FORMAT_R8G8B8_SRGB,
+                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+          .copyBufferToImage(stagingBuffer, texture.image, 2, 2)
+          .transitionImageLayout(texture.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
 
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-
-                            [image = texture.image, stagingBuffer, width = 2,
-                             height = 2](auto commandBuffer) {
-                              copyBufferToImage(commandBuffer,
-                                                stagingBuffer->buffer, image,
-                                                static_cast<uint32_t>(width),
-                                                static_cast<uint32_t>(height));
-                            });
-
-    vko::executeCommandSync(device, commandPool.queue, commandPool,
-                            [image = texture.image](auto commandBuffer) {
-                              transitionImageLayout(
-                                  commandBuffer, image, VK_FORMAT_R8G8B8A8_SRGB,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-                            });
+    device.submit(cmd);
+    vkQueueWaitIdle(device.queue);
   }
 
   Vertex vertices[] = {
@@ -224,14 +145,14 @@ void main_loop(const std::function<bool()> &runLoop,
               .offset = offsetof(Vertex, texCoord),
           },
       });
-  vertexBuffer.memory = physicalDevice.allocAndMapMemoryForBuffer(
-      device, vertexBuffer.buffer, vertices, sizeof(vertices));
+  vertexBuffer.memory = physicalDevice.allocForMap(device, vertexBuffer.buffer);
+  vertexBuffer.memory.mapWrite(vertices, sizeof(vertices));
 
   uint16_t indices[] = {0, 1, 2, 2, 3, 0};
   auto indexBuffer = vuloxr::vk::IndexBuffer::create(
       device, sizeof(indices), std::size(indices), VK_INDEX_TYPE_UINT16);
-  indexBuffer.memory = physicalDevice.allocAndMapMemoryForBuffer(
-      device, indexBuffer.buffer, indices, sizeof(indices));
+  indexBuffer.memory = physicalDevice.allocForMap(device, indexBuffer.buffer);
+  indexBuffer.memory.mapWrite(indices, sizeof(indices));
 
   vko::DescriptorSets descriptorSets(
       device,
@@ -296,8 +217,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
   std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
       swapchain.images.size());
-  std::vector<std::shared_ptr<vko::Buffer>> uniformBuffers(
-      swapchain.images.size());
+  std::vector<std::shared_ptr<vuloxr::vk::UniformBuffer<UniformBufferObject>>>
+      uniformBuffers(swapchain.images.size());
 
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
@@ -318,11 +239,10 @@ void main_loop(const std::function<bool()> &runLoop,
 
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
-        auto ubo = std::make_shared<vko::Buffer>(
-            physicalDevice, device, sizeof(UniformBufferObject),
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        auto ubo =
+            std::make_shared<vuloxr::vk::UniformBuffer<UniformBufferObject>>(
+                device);
+        ubo->memory = physicalDevice.allocForMap(device, ubo->buffer);
         uniformBuffers[acquired.imageIndex] = ubo;
 
         descriptorSets.update(acquired.imageIndex,
@@ -356,10 +276,10 @@ void main_loop(const std::function<bool()> &runLoop,
         float time = std::chrono::duration<float, std::chrono::seconds::period>(
                          currentTime - startTime)
                          .count();
-        UniformBufferObject ubo{};
-        ubo.setTime(time, swapchain.createInfo.imageExtent.width,
-                    swapchain.createInfo.imageExtent.height);
-        uniformBuffers[acquired.imageIndex]->memory->assign(ubo);
+        auto ubo = uniformBuffers[acquired.imageIndex];
+        ubo->value.setTime(time, swapchain.createInfo.imageExtent.width,
+                           swapchain.createInfo.imageExtent.height);
+        ubo->mapWrite();
       }
 
       vuloxr::vk::CheckVkResult(device.submit(

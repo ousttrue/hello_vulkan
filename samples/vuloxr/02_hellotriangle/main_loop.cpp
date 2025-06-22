@@ -65,8 +65,8 @@ void main_loop(const std::function<bool()> &runLoop,
           },
       });
 
-  auto meshMemory = physicalDevice.allocAndMapMemoryForBuffer(
-      device, mesh.buffer, data, sizeof(data));
+  auto meshMemory = physicalDevice.allocForMap(device, mesh.buffer);
+  meshMemory.mapWrite(data, sizeof(data));
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);

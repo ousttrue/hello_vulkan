@@ -1,40 +1,54 @@
 #pragma once
 #include "../vk.h"
 #include "vuloxr.h"
-#include <span>
 
 namespace vuloxr {
 
 namespace vk {
 
+struct Buffer : NonCopyable {
+  VkDevice device;
+  VkBuffer buffer;
+  operator VkBuffer() const { return this->buffer; }
+  Buffer(VkDevice _device, uint32_t bufferSize, VkBufferUsageFlags usage)
+      : device(_device) {
+    VkBufferCreateInfo info = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = bufferSize,
+        .usage = usage,
+    };
+    CheckVkResult(vkCreateBuffer(this->device, &info, nullptr, &this->buffer));
+  }
+  ~Buffer() { vkDestroyBuffer(this->device, this->buffer, nullptr); }
+};
+
+template <typename T> struct UniformBuffer : NonCopyable {
+  VkDevice device;
+  Buffer buffer;
+  Memory memory;
+  T value;
+  UniformBuffer(VkDevice device)
+      : buffer(device, sizeof(T), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
+        memory(device) {}
+  void mapWrite() const { this->memory.mapWrite(&this->value, sizeof(T)); }
+};
+
 struct VertexBuffer : NonCopyable {
   VkDevice device;
-  VkBuffer buffer = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  Buffer buffer;
+  Memory memory;
   uint32_t drawCount = 0;
   std::vector<VkVertexInputBindingDescription> bindings;
   std::vector<VkVertexInputAttributeDescription> attributes;
-
-  ~VertexBuffer() {
-    vkFreeMemory(this->device, this->memory, nullptr);
-    vkDestroyBuffer(this->device, this->buffer, nullptr);
-  }
 
   static VertexBuffer
   create(VkDevice device, uint32_t bufferSize, uint32_t drawCount,
          const std::vector<VkVertexInputBindingDescription> &bindings,
          const std::vector<VkVertexInputAttributeDescription> &attributes) {
-    VkBufferCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = bufferSize,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-    };
-    VkBuffer buffer;
-    CheckVkResult(vkCreateBuffer(device, &info, nullptr, &buffer));
-
     return {
         .device = device,
-        .buffer = buffer,
+        .buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+        .memory = Memory(device),
         .drawCount = drawCount,
         .bindings = bindings,
         .attributes = attributes,
@@ -44,36 +58,25 @@ struct VertexBuffer : NonCopyable {
   void draw(VkCommandBuffer cmd, VkPipeline pipeline) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmd, 0, 1, &this->buffer, &offset);
+    VkBuffer buffer = this->buffer;
+    vkCmdBindVertexBuffers(cmd, 0, 1, &buffer, &offset);
     vkCmdDraw(cmd, this->drawCount, 1, 0, 0);
   }
 };
 
 struct IndexBuffer : NonCopyable {
   VkDevice device = VK_NULL_HANDLE;
-  VkBuffer buffer = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  Buffer buffer;
+  Memory memory;
   uint32_t drawCount;
   VkIndexType indexType = VK_INDEX_TYPE_UINT16;
 
-  ~IndexBuffer() {
-    vkFreeMemory(this->device, this->memory, nullptr);
-    vkDestroyBuffer(this->device, this->buffer, nullptr);
-  }
-
   static IndexBuffer create(VkDevice device, uint32_t bufferSize,
                             uint32_t drawCount, VkIndexType indexType) {
-    VkBufferCreateInfo info = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = bufferSize,
-        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-    };
-    VkBuffer buffer;
-    CheckVkResult(vkCreateBuffer(device, &info, nullptr, &buffer));
-
     return {
         .device = device,
-        .buffer = buffer,
+        .buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
+        .memory = Memory(device),
         .drawCount = drawCount,
         .indexType = indexType,
     };
@@ -91,7 +94,7 @@ struct IndexBuffer : NonCopyable {
 struct Texture : NonCopyable {
   VkDevice device;
   VkImage image = VK_NULL_HANDLE;
-  VkDeviceMemory memory = VK_NULL_HANDLE;
+  Memory memory;
   VkImageView imageView = VK_NULL_HANDLE;
   VkSampler sampler = VK_NULL_HANDLE;
 
@@ -101,7 +104,8 @@ struct Texture : NonCopyable {
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
 
-  Texture(VkDevice _device, uint32_t width, uint32_t height) : device(_device) {
+  Texture(VkDevice _device, uint32_t width, uint32_t height)
+      : device(_device), memory(_device) {
 
     VkImageCreateInfo imageInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -121,8 +125,8 @@ struct Texture : NonCopyable {
         vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
   }
 
-  void setMemory(VkDeviceMemory memory) {
-    this->memory = memory;
+  void setMemory(Memory memory) {
+    this->memory = std::move(memory);
 
     VkImageViewCreateInfo viewInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -170,7 +174,6 @@ struct Texture : NonCopyable {
   ~Texture() {
     vkDestroySampler(this->device, this->sampler, nullptr);
     vkDestroyImageView(this->device, this->imageView, nullptr);
-    vkFreeMemory(device, this->memory, nullptr);
     vkDestroyImage(this->device, this->image, nullptr);
   }
 };
