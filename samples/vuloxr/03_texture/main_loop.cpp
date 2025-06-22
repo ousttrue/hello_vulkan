@@ -259,10 +259,12 @@ void main_loop(const std::function<bool()> &runLoop,
         backbuffers[acquired.imageIndex] = backbuffer;
 
         {
+          VkClearValue clearValue{
+              .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}};
           vuloxr::vk::RenderPassRecording recording(
               cmd, pipelineLayout, pipeline.renderPass, backbuffer->framebuffer,
-              swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
-              descriptorSet, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
+              swapchain.createInfo.imageExtent, &clearValue, 1, descriptorSet,
+              VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
           indexBuffer.draw(cmd, pipeline, vertexBuffer.buffer);
         }

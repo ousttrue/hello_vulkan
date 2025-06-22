@@ -15,7 +15,7 @@ struct RenderPassRecording : NonCopyable {
   RenderPassRecording(VkCommandBuffer _commandBuffer,
                       VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
                       VkFramebuffer framebuffer, VkExtent2D extent,
-                      const ClearColor &clearColor,
+                      const VkClearValue *clearValues, uint32_t clearValueCount,
                       VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
                       VkCommandBufferUsageFlags flags =
                           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
@@ -31,8 +31,8 @@ struct RenderPassRecording : NonCopyable {
         .renderPass = renderPass,
         .framebuffer = framebuffer,
         .renderArea = {.offset = {0, 0}, .extent = extent},
-        .clearValueCount = 1,
-        .pClearValues = reinterpret_cast<const VkClearValue *>(&clearColor),
+        .clearValueCount = clearValueCount,
+        .pClearValues = clearValues,
     };
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
                          VK_SUBPASS_CONTENTS_INLINE);
@@ -90,23 +90,6 @@ struct RenderPassRecording : NonCopyable {
   //   }
   //   vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
   // }
-
-  void transitionLayout(VkImage image, VkImageLayout oldLayout,
-                        VkImageLayout newLayout) {
-    VkImageMemoryBarrier depthBarrier{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-        .oldLayout = oldLayout,
-        .newLayout = newLayout,
-        .image = image,
-        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
-    };
-    vkCmdPipelineBarrier(this->commandBuffer,
-                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &depthBarrier);
-  }
 };
 
 struct CommandScope : NonCopyable {
@@ -195,6 +178,23 @@ struct CommandScope : NonCopyable {
                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
     return *this;
+  }
+
+  void transitionDepthLayout(VkImage image, VkImageLayout oldLayout,
+                             VkImageLayout newLayout) {
+    VkImageMemoryBarrier depthBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .image = image,
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(this->commandBuffer,
+                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &depthBarrier);
   }
 };
 
