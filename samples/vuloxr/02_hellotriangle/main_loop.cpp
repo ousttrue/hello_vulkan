@@ -1,9 +1,10 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
-#include "vuloxr/vk.h"
-#include "vuloxr/vk/buffer.h"
-#include "vuloxr/vk/pipeline.h"
-#include <vulkan/vulkan_core.h>
+
+#include <vuloxr/vk.h>
+#include <vuloxr/vk/buffer.h>
+#include <vuloxr/vk/command.h>
+#include <vuloxr/vk/pipeline.h>
 
 const char VS[] = {
 #embed "triangle.vert"

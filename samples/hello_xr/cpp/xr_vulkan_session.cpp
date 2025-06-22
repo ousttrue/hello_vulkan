@@ -3,11 +3,11 @@
 #include "xr_linear.h"
 #include <map>
 #include <thread>
-#include <vulkan/vulkan_core.h>
+
 #include <vuloxr/vk/buffer.h>
+#include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
-#include <vuloxr/xr.h>
 #include <vuloxr/xr/session.h>
 
 char VertexShaderGlsl[] = {
@@ -89,8 +89,8 @@ struct ViewRenderer {
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
-  ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice, VkDevice _device,
-               uint32_t queueFamilyIndex, VkExtent2D extent,
+  ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
+               VkDevice _device, uint32_t queueFamilyIndex, VkExtent2D extent,
                VkFormat colorFormat, VkFormat depthFormat,
                VkSampleCountFlagBits sampleCountFlagBits,
                vuloxr::vk::Pipeline _pipeline)
@@ -99,7 +99,8 @@ struct ViewRenderer {
         depthBuffer(_device, extent, depthFormat, sampleCountFlagBits) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
-    this->depthBuffer.memory = physicalDevice.allocForTransfer(device, this->depthBuffer.image);
+    this->depthBuffer.memory =
+        physicalDevice.allocForTransfer(device, this->depthBuffer.image);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,

@@ -3,6 +3,7 @@
 #include "vuloxr/vk.h"
 #include <assert.h>
 #include <vulkan/vulkan_core.h>
+#include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
 
 const char VS[] = {

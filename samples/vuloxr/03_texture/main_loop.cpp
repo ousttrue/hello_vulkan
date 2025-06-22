@@ -2,6 +2,7 @@
 #include "../glsl_to_spv.h"
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/buffer.h>
+#include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
 
 const char VS[] = {
@@ -92,7 +93,7 @@ void main_loop(const std::function<bool()> &runLoop,
     auto cmd = pool.commandBuffers[0];
 
     {
-      vuloxr::vk::CommandRecording(cmd)
+      vuloxr::vk::CommandScope(cmd)
           .transitionImageLayout(texture.image, VK_FORMAT_R8G8B8_SRGB,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
