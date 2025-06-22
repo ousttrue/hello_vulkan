@@ -281,12 +281,17 @@ struct VisualizedSpaces : public vko::not_copyable {
   }
 };
 
-void xr_vulkan_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
-             XrSystemId systemId, XrSession session, XrSpace appSpace,
-             XrEnvironmentBlendMode blendMode, VkClearColorValue clearColor,
-             XrViewConfigurationType viewConfigurationType, VkFormat viewFormat,
-             VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-             VkDevice device) {
+void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
+                       XrInstance instance, XrSystemId systemId,
+                       XrSession session, XrSpace appSpace,
+                       XrEnvironmentBlendMode blendMode,
+                       VkClearColorValue clearColor,
+                       XrViewConfigurationType viewConfigurationType,
+                       VkFormat viewFormat, VkInstance vkInstance,
+                       VkPhysicalDevice physicalDevice,
+                       uint32_t queueFamilyIndex, VkDevice device) {
+  // debug
+  vko::g_vkSetDebugUtilsObjectNameEXT(vkInstance);
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   vko::IndexedMesh mesh = {

@@ -3,8 +3,7 @@
 #include "xr_vulkan_session.h"
 #include <cstddef>
 #include <vuloxr/android_userdata.h>
-#include <vuloxr/xr.h>
-#include <xro/xro.h>
+#include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -78,19 +77,16 @@ void _android_main(struct android_app *app) {
   {
     auto [instance, physicalDevice, device] = xr_instance.createVulkan();
 
-    // debug
-    vko::g_vkSetDebugUtilsObjectNameEXT(instance);
-
     {
-      xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
-                           physicalDevice, physicalDevice.graphicsFamilyIndex,
-                           device);
+      vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
+                                  instance, physicalDevice,
+                                  physicalDevice.graphicsFamilyIndex, device);
 
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
           GetXrReferenceSpaceCreateInfo(options.AppSpace);
       XrSpace appSpace;
-      XRO_CHECK(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
-                                       &appSpace));
+      vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
+          session, &referenceSpaceCreateInfo, &appSpace));
       auto clearColor = options.GetBackgroundClearColor();
       xr_vulkan_session(
           [app](bool isSessionRunning) {
@@ -126,7 +122,7 @@ void _android_main(struct android_app *app) {
           xr_instance.instance, xr_instance.systemId, session, appSpace,
           options.Parsed.EnvironmentBlendMode, clearColor,
           options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
-          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+          instance, physicalDevice, physicalDevice.graphicsFamilyIndex, device);
 
       // session scope
     }
