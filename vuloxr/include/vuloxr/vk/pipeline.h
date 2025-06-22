@@ -1,8 +1,6 @@
 #pragma once
 #include "../vk.h"
-#include "vuloxr.h"
 #include <span>
-#include <vulkan/vulkan_core.h>
 
 namespace vuloxr {
 
@@ -91,15 +89,16 @@ struct RenderPassRecording : NonCopyable {
   };
 
   RenderPassRecording(VkCommandBuffer _commandBuffer,
-                      VkCommandBufferUsageFlags flags, VkRenderPass renderPass,
+                      VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
                       VkFramebuffer framebuffer, VkExtent2D extent,
                       const ClearColor &clearColor,
-                      VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
-                      VkDescriptorSet descriptorSet = VK_NULL_HANDLE)
+                      VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
+                      VkCommandBufferUsageFlags flags =
+                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
       : commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = flags, // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .flags = flags,
     };
     CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
 
@@ -167,6 +166,61 @@ struct RenderPassRecording : NonCopyable {
   //   }
   //   vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
   // }
+
+  void transitionLayout(VkImage image, VkImageLayout oldLayout,
+                        VkImageLayout newLayout) {
+    VkImageMemoryBarrier depthBarrier{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .image = image,
+        .subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1},
+    };
+    vkCmdPipelineBarrier(this->commandBuffer,
+                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &depthBarrier);
+  }
+};
+
+struct Pipeline : NonCopyable {
+  VkDevice device;
+  VkRenderPass renderPass = VK_NULL_HANDLE;
+  VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+  operator VkPipeline() const { return this->graphicsPipeline; }
+  Pipeline(VkDevice _device, VkRenderPass _renderPass,
+           VkPipelineLayout _pipelineLayout, VkPipeline _graphicsPipeline)
+      : device(_device), renderPass(_renderPass),
+        pipelineLayout(_pipelineLayout), graphicsPipeline(_graphicsPipeline) {}
+  ~Pipeline() {
+    vkDestroyPipeline(this->device, this->graphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(this->device, this->pipelineLayout, nullptr);
+    vkDestroyRenderPass(this->device, this->renderPass, nullptr);
+  }
+  Pipeline(const Pipeline &) = delete;
+  Pipeline &operator=(const Pipeline &) = delete;
+  Pipeline(Pipeline &&rhs) {
+    this->device = rhs.device;
+    this->renderPass = rhs.renderPass;
+    rhs.renderPass = VK_NULL_HANDLE;
+    this->pipelineLayout = rhs.pipelineLayout;
+    rhs.pipelineLayout = VK_NULL_HANDLE;
+    this->graphicsPipeline = rhs.graphicsPipeline;
+    rhs.graphicsPipeline = VK_NULL_HANDLE;
+  }
+  Pipeline &operator=(Pipeline &&rhs) {
+    this->device = rhs.device;
+    this->renderPass = rhs.renderPass;
+    rhs.renderPass = VK_NULL_HANDLE;
+    this->pipelineLayout = rhs.pipelineLayout;
+    rhs.pipelineLayout = VK_NULL_HANDLE;
+    this->graphicsPipeline = rhs.graphicsPipeline;
+    rhs.graphicsPipeline = VK_NULL_HANDLE;
+    return *this;
+  }
 };
 
 struct PipelineBuilder {
@@ -252,45 +306,6 @@ struct PipelineBuilder {
       .depthWriteEnable = VK_FALSE,
       .depthBoundsTestEnable = VK_FALSE,
       .stencilTestEnable = VK_FALSE,
-  };
-
-  struct Pipeline : NonCopyable {
-    VkDevice device;
-    VkRenderPass renderPass = VK_NULL_HANDLE;
-    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
-    operator VkPipeline() const { return this->graphicsPipeline; }
-    Pipeline(VkDevice _device, VkRenderPass _renderPass,
-             VkPipelineLayout _pipelineLayout, VkPipeline _graphicsPipeline)
-        : device(_device), renderPass(_renderPass),
-          pipelineLayout(_pipelineLayout), graphicsPipeline(_graphicsPipeline) {
-    }
-    ~Pipeline() {
-      vkDestroyPipeline(this->device, this->graphicsPipeline, nullptr);
-      vkDestroyPipelineLayout(this->device, this->pipelineLayout, nullptr);
-      vkDestroyRenderPass(this->device, this->renderPass, nullptr);
-    }
-    Pipeline(const Pipeline &) = delete;
-    Pipeline &operator=(const Pipeline &) = delete;
-    Pipeline(Pipeline &&rhs) {
-      this->device = rhs.device;
-      this->renderPass = rhs.renderPass;
-      rhs.renderPass = VK_NULL_HANDLE;
-      this->pipelineLayout = rhs.pipelineLayout;
-      rhs.pipelineLayout = VK_NULL_HANDLE;
-      this->graphicsPipeline = rhs.graphicsPipeline;
-      rhs.graphicsPipeline = VK_NULL_HANDLE;
-    }
-    Pipeline &operator=(Pipeline &&rhs) {
-      this->device = rhs.device;
-      this->renderPass = rhs.renderPass;
-      rhs.renderPass = VK_NULL_HANDLE;
-      this->pipelineLayout = rhs.pipelineLayout;
-      rhs.pipelineLayout = VK_NULL_HANDLE;
-      this->graphicsPipeline = rhs.graphicsPipeline;
-      rhs.graphicsPipeline = VK_NULL_HANDLE;
-      return *this;
-    }
   };
 
   Pipeline create(
@@ -526,6 +541,97 @@ struct DescriptorSets : NonCopyable {
                            descriptorWrites, 0, nullptr);
   }
 };
+
+inline VkRenderPass createColorDepthRenderPass(VkDevice device,
+                                               VkFormat colorFormat,
+                                               VkFormat depthFormat) {
+
+  VkAttachmentDescription attachments[] = {
+      {
+          .format = colorFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      },
+      {
+          .format = depthFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+      },
+  };
+
+  VkAttachmentReference colorRef = {0,
+                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthRef = {
+      1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpasses[] = {
+      {
+          .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+          .colorAttachmentCount = 1,
+          .pColorAttachments = &colorRef,
+          .pDepthStencilAttachment = &depthRef,
+      },
+  };
+
+  VkRenderPassCreateInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      //
+      .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
+      .pAttachments = attachments,
+      //
+      .subpassCount = static_cast<uint32_t>(std::size(subpasses)),
+      .pSubpasses = subpasses,
+      //
+      .dependencyCount = 0, // static_cast<uint32_t>(std::size(dependencies)),
+      .pDependencies = nullptr, // dependencies,
+  };
+
+  VkRenderPass renderPass;
+  if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
+      VK_SUCCESS) {
+    return VK_NULL_HANDLE;
+  }
+
+  //   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
+  //                                  (uint64_t)ptr->pass,
+  //                                  "hello_xr render pass") != VK_SUCCESS) {
+  //     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+  //   }
+
+  return renderPass;
+}
+
+inline VkPipelineLayout
+createPipelineLayoutWithConstantSize(VkDevice device, uint32_t constantSize) {
+  VkPushConstantRange pushConstantRanges[] = {
+      {
+          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+          .offset = 0,
+          .size = constantSize,
+      },
+  };
+  VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pushConstantRangeCount =
+          static_cast<uint32_t>(std::size(pushConstantRanges)),
+      .pPushConstantRanges = pushConstantRanges,
+  };
+  VkPipelineLayout layout;
+  CheckVkResult(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo,
+                                       nullptr, &layout));
+  return layout;
+}
 
 } // namespace vk
 } // namespace vuloxr

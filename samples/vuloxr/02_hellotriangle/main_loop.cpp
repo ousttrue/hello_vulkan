@@ -116,8 +116,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
       {
         vuloxr::vk::RenderPassRecording recording(
-            cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            pipeline.renderPass, backbuffer->framebuffer,
+            cmd, nullptr, pipeline.renderPass, backbuffer->framebuffer,
             swapchain.createInfo.imageExtent, {0.1f, 0.1f, 0.2f, 1.0f});
         mesh.draw(cmd, pipeline);
       }

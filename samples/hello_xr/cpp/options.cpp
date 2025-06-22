@@ -1,5 +1,5 @@
 #include "options.h"
-#include <xro/xro.h>
+#include <vuloxr.h>
 
 bool EqualsIgnoreCase(const std::string &s1, const std::string &s2,
                       const std::locale &loc) {
@@ -140,7 +140,7 @@ bool Options ::UpdateOptionsFromCommandLine(int argc, char *argv[]) {
   try {
     this->ParseStrings();
   } catch (std::invalid_argument &ia) {
-    xro::Logger::Error(ia.what());
+    vuloxr::Logger::Error(ia.what());
     return false;
   }
   return true;
@@ -168,7 +168,7 @@ bool Options::UpdateOptionsFromSystemProperties() {
   try {
     this->ParseStrings();
   } catch (std::invalid_argument &ia) {
-    xro::Logger::Error("%s", ia.what());
+    vuloxr::Logger::Error("%s", ia.what());
     return false;
   }
   return true;

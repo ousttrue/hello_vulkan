@@ -259,10 +259,9 @@ void main_loop(const std::function<bool()> &runLoop,
 
         {
           vuloxr::vk::RenderPassRecording recording(
-              cmd, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-              pipeline.renderPass, backbuffer->framebuffer,
+              cmd, pipelineLayout, pipeline.renderPass, backbuffer->framebuffer,
               swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f},
-              pipelineLayout, descriptorSet);
+              descriptorSet, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
           indexBuffer.draw(cmd, pipeline, vertexBuffer.buffer);
         }

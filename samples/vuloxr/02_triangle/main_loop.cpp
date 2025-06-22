@@ -69,9 +69,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
     {
       vuloxr::vk::RenderPassRecording recording(
-          cmd, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, pipeline.renderPass,
-          image->framebuffer, swapchain.createInfo.imageExtent,
-          {0.0f, 0.0f, 0.0f, 1.0f});
+          cmd, nullptr, pipeline.renderPass, image->framebuffer,
+          swapchain.createInfo.imageExtent, {0.0f, 0.0f, 0.0f, 1.0f});
       recording.draw(pipeline.graphicsPipeline, nullptr, 3);
     }
 

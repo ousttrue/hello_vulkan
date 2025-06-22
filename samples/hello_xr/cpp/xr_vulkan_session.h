@@ -10,6 +10,5 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                        XrEnvironmentBlendMode blendMode,
                        VkClearColorValue clearColor,
                        XrViewConfigurationType viewConfigurationType,
-                       VkFormat viewFormat, VkInstance vkInstance,
-                       VkPhysicalDevice physicalDevice,
+                       VkFormat viewFormat, VkPhysicalDevice physicalDevice,
                        uint32_t queueFamilyIndex, VkDevice device);

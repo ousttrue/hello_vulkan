@@ -3,11 +3,12 @@
 #include "xr_linear.h"
 #include <map>
 #include <thread>
-#include <vko/vko.h>
-#include <vko/vko_pipeline.h>
-#include <vko/vko_shaderc.h>
 #include <vulkan/vulkan_core.h>
-#include <xro/xro.h>
+#include <vuloxr/vk/buffer.h>
+#include <vuloxr/vk/pipeline.h>
+#include <vuloxr/vk/shaderc.h>
+#include <vuloxr/xr.h>
+#include <vuloxr/xr/session.h>
 
 char VertexShaderGlsl[] = {
 #embed "shader.vert"
@@ -80,38 +81,38 @@ struct Cube {
 struct ViewRenderer {
   VkDevice device;
   VkQueue queue;
-  vko::Pipeline pipeline;
-  std::shared_ptr<vko::DepthImage> depthBuffer;
-  std::map<VkImage, std::shared_ptr<vko::SwapchainFramebuffer>> framebufferMap;
-  vko::Fence execFence;
+  vuloxr::vk::Pipeline pipeline;
+  vuloxr::vk::DepthImage depthBuffer;
+  std::map<VkImage, std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>>
+      framebufferMap;
+  vuloxr::vk::Fence execFence;
   VkCommandPool commandPool = VK_NULL_HANDLE;
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
-  ViewRenderer(VkPhysicalDevice physicalDevice, VkDevice _device,
+  ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice, VkDevice _device,
                uint32_t queueFamilyIndex, VkExtent2D extent,
                VkFormat colorFormat, VkFormat depthFormat,
                VkSampleCountFlagBits sampleCountFlagBits,
-               vko::Pipeline _pipeline)
+               vuloxr::vk::Pipeline _pipeline)
       : device(_device), execFence(_device, true),
-        pipeline(std::move(_pipeline)) {
+        pipeline(std::move(_pipeline)),
+        depthBuffer(_device, extent, depthFormat, sampleCountFlagBits) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
-    this->depthBuffer = std::make_shared<vko::DepthImage>(
-        this->device, physicalDevice, extent, depthFormat, sampleCountFlagBits,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    this->depthBuffer.memory = physicalDevice.allocForTransfer(device, this->depthBuffer.image);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = queueFamilyIndex,
     };
-    vko::VKO_CHECK(vkCreateCommandPool(this->device, &cmdPoolInfo, nullptr,
-                                       &this->commandPool));
-    if (vko::SetDebugUtilsObjectNameEXT(
-            device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)this->commandPool,
-            "hello_xr command pool") != VK_SUCCESS) {
-      throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    }
+    vuloxr::vk::CheckVkResult(vkCreateCommandPool(this->device, &cmdPoolInfo,
+                                                  nullptr, &this->commandPool));
+    // if (vko::SetDebugUtilsObjectNameEXT(
+    //         device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)this->commandPool,
+    //         "hello_xr command pool") != VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
 
     VkCommandBufferAllocateInfo cmd{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -119,14 +120,15 @@ struct ViewRenderer {
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    vko::VKO_CHECK(
+    vuloxr::vk::CheckVkResult(
         vkAllocateCommandBuffers(this->device, &cmd, &this->commandBuffer));
-    if (vko::SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_COMMAND_BUFFER,
-                                        (uint64_t)this->commandBuffer,
-                                        "hello_xr command buffer") !=
-        VK_SUCCESS) {
-      throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    }
+    // if (vko::SetDebugUtilsObjectNameEXT(device,
+    // VK_OBJECT_TYPE_COMMAND_BUFFER,
+    //                                     (uint64_t)this->commandBuffer,
+    //                                     "hello_xr command buffer") !=
+    //     VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
   }
 
   ~ViewRenderer() {
@@ -144,16 +146,18 @@ struct ViewRenderer {
     execFence.wait();
     execFence.reset();
 
-    vko::VKO_CHECK(vkResetCommandBuffer(this->commandBuffer, 0));
+    vuloxr::vk::CheckVkResult(vkResetCommandBuffer(this->commandBuffer, 0));
 
     VkCommandBufferBeginInfo cmdBeginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
     };
-    vko::VKO_CHECK(vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
+    vuloxr::vk::CheckVkResult(
+        vkBeginCommandBuffer(this->commandBuffer, &cmdBeginInfo));
 
     // Ensure depth is in the right layout
-    this->depthBuffer->TransitionLayout(
-        this->commandBuffer, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    // this->depthBuffer->TransitionLayout(
+    //     this->commandBuffer,
+    //     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
     // Bind and clear eye render target
     static std::array<VkClearValue, 2> clearValues;
@@ -168,15 +172,32 @@ struct ViewRenderer {
 
     auto found = this->framebufferMap.find(image);
     if (found == this->framebufferMap.end()) {
-      auto rt = std::make_shared<vko::SwapchainFramebuffer>(
+      auto rt = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
           this->device, image, size, colorFormat, this->pipeline.renderPass,
-          this->depthBuffer->image, depthFormat);
+          this->depthBuffer.image, depthFormat);
       found = this->framebufferMap.insert({image, rt}).first;
     }
     renderPassBeginInfo.renderPass = this->pipeline.renderPass;
     renderPassBeginInfo.framebuffer = found->second->framebuffer;
     renderPassBeginInfo.renderArea.offset = {0, 0};
     renderPassBeginInfo.renderArea.extent = size;
+
+    {
+      vuloxr::vk::RenderPassRecording recording(
+          this->commandBuffer, this->pipeline.pipelineLayout,
+          this->pipeline.renderPass, found->second->framebuffer, size,
+          {} /*clearColor*/);
+      // RenderPassRecording(VkCommandBuffer _commandBuffer,
+      //                     VkPipelineLayout pipelineLayout, VkRenderPass
+      //                     renderPass, VkFramebuffer framebuffer, VkExtent2D
+      //                     extent, const ClearColor &clearColor,
+      //                     VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
+      //                     VkCommandBufferUsageFlags flags =
+      //                         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+      recording.transitionLayout(
+          depthBuffer.image, VK_IMAGE_LAYOUT_UNDEFINED,
+          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+    }
 
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassBeginInfo,
                          VK_SUBPASS_CONTENTS_INLINE);
@@ -217,14 +238,15 @@ struct ViewRenderer {
     }
 
     vkCmdEndRenderPass(this->commandBuffer);
-    vko::VKO_CHECK(vkEndCommandBuffer(this->commandBuffer));
+    vuloxr::vk::CheckVkResult(vkEndCommandBuffer(this->commandBuffer));
 
     VkSubmitInfo submitInfo{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &this->commandBuffer,
     };
-    vko::VKO_CHECK(vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
+    vuloxr::vk::CheckVkResult(
+        vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
   }
 };
 // struct ViewSwapchainInfo {
@@ -250,7 +272,7 @@ struct ViewRenderer {
 //   // }
 // };
 
-struct VisualizedSpaces : public vko::not_copyable {
+struct VisualizedSpaces : vuloxr::NonCopyable {
   std::vector<XrSpace> m_visualizedSpaces;
 
   VisualizedSpaces(XrSession session) {
@@ -268,8 +290,9 @@ struct VisualizedSpaces : public vko::not_copyable {
       if (XR_SUCCEEDED(res)) {
         m_visualizedSpaces.push_back(space);
       } else {
-        xro::Logger::Error("Failed to create reference space %s with error %d",
-                           visualizedSpace.c_str(), res);
+        vuloxr::Logger::Error(
+            "Failed to create reference space %s with error %d",
+            visualizedSpace.c_str(), res);
       }
     }
   }
@@ -287,95 +310,97 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                        XrEnvironmentBlendMode blendMode,
                        VkClearColorValue clearColor,
                        XrViewConfigurationType viewConfigurationType,
-                       VkFormat viewFormat, VkInstance vkInstance,
-                       VkPhysicalDevice physicalDevice,
+                       VkFormat viewFormat, VkPhysicalDevice physicalDevice,
                        uint32_t queueFamilyIndex, VkDevice device) {
   // debug
-  vko::g_vkSetDebugUtilsObjectNameEXT(vkInstance);
+  // vko::g_vkSetDebugUtilsObjectNameEXT(vkInstance);
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
-  vko::IndexedMesh mesh = {
-      .inputBindingDescriptions =
+  auto vertices = vuloxr::vk::VertexBuffer::create(
+      device, sizeof(c_cubeVertices), std::size(c_cubeVertices),
+      {
           {
-              {
-                  .binding = 0,
-                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
-                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-              },
+              .binding = 0,
+              .stride = static_cast<uint32_t>(sizeof(Vertex)),
+              .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
           },
-      .attributeDescriptions =
+      },
+      {
           {
-              {
-                  .location = 0,
-                  .binding = 0,
-                  .format = VK_FORMAT_R32G32B32_SFLOAT,
-                  .offset = offsetof(Vertex, Position),
-              },
-              {
-                  .location = 1,
-                  .binding = 0,
-                  .format = VK_FORMAT_R32G32B32_SFLOAT,
-                  .offset = offsetof(Vertex, Color),
-              },
+              .location = 0,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32_SFLOAT,
+              .offset = offsetof(Vertex, Position),
           },
-  };
-  {
-    VkDeviceSize bufferSize = sizeof(c_cubeVertices);
-    mesh.vertexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+          {
+              .location = 1,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32_SFLOAT,
+              .offset = offsetof(Vertex, Color),
+          },
+      });
+  // {
+  //   VkDeviceSize bufferSize = sizeof(c_cubeVertices);
+  //   mesh.vertexBuffer = std::make_shared<vko::Buffer>(
+  //       physicalDevice, device, bufferSize,
+  //       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+  //       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  //
+  //   vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
+  //                                 c_cubeVertices, bufferSize,
+  //                                 mesh.vertexBuffer->buffer);
+  // }
 
-    vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
-                                  c_cubeVertices, bufferSize,
-                                  mesh.vertexBuffer->buffer);
-  }
-  {
-    mesh.indexDrawCount = std::size(c_cubeIndices);
-    VkDeviceSize bufferSize = sizeof(c_cubeIndices);
-    mesh.indexBuffer = std::make_shared<vko::Buffer>(
-        physicalDevice, device, bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
-                                  c_cubeIndices, bufferSize,
-                                  mesh.indexBuffer->buffer);
-  }
+  auto indices = vuloxr::vk::IndexBuffer::create(device, sizeof(c_cubeIndices),
+                                                 std::size(c_cubeIndices),
+                                                 VK_INDEX_TYPE_UINT16);
+  // {
+  //   mesh.indexDrawCount = std::size(c_cubeIndices);
+  //   VkDeviceSize bufferSize = sizeof(c_cubeIndices);
+  //   mesh.indexBuffer = std::make_shared<vko::Buffer>(
+  //       physicalDevice, device, bufferSize,
+  //       VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+  //       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  //
+  //   vko::copyBytesToBufferCommand(physicalDevice, device, queueFamilyIndex,
+  //                                 c_cubeIndices, bufferSize,
+  //                                 mesh.indexBuffer->buffer);
+  // }
 
   // Create resources for each view.
-  std::vector<std::shared_ptr<xro::Swapchain>> swapchains;
+  std::vector<std::shared_ptr<vuloxr::xr::Swapchain>> swapchains;
   std::vector<std::shared_ptr<ViewRenderer>> renderers;
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
-  xro::SessionState state(instance, session, viewConfigurationType);
+  vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
   VisualizedSpaces spaces(session);
-  xro::InputState input(instance, session);
+  vuloxr::xr::InputState input(instance, session);
 
-  xro::Stereoscope stereoscope(instance, systemId, viewConfigurationType);
+  vuloxr::xr::Stereoscope stereoscope(instance, systemId,
+                                      viewConfigurationType);
 
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
-    auto swapchain = std::make_shared<xro::Swapchain>(
+    auto swapchain = std::make_shared<vuloxr::xr::Swapchain>(
         session, i, stereoscope.viewConfigurations[i], viewFormat);
     swapchains.push_back(swapchain);
 
     // pieline
-    auto pipelineLayout =
-        vko::createPipelineLayoutWithConstantSize(device, sizeof(float) * 16);
+    auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
+        device, sizeof(float) * 16);
     auto renderPass =
-        vko::createColorDepthRenderPass(device, viewFormat, depthFormat);
+        vuloxr::vk::createColorDepthRenderPass(device, viewFormat, depthFormat);
 
-    auto vertexSPIRV = vko::glsl_vs_to_spv(VertexShaderGlsl);
+    auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
     assert(vertexSPIRV.size());
-    auto vs =
-        vko::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
+    auto vs = vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV,
+                                                           "main");
 
-    auto fragmentSPIRV = vko::glsl_fs_to_spv(FragmentShaderGlsl);
+    auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
     assert(fragmentSPIRV.size());
-    auto fs =
-        vko::ShaderModule::createFragmentShader(device, fragmentSPIRV, "main");
+    auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+        device, fragmentSPIRV, "main");
 
     std::vector<VkPipelineShaderStageCreateInfo> stages = {
         vs.pipelineShaderStageCreateInfo,
@@ -394,11 +419,10 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         .maxDepth = 1.0f,
     };
 
-    vko::PipelineBuilder builder;
-    auto pipeline =
-        builder.create(device, renderPass, pipelineLayout, stages,
-                       mesh.inputBindingDescriptions,
-                       mesh.attributeDescriptions, {viewport}, {scissor}, {});
+    vuloxr::vk::PipelineBuilder builder;
+    auto pipeline = builder.create(device, renderPass, pipelineLayout, stages,
+                                   vertices.bindings, vertices.attributes,
+                                   {viewport}, {scissor}, {});
 
     auto ptr = std::make_shared<ViewRenderer>(
         physicalDevice, device, queueFamilyIndex, swapchain->extent(),
@@ -423,8 +447,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
     input.PollActions();
 
-    auto frameState = xro::beginFrame(session);
-    xro::LayerComposition composition(blendMode, appSpace);
+    auto frameState = vuloxr::xr::beginFrame(session);
+    vuloxr::xr::LayerComposition composition(blendMode, appSpace);
 
     if (frameState.shouldRender == XR_TRUE) {
       if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
@@ -436,17 +460,17 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
         // For each locatable space that we want to visualize, render a 25cm
         for (XrSpace visualizedSpace : spaces.m_visualizedSpaces) {
-          auto [res, location] = xro::locate(
+          auto [res, location] = vuloxr::xr::locate(
               appSpace, frameState.predictedDisplayTime, visualizedSpace);
-          if (xro::locationIsValid(res, location)) {
+          if (vuloxr::xr::locationIsValid(res, location)) {
             cubes.push_back({location.pose, {0.25f, 0.25f, 0.25f}});
           }
         }
         for (auto &hand : input.hands) {
-          auto [res, location] = xro::locate(
+          auto [res, location] = vuloxr::xr::locate(
               appSpace, frameState.predictedDisplayTime, hand.space);
           auto s = hand.scale * 0.1f;
-          if (xro::locationIsValid(res, location)) {
+          if (vuloxr::xr::locationIsValid(res, location)) {
             cubes.push_back({location.pose, {s, s, s}});
           }
         }
@@ -460,9 +484,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
           renderers[i]->render(
               image, swapchain->extent(), swapchain->format(), depthFormat,
-              clearColor, mesh.vertexBuffer->buffer, mesh.indexBuffer->buffer,
-              mesh.indexDrawCount, projectionLayer.pose, projectionLayer.fov,
-              cubes);
+              clearColor, vertices.buffer, indices.buffer, indices.drawCount,
+              projectionLayer.pose, projectionLayer.fov, cubes);
 
           swapchain->EndSwapchain();
         }
@@ -471,7 +494,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
     // std::vector<XrCompositionLayerBaseHeader *>
     auto &layers = composition.commitLayers();
-    xro::endFrame(session, frameState.predictedDisplayTime, blendMode, layers);
+    vuloxr::xr::endFrame(session, frameState.predictedDisplayTime, blendMode,
+                         layers);
   }
 
   vkDeviceWaitIdle(device);

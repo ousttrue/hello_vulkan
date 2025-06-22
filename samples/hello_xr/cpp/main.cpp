@@ -3,7 +3,7 @@
 #include "xr_vulkan_session.h"
 #include <thread>
 #include <vuloxr/xr.h>
-#include <xro/xro.h>
+#include <vuloxr/xr/session.h>
 
 void ShowHelp() {
   vuloxr::Logger::Info(
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
   if (xr_instance.create(nullptr) != XR_SUCCESS) {
-    xro::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
+    vuloxr::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
     return 1;
   }
   //   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
@@ -53,13 +53,13 @@ int main(int argc, char *argv[]) {
 
     {
       // XrSession
-      xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
+      vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId, instance,
                            physicalDevice, physicalDevice.graphicsFamilyIndex,
                            device);
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
           GetXrReferenceSpaceCreateInfo(options.AppSpace);
       XrSpace appSpace;
-      XRO_CHECK(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
+      vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
                                        &appSpace));
       auto clearColor = options.GetBackgroundClearColor();
 

@@ -334,20 +334,20 @@ struct Instance : NonCopyable {
              void *user_data) {
             if (message_severity &
                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-              Logger::Error("%s %s\n", callback_data->pMessageIdName,
+              Logger::Error("%s %s", callback_data->pMessageIdName,
                             callback_data->pMessage);
             } else if (message_severity &
                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-              Logger::Warn("%s %s\n", callback_data->pMessageIdName,
+              Logger::Warn("%s %s", callback_data->pMessageIdName,
                            callback_data->pMessage);
             } else if (message_severity &
                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-              Logger::Info("%s %s\n", callback_data->pMessageIdName,
+              Logger::Info("%s %s", callback_data->pMessageIdName,
                            callback_data->pMessage);
             } else /*if(message_severity &
                       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)*/
             {
-              Logger::Verbose("%s %s\n", callback_data->pMessageIdName,
+              Logger::Verbose("%s %s", callback_data->pMessageIdName,
                               callback_data->pMessage);
             }
 
@@ -1262,6 +1262,33 @@ struct SwapchainFramebuffer {
     if (this->depthView != VK_NULL_HANDLE) {
       vkDestroyImageView(this->device, depthView, nullptr);
     }
+  }
+};
+
+struct Fence : NonCopyable {
+  VkDevice device;
+  VkFence fence = VK_NULL_HANDLE;
+  operator VkFence() const { return this->fence; }
+  Fence(VkDevice _device, bool signaled) : device(_device) {
+    VkFenceCreateInfo fenceInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    };
+    if (signaled) {
+      fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    }
+    CheckVkResult(
+        vkCreateFence(this->device, &fenceInfo, nullptr, &this->fence));
+  }
+  ~Fence() {
+    if (this->fence != VK_NULL_HANDLE) {
+      vkDestroyFence(this->device, this->fence, nullptr);
+    }
+  }
+  void reset() { vkResetFences(this->device, 1, &this->fence); }
+
+  void wait() {
+    CheckVkResult(
+        vkWaitForFences(this->device, 1, &this->fence, VK_TRUE, UINT64_MAX));
   }
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "../xr.h"
+#include <algorithm>
 
 namespace vuloxr {
 

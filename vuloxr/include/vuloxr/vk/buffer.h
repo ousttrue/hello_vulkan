@@ -91,6 +91,68 @@ struct IndexBuffer : NonCopyable {
   }
 };
 
+struct DepthImage : NonCopyable {
+  VkDevice device;
+  VkImage image = VK_NULL_HANDLE;
+  Memory memory;
+  // VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  // VkDeviceMemory depthMemory{VK_NULL_HANDLE};
+  // VkDevice m_vkDevice{VK_NULL_HANDLE};
+  // VkImage depthImage{VK_NULL_HANDLE};
+
+  DepthImage(VkDevice _device, VkExtent2D size, VkFormat depthFormat,
+             VkSampleCountFlagBits sampleCount)
+      // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+      : device(_device), memory(_device) {
+
+    // Create a D32 depthbuffer
+    VkImageCreateInfo imageInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = depthFormat,
+        .extent =
+            {
+                .width = size.width,
+                .height = size.height,
+                .depth = 1,
+            },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = sampleCount,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    CheckVkResult(
+        vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
+    // if (SetDebugUtilsObjectNameEXT(
+    //         device, VK_OBJECT_TYPE_IMAGE, (uint64_t)ptr->depthImage,
+    //         "hello_xr fallback depth image") != VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
+
+    // VkMemoryRequirements memRequirements;
+    // vkGetImageMemoryRequirements(_device, image, &memRequirements);
+    // this->memory = std::make_shared<DeviceMemory>(this->device,
+    // physicalDevice,
+    //                                               memRequirements,
+    //                                               properties);
+
+    // auto memAllocator = MemoryAllocator::Create(physicalDevice, device);
+    // ptr->depthMemory = memAllocator->Allocate( ptr->depthImage,
+    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); if (SetDebugUtilsObjectNameEXT(
+    //         device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
+    //         "hello_xr fallback depth image memory") != VK_SUCCESS) {
+    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+    // }
+    // VKO_CHECK(vkBindImageMemory(this->device, this->image, *this->memory,
+    // 0));
+  }
+  ~DepthImage() { vkDestroyImage(this->device, this->image, nullptr); }
+};
+
 struct Texture : NonCopyable {
   VkDevice device;
   VkImage image = VK_NULL_HANDLE;
