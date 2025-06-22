@@ -3,14 +3,16 @@
 #include "xr_vulkan_session.h"
 #include <cstddef>
 #include <vuloxr/android_userdata.h>
+#include <vuloxr/xr.h>
 #include <xro/xro.h>
 
 auto APP_NAME = "hello_xr";
 
 static void ShowHelp() {
-  xro::Logger::Info("adb shell setprop debug.xr.formFactor Hmd|Handheld");
-  xro::Logger::Info("adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
-  xro::Logger::Info(
+  vuloxr::Logger::Info("adb shell setprop debug.xr.formFactor Hmd|Handheld");
+  vuloxr::Logger::Info(
+      "adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
+  vuloxr::Logger::Info(
       "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
 }
 
@@ -21,11 +23,9 @@ static void ShowHelp() {
  */
 void _android_main(struct android_app *app) {
 #ifdef NDEBUG
-  __android_log_print(ANDROID_LOG_INFO, APP_NAME,
-                      "#### [release][android_main] ####");
+  vuloxr::Logger::Info("#### [release][android_main] ####");
 #else
-  __android_log_print(ANDROID_LOG_INFO, APP_NAME,
-                      "#### [debug][android_main] ####");
+  vuloxr::Logger::Info("#### [debug][android_main] ####");
 #endif
 
   vuloxr::android::UserData userdata{
@@ -69,7 +69,7 @@ void _android_main(struct android_app *app) {
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
   xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
-  XRO_CHECK(xr_instance.create(&instanceCreateInfoAndroid));
+  vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
   // options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
   // if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
   //   ShowHelp();
@@ -153,8 +153,8 @@ void android_main(struct android_app *app) {
   try {
     _android_main(app);
   } catch (const std::exception &ex) {
-    xro::Logger::Error("%s", ex.what());
+    vuloxr::Logger::Error("%s", ex.what());
   } catch (...) {
-    xro::Logger::Error("Unknown Error");
+    vuloxr::Logger::Error("Unknown Error");
   }
 }
