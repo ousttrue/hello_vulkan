@@ -64,7 +64,7 @@ void _android_main(struct android_app *app) {
       .applicationVM = app->activity->vm,
       .applicationActivity = app->activity->clazz,
   };
-  xro::Instance xr_instance;
+  vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
@@ -77,6 +77,9 @@ void _android_main(struct android_app *app) {
 
   {
     auto [instance, physicalDevice, device] = xr_instance.createVulkan();
+
+    // debug
+    vko::g_vkSetDebugUtilsObjectNameEXT(instance);
 
     {
       xro::Session session(xr_instance.instance, xr_instance.systemId, instance,
