@@ -451,6 +451,81 @@ struct ShaderModule : NonCopyable {
   }
 };
 
-} // namespace vk
+struct DescriptorSets : NonCopyable {
+  VkDevice device;
+  VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+  VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> descriptorSets;
 
+  DescriptorSets(VkDevice _device,
+                 const std::vector<VkDescriptorSetLayoutBinding> &bindings)
+      : device(_device) {
+    // assert(bindings.size());
+    VkDescriptorSetLayoutCreateInfo layoutInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(std::size(bindings)),
+        .pBindings = bindings.data(),
+    };
+    CheckVkResult(vkCreateDescriptorSetLayout(
+        this->device, &layoutInfo, nullptr, &this->descriptorSetLayout));
+  }
+
+  ~DescriptorSets() {
+    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->descriptorSetLayout,
+                                 nullptr);
+  }
+
+  void allocate(uint32_t count,
+                const std::vector<VkDescriptorPoolSize> &poolSizes) {
+    VkDescriptorPoolCreateInfo poolInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = count,
+        .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
+        .pPoolSizes = poolSizes.data(),
+    };
+    CheckVkResult(vkCreateDescriptorPool(this->device, &poolInfo, nullptr,
+                                         &this->descriptorPool));
+
+    std::vector<VkDescriptorSetLayout> layouts(count, descriptorSetLayout);
+    VkDescriptorSetAllocateInfo descriptorAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = this->descriptorPool,
+        .descriptorSetCount = count,
+        .pSetLayouts = layouts.data(),
+    };
+    this->descriptorSets.resize(count);
+    CheckVkResult(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
+                                           this->descriptorSets.data()));
+  }
+
+  void update(uint32_t index, VkDescriptorBufferInfo bufferInfo,
+              VkDescriptorImageInfo imageInfo) {
+    VkWriteDescriptorSet descriptorWrites[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = this->descriptorSets[index],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &bufferInfo,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = this->descriptorSets[index],
+            .dstBinding = 1,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &imageInfo,
+        },
+    };
+    vkUpdateDescriptorSets(device,
+                           static_cast<uint32_t>(std::size(descriptorWrites)),
+                           descriptorWrites, 0, nullptr);
+  }
+};
+
+} // namespace vk
 } // namespace vuloxr

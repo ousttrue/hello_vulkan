@@ -1,6 +1,5 @@
 #include "../main_loop.h"
 #include "../glsl_to_spv.h"
-#include <vko/vko_pipeline.h>
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/pipeline.h>
@@ -154,7 +153,7 @@ void main_loop(const std::function<bool()> &runLoop,
   indexBuffer.memory = physicalDevice.allocForMap(device, indexBuffer.buffer);
   indexBuffer.memory.mapWrite(indices, sizeof(indices));
 
-  vko::DescriptorSets descriptorSets(
+  vuloxr::vk::DescriptorSets descriptorSets(
       device,
       {
           {
