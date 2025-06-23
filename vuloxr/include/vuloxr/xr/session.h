@@ -184,10 +184,10 @@ class SessionState {
 
   // Application's current lifecycle state according to the runtime
   XrSessionState m_sessionState = XR_SESSION_STATE_UNKNOWN;
-  bool m_sessionRunning = false;
   XrEventDataBuffer m_eventDataBuffer;
 
 public:
+  bool m_sessionRunning = false;
   SessionState(XrInstance instance, XrSession session,
                XrViewConfigurationType viewConfigurationType)
       : m_instance(instance), m_session(session),
@@ -203,7 +203,6 @@ public:
     PollResult res{
         .exitRenderLoop = false,
         .requestRestart = false,
-        .isSessionRunning = m_sessionRunning,
     };
 
     // Process all pending messages.
@@ -237,6 +236,7 @@ public:
       }
     }
 
+    res.isSessionRunning = m_sessionRunning;
     return res;
   }
 

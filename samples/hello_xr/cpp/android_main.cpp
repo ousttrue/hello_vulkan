@@ -1,26 +1,12 @@
 #include <vuloxr/android/userdata.h>
 
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "options.h"
 #include "xr_vulkan_session.h"
 #include <cstddef>
 #include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
 
-static void ShowHelp() {
-  vuloxr::Logger::Info("adb shell setprop debug.xr.formFactor Hmd|Handheld");
-  vuloxr::Logger::Info(
-      "adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
-  vuloxr::Logger::Info(
-      "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
-}
-
-/**
- * This is the main entry point of a native application that is using
- * android_native_app_glue.  It runs in its own thread, with its own
- * event loop for receiving input events and doing other things.
- */
 void _android_main(struct android_app *app) {
 #ifdef NDEBUG
   vuloxr::Logger::Info("#### [release][android_main] ####");
@@ -38,12 +24,6 @@ void _android_main(struct android_app *app) {
 
   JNIEnv *Env;
   app->activity->vm->AttachCurrentThread(&Env, nullptr);
-
-  Options options;
-  if (!options.UpdateOptionsFromSystemProperties()) {
-    ShowHelp();
-    return;
-  }
 
   // Initialize the loader for this platform
   PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
@@ -68,12 +48,7 @@ void _android_main(struct android_app *app) {
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
-  xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
   vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
-  // options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-  // if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
-  //   ShowHelp();
-  // }
 
   {
     auto [instance, physicalDevice, device] = xr_instance.createVulkan();
@@ -83,12 +58,31 @@ void _android_main(struct android_app *app) {
                                   instance, physicalDevice,
                                   physicalDevice.graphicsFamilyIndex, device);
 
-      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-          GetXrReferenceSpaceCreateInfo(options.AppSpace);
+      auto referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo();
       XrSpace appSpace;
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
-      auto clearColor = options.GetBackgroundClearColor();
+      //       auto clearColor = options.GetBackgroundClearColor();
+      // VkClearColorValue Options::GetBackgroundClearColor() const {
+      //   static const VkClearColorValue SlateGrey{
+      //       .float32 = {0.184313729f, 0.309803933f, 0.309803933f, 1.0f}};
+      //   static const VkClearColorValue TransparentBlack{
+      //       .float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
+      //   static const VkClearColorValue Black{.float32 = {0.0f, 0.0f,
+      //   0.0f, 1.0f}};
+      //
+      //   switch (Parsed.EnvironmentBlendMode) {
+      //   case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
+      //     return SlateGrey;
+      //   case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
+      //     return Black;
+      //   case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
+      //     return TransparentBlack;
+      //   default:
+      //     return SlateGrey;
+      //   }
+      // }
+
       xr_vulkan_session(
           [app](bool isSessionRunning) {
             if (app->destroyRequested) {
@@ -121,10 +115,11 @@ void _android_main(struct android_app *app) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          options.Parsed.EnvironmentBlendMode, clearColor,
-          options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
-          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
-
+          //
+          session.selectColorSwapchainFormat(), physicalDevice,
+          physicalDevice.graphicsFamilyIndex, device,
+          //
+          {{0.184313729f, 0.309803933f, 0.309803933f, 1.0f}});
       // session scope
     }
     // vulkan scope

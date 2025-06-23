@@ -2,5 +2,5 @@
 #include <openxr/openxr.h>
 #include <string>
 
-XrReferenceSpaceCreateInfo
-GetXrReferenceSpaceCreateInfo(const std::string &referenceSpaceTypeStr);
+XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(
+    const std::string &referenceSpaceTypeStr = "local");

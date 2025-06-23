@@ -275,11 +275,13 @@ struct VisualizedSpaces : vuloxr::NonCopyable {
 void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                        XrInstance instance, XrSystemId systemId,
                        XrSession session, XrSpace appSpace,
-                       XrEnvironmentBlendMode blendMode,
-                       VkClearColorValue clearColor,
-                       XrViewConfigurationType viewConfigurationType,
+                       //
                        VkFormat viewFormat, VkPhysicalDevice _physicalDevice,
-                       uint32_t queueFamilyIndex, VkDevice device) {
+                       uint32_t queueFamilyIndex, VkDevice device,
+                       //
+                       VkClearColorValue clearColor,
+                       XrEnvironmentBlendMode blendMode,
+                       XrViewConfigurationType viewConfigurationType) {
   // debug
   // vko::g_vkSetDebugUtilsObjectNameEXT(vkInstance);
 
@@ -383,8 +385,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
   }
 
   // mainloop
-  bool isSessionRunning = true;
-  while (runLoop(isSessionRunning)) {
+  while (runLoop(state.m_sessionRunning)) {
     auto poll = state.PollEvents();
     if (poll.exitRenderLoop) {
       break;

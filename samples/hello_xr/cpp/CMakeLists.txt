@@ -24,5 +24,4 @@ else()
 endif()
 
 target_link_libraries(hello_xr PRIVATE vuloxr OpenXR::openxr_loader shaderc)
-target_sources(hello_xr PRIVATE # logger.cpp
-                                GetXrReferenceSpaceCreateInfo.cpp options.cpp)
+target_sources(hello_xr PRIVATE GetXrReferenceSpaceCreateInfo.cpp)

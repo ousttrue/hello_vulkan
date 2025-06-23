@@ -1,32 +1,10 @@
 #include "GetXrReferenceSpaceCreateInfo.h"
-#include "options.h"
 #include "xr_vulkan_session.h"
 #include <thread>
 #include <vuloxr/xr.h>
 #include <vuloxr/xr/session.h>
 
-void ShowHelp() {
-  vuloxr::Logger::Info(
-      "HelloXr [--formfactor|-ff <Form factor>] "
-      "[--viewconfig|-vc <View config>] "
-      "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]");
-  vuloxr::Logger::Info("Graphics APIs:            D3D11, D3D12, "
-                       "OpenGLES, OpenGL, Vulkan2, Vulkan, Metal");
-  vuloxr::Logger::Info("Form factors:             Hmd, Handheld");
-  vuloxr::Logger::Info("View configurations:      Mono, Stereo");
-  vuloxr::Logger::Info(
-      "Environment blend modes:  Opaque, Additive, AlphaBlend");
-  vuloxr::Logger::Info("Spaces:                   View, Local, Stage");
-}
-
 int main(int argc, char *argv[]) {
-  // Parse command-line arguments into Options.
-  Options options;
-  if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
-    ShowHelp();
-    return 1;
-  }
-
   // Spawn a thread to wait for a keypress
   static bool quitKeyPressed = false;
   auto exitPollingThread = std::thread{[] {
@@ -38,31 +16,27 @@ int main(int argc, char *argv[]) {
 
   vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
-  xr_instance.systemInfo.formFactor = options.Parsed.FormFactor;
   if (xr_instance.create(nullptr) != XR_SUCCESS) {
     vuloxr::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
     return 1;
   }
-  //   options.SetEnvironmentBlendMode(program->GetPreferredBlendMode());
-  //   if (!options.UpdateOptionsFromCommandLine(argc, argv)) {
-  //     ShowHelp();
-  //   }
 
   {
     auto [instance, physicalDevice, device] = xr_instance.createVulkan();
 
     {
       // XrSession
-      vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId, instance,
-                           physicalDevice, physicalDevice.graphicsFamilyIndex,
-                           device);
-      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo =
-          GetXrReferenceSpaceCreateInfo(options.AppSpace);
+      vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
+                                  instance, physicalDevice,
+                                  physicalDevice.graphicsFamilyIndex, device);
+      auto referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo();
       XrSpace appSpace;
-      vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(session, &referenceSpaceCreateInfo,
-                                       &appSpace));
-      auto clearColor = options.GetBackgroundClearColor();
+      vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
+          session, &referenceSpaceCreateInfo, &appSpace));
 
+      VkClearColorValue clearColor{
+          .float32 = {0, 0, 0, 0},
+      };
       xr_vulkan_session(
           [pQuit = &quitKeyPressed](bool isSessionRunning) {
             if (*pQuit) {
@@ -71,9 +45,10 @@ int main(int argc, char *argv[]) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          options.Parsed.EnvironmentBlendMode, clearColor,
-          options.Parsed.ViewConfigType, session.selectColorSwapchainFormat(),
-          physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+          session.selectColorSwapchainFormat(), physicalDevice,
+          physicalDevice.graphicsFamilyIndex, device,
+          //
+          clearColor);
 
       // session
     }
