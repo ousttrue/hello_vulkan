@@ -1,4 +1,5 @@
 #include "app_engine.h"
+#include <vuloxr.h>
 
 struct AndroidAppState {
   ANativeWindow *NativeWindow = nullptr;
