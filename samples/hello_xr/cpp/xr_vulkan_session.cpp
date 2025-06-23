@@ -1,5 +1,4 @@
 #include "xr_vulkan_session.h"
-#include "GetXrReferenceSpaceCreateInfo.h"
 #include "xr_linear.h"
 #include <map>
 #include <thread>
@@ -240,34 +239,65 @@ struct ViewRenderer {
   }
 };
 
+inline XrPosef RotateCCWAboutYAxis(float radians, XrVector3f translation) {
+  XrPosef t{
+      .orientation = {0, 0, 0, 1.0f},
+      .position = {0, 0, 0},
+  };
+  t.orientation.x = 0.f;
+  t.orientation.y = std::sin(radians * 0.5f);
+  t.orientation.z = 0.f;
+  t.orientation.w = std::cos(radians * 0.5f);
+  t.position = translation;
+  return t;
+}
+
 struct VisualizedSpaces : vuloxr::NonCopyable {
-  std::vector<XrSpace> m_visualizedSpaces;
+  std::vector<XrSpace> spaces;
 
   VisualizedSpaces(XrSession session) {
-    std::string visualizedSpaces[] = {
-        "ViewFront",        "Local",      "Stage",
-        "StageLeft",        "StageRight", "StageLeftRotated",
-        "StageRightRotated"};
-
-    for (const auto &visualizedSpace : visualizedSpaces) {
-      auto referenceSpaceCreateInfo =
-          GetXrReferenceSpaceCreateInfo(visualizedSpace);
-      XrSpace space;
-      XrResult res =
-          xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &space);
-      if (XR_SUCCEEDED(res)) {
-        m_visualizedSpaces.push_back(space);
-      } else {
-        vuloxr::Logger::Error(
-            "Failed to create reference space %s with error %d",
-            visualizedSpace.c_str(), res);
-      }
-    }
+    // ViewFront
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_VIEW,
+             {.orientation = {0, 0, 0, 1.0f}, .position = {0, 0, -2.0f}});
+    // Local
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_LOCAL);
+    // Stage
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_STAGE);
+    // StageLeft
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_STAGE,
+             RotateCCWAboutYAxis(0.f, {-2.f, 0.f, -2.f}));
+    // StageRight
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_STAGE,
+             RotateCCWAboutYAxis(0.f, {2.f, 0.f, -2.f}));
+    // StageLeftRotated
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_STAGE,
+             RotateCCWAboutYAxis(3.14f / 3.f, {-2.f, 0.5f, -2.f}));
+    // StageRightRotated
+    addSpace(session, XR_REFERENCE_SPACE_TYPE_STAGE,
+             RotateCCWAboutYAxis(-3.14f / 3.f, {2.f, 0.5f, -2.f}));
   }
 
   ~VisualizedSpaces() {
-    for (XrSpace visualizedSpace : m_visualizedSpaces) {
+    for (XrSpace visualizedSpace : this->spaces) {
       xrDestroySpace(visualizedSpace);
+    }
+  }
+
+  void addSpace(XrSession session, XrReferenceSpaceType spaceType,
+                const XrPosef &pose = {.orientation = {0, 0, 0, 1.0f},
+                                       .position = {0, 0, 0}}) {
+    XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
+        .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+        .referenceSpaceType = spaceType,
+        .poseInReferenceSpace = pose,
+    };
+    XrSpace space;
+    XrResult res =
+        xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &space);
+    if (XR_SUCCEEDED(res)) {
+      this->spaces.push_back(space);
+    } else {
+      vuloxr::Logger::Error("Failed to create reference space");
     }
   }
 };
@@ -411,7 +441,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         std::vector<Cube> cubes;
 
         // For each locatable space that we want to visualize, render a 25cm
-        for (XrSpace visualizedSpace : spaces.m_visualizedSpaces) {
+        for (XrSpace visualizedSpace : spaces.spaces) {
           auto [res, location] = vuloxr::xr::locate(
               appSpace, frameState.predictedDisplayTime, visualizedSpace);
           if (vuloxr::xr::locationIsValid(res, location)) {

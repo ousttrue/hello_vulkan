@@ -1,4 +1,3 @@
-#include "GetXrReferenceSpaceCreateInfo.h"
 #include "xr_vulkan_session.h"
 #include <thread>
 #include <vuloxr/xr.h>
@@ -29,7 +28,14 @@ int main(int argc, char *argv[]) {
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   instance, physicalDevice,
                                   physicalDevice.graphicsFamilyIndex, device);
-      auto referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo();
+
+      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
+          .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+          .next = 0,
+          .referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL,
+          .poseInReferenceSpace = {.orientation = {0, 0, 0, 1.0f},
+                                   .position = {0, 0, 0}},
+      };
       XrSpace appSpace;
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));

@@ -1,13 +1,12 @@
 #include <vuloxr/android/userdata.h>
 
-#include "GetXrReferenceSpaceCreateInfo.h"
 #include "xr_vulkan_session.h"
 #include <cstddef>
 #include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
 
-void _android_main(struct android_app *app) {
+void android_main(struct android_app *app) {
 #ifdef NDEBUG
   vuloxr::Logger::Info("#### [release][android_main] ####");
 #else
@@ -58,30 +57,16 @@ void _android_main(struct android_app *app) {
                                   instance, physicalDevice,
                                   physicalDevice.graphicsFamilyIndex, device);
 
-      auto referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo();
+      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
+          .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+          .next = 0,
+          .referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL,
+          .poseInReferenceSpace = {.orientation = {0, 0, 0, 1.0f},
+                                   .position = {0, 0, 0}},
+      };
       XrSpace appSpace;
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
-      //       auto clearColor = options.GetBackgroundClearColor();
-      // VkClearColorValue Options::GetBackgroundClearColor() const {
-      //   static const VkClearColorValue SlateGrey{
-      //       .float32 = {0.184313729f, 0.309803933f, 0.309803933f, 1.0f}};
-      //   static const VkClearColorValue TransparentBlack{
-      //       .float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
-      //   static const VkClearColorValue Black{.float32 = {0.0f, 0.0f,
-      //   0.0f, 1.0f}};
-      //
-      //   switch (Parsed.EnvironmentBlendMode) {
-      //   case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
-      //     return SlateGrey;
-      //   case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
-      //     return Black;
-      //   case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
-      //     return TransparentBlack;
-      //   default:
-      //     return SlateGrey;
-      //   }
-      // }
 
       xr_vulkan_session(
           [app](bool isSessionRunning) {
@@ -142,14 +127,4 @@ void _android_main(struct android_app *app) {
   }
 
   app->activity->vm->DetachCurrentThread();
-}
-
-void android_main(struct android_app *app) {
-  try {
-    _android_main(app);
-  } catch (const std::exception &ex) {
-    vuloxr::Logger::Error("%s", ex.what());
-  } catch (...) {
-    vuloxr::Logger::Error("Unknown Error");
-  }
 }
