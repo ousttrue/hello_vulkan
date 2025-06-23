@@ -1,8 +1,9 @@
+#include <vuloxr/android/userdata.h>
+
 #include "GetXrReferenceSpaceCreateInfo.h"
 #include "options.h"
 #include "xr_vulkan_session.h"
 #include <cstddef>
-#include <vuloxr/android/userdata.h>
 #include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";

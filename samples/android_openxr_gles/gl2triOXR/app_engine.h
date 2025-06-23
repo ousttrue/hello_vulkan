@@ -1,8 +1,10 @@
 #pragma once
 
-#include "util_egl.h"
-#include "util_oxr.h"
+// #include "util_egl.h"
+// #include "util_oxr.h"
+#include <vuloxr/android/userdata.h>
 
+#include <vuloxr/xr.h>
 
 class AppEngine {
 public:
@@ -23,7 +25,7 @@ private:
     XrSession           m_session;
     XrSpace             m_appSpace;
     XrSystemId          m_systemId;
-    std::vector<viewsurface_t> m_viewSurface;
+    // std::vector<viewsurface_t> m_viewSurface;
 
     void RenderFrame();
     bool RenderLayer(XrTime dpy_time,

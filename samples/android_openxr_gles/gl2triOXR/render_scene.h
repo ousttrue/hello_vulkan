@@ -1,4 +1,5 @@
 #pragma once
+#include <vulkan/vulkan.h>
 
-int init_gles_scene ();
-int render_gles_scene (render_target_t &rtarget, XrRect2Di imgRect);
+int init_gles_scene();
+// int render_gles_scene(VkImage rtarget, VkExtent2D imgRect);
