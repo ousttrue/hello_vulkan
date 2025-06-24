@@ -1,7 +1,4 @@
-#include "app_engine.h"
-
 #include <EGL/egl.h>
-
 #include <EGL/eglext.h>
 
 #include <vuloxr/android/userdata.h>
@@ -10,6 +7,9 @@
 #include <vuloxr/android/xr_loader.h>
 #include <vuloxr/xr/egl.h>
 #include <vuloxr/xr/session.h>
+
+#include "render_scene.h"
+#include <util_oxr.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -58,11 +58,68 @@ EGLContext _egl_get_context() {
   return ctx;
 }
 
-void xr_gles_session(const std::function<bool(bool)> &runLoop,
-                     AppEngine &engine) {
+static void xr_gles_session(const std::function<bool(bool)> &runLoop,
+                            XrInstance instance, XrSystemId systemId,
+                            XrSession session, XrSpace appSpace) {
+
+  init_gles_scene();
+
+  auto m_viewSurface = oxr_create_viewsurface(instance, systemId, session);
 
   while (runLoop(true)) {
-    engine.UpdateFrame();
+    bool exit_loop, req_restart;
+    oxr_poll_events(instance, session, &exit_loop, &req_restart);
+
+    if (!oxr_is_session_running()) {
+      continue;
+    }
+
+    // RenderFrame();
+    std::vector<XrCompositionLayerBaseHeader *> all_layers;
+
+    XrTime dpy_time;
+    oxr_begin_frame(session, &dpy_time);
+
+    std::vector<XrCompositionLayerProjectionView> layerViews;
+
+    // RenderLayer(dpy_time, projLayerViews, projLayer);
+
+    /* Acquire View Location */
+    uint32_t viewCount = (uint32_t)m_viewSurface.size();
+
+    std::vector<XrView> views(viewCount, {XR_TYPE_VIEW});
+    oxr_locate_views(session, dpy_time, appSpace, &viewCount, views.data());
+
+    layerViews.resize(viewCount);
+
+    /* Render each view */
+    for (uint32_t i = 0; i < viewCount; i++) {
+      XrSwapchainSubImage subImg;
+      render_target_t rtarget;
+      oxr_acquire_viewsurface(m_viewSurface[i], rtarget, subImg);
+
+      render_gles_scene(rtarget, subImg.imageRect);
+
+      oxr_release_viewsurface(m_viewSurface[i]);
+
+      layerViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
+      layerViews[i].pose = views[i].pose;
+      layerViews[i].fov = views[i].fov;
+      layerViews[i].subImage = subImg;
+    }
+
+    XrCompositionLayerProjection layer{
+        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+        .space = appSpace,
+        .viewCount = (uint32_t)layerViews.size(),
+        .views = layerViews.data(),
+    };
+
+    all_layers.push_back(
+        reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
+
+    /* Compose all layers */
+    oxr_end_frame(session, dpy_time, all_layers);
   }
 }
 
@@ -118,9 +175,6 @@ void android_main(struct android_app *app) {
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
 
-      AppEngine engine(app, xr_instance.instance, xr_instance.systemId, session,
-                       appSpace);
-
       xr_gles_session(
           [app](bool isSessionRunning) {
             if (app->destroyRequested) {
@@ -152,7 +206,7 @@ void android_main(struct android_app *app) {
 
             return true;
           },
-          engine);
+          xr_instance.instance, xr_instance.systemId, session, appSpace);
       // session scope
     }
     // vulkan scope

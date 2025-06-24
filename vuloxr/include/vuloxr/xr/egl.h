@@ -1,6 +1,11 @@
 #pragma once
+#include "../../vuloxr.h"
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <GLES3/gl31.h>
+// #include <GLES2/gl2.h>
+// #include <GLES2/gl2ext.h>
 
 #include <openxr/openxr.h>
 
@@ -88,8 +93,9 @@ inline void getGLESGraphicsRequirementsKHR(XrInstance instance,
   glGetIntegerv(GL_MINOR_VERSION, &minor);
   XrVersion glver = XR_MAKE_VERSION(major, minor, 0);
 
-  LOGI("GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
-       glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
+  Logger::Info(
+      "GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
+      glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
 
   assert(glver >= gfxReq.minApiVersionSupported ||
          glver <= gfxReq.maxApiVersionSupported);
