@@ -76,6 +76,19 @@ struct Stereoscope {
     CheckXrResult(xrEnumerateViewConfigurationViews(
         instance, systemId, viewConfigurationType, viewCount, &viewCount,
         viewConfigurations.data()));
+
+    vuloxr::Logger::Info("ViewConfiguration num: %d", viewCount);
+    for (uint32_t i = 0; i < viewCount; i++) {
+      XrViewConfigurationView &vp = this->viewConfigurations[i];
+      vuloxr::Logger::Info(
+          "ViewConfiguration[%d/%d]: MaxWH(%d, %d), MaxSample(%d)", i,
+          viewCount, vp.maxImageRectWidth, vp.maxImageRectHeight,
+          vp.maxSwapchainSampleCount);
+      vuloxr::Logger::Info(
+          "                        RecWH(%d, %d), RecSample(% d) ",
+          vp.recommendedImageRectWidth, vp.recommendedImageRectHeight,
+          vp.recommendedSwapchainSampleCount);
+    }
   }
 
   bool Locate(XrSession session, XrSpace appSpace, XrTime predictedDisplayTime,
@@ -695,6 +708,25 @@ struct Swapchain : NonCopyable {
     };
     CheckXrResult(xrCreateSwapchain(session, &this->swapchainCreateInfo,
                                     &this->swapchain));
+    // static XrSwapchain oxr_create_swapchain(XrSession session, uint32_t
+    // width,
+    //                                         uint32_t height) {
+    // XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
+    // ci.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
+    // XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT; ci.format = GL_RGBA8; ci.width =
+    // width; ci.height = height; ci.faceCount = 1; ci.arraySize = 1;
+    // ci.mipCount = 1;
+    // ci.sampleCount = 1;
+
+    // uint32_t imgCnt;
+    // xrEnumerateSwapchainImages(swapchain, 0, &imgCnt, NULL);
+    // XrSwapchainImageOpenGLESKHR *img_gles =
+    //     (XrSwapchainImageOpenGLESKHR *)calloc(
+    //         sizeof(XrSwapchainImageOpenGLESKHR), imgCnt);
+    // for (uint32_t i = 0; i < imgCnt; i++)
+    //   img_gles[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR;
+    // xrEnumerateSwapchainImages(swapchain, imgCnt, &imgCnt,
+    //                            (XrSwapchainImageBaseHeader *)img_gles);
 
     uint32_t imageCount;
     CheckXrResult(

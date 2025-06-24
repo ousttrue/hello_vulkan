@@ -9,6 +9,8 @@
 
 auto APP_NAME = "hello_xr";
 
+using GLESSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageOpenGLESKHR>;
+
 /* ----------------------------------------------------------------------------
  * * Swapchain operation
  * ----------------------------------------------------------------------------
@@ -27,42 +29,13 @@ auto APP_NAME = "hello_xr";
  *
  * ----------------------------------------------------------------------------
  */
-static XrSwapchain oxr_create_swapchain(XrSession session, uint32_t width,
-                                        uint32_t height) {
-  XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
-  ci.usageFlags =
-      XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-  ci.format = GL_RGBA8;
-  ci.width = width;
-  ci.height = height;
-  ci.faceCount = 1;
-  ci.arraySize = 1;
-  ci.mipCount = 1;
-  ci.sampleCount = 1;
-
-  XrSwapchain swapchain;
-  xrCreateSwapchain(session, &ci, &swapchain);
-
-  return swapchain;
-}
-
 static int
-oxr_alloc_swapchain_rtargets(XrSwapchain swapchain, uint32_t width,
+oxr_alloc_swapchain_rtargets(GLESSwapchain &swapchain, uint32_t width,
                              uint32_t height,
                              std::vector<render_target_t> &rtarget_array) {
-  uint32_t imgCnt;
-  xrEnumerateSwapchainImages(swapchain, 0, &imgCnt, NULL);
 
-  XrSwapchainImageOpenGLESKHR *img_gles = (XrSwapchainImageOpenGLESKHR *)calloc(
-      sizeof(XrSwapchainImageOpenGLESKHR), imgCnt);
-  for (uint32_t i = 0; i < imgCnt; i++)
-    img_gles[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR;
-
-  xrEnumerateSwapchainImages(swapchain, imgCnt, &imgCnt,
-                             (XrSwapchainImageBaseHeader *)img_gles);
-
-  for (uint32_t i = 0; i < imgCnt; i++) {
-    GLuint tex_c = img_gles[i].image;
+  for (uint32_t i = 0; i < swapchain.swapchainImages.size(); i++) {
+    GLuint tex_c = swapchain.swapchainImages[i].image;
     GLuint tex_z = 0;
     GLuint fbo = 0;
 
@@ -96,68 +69,18 @@ oxr_alloc_swapchain_rtargets(XrSwapchain swapchain, uint32_t width,
     rtarget_array.push_back(rtarget);
 
     vuloxr::Logger::Info(
-        "SwapchainImage[%d/%d] FBO:%d, TEXC:%d, TEXZ:%d, WH(%d, %d)", i, imgCnt,
-        fbo, tex_c, tex_z, width, height);
+        "SwapchainImage[%d/%d] FBO:%d, TEXC:%d, TEXZ:%d, WH(%d, %d)", i,
+        swapchain.swapchainImages.size(), fbo, tex_c, tex_z, width, height);
   }
-  free(img_gles);
   return 0;
 }
 
 struct viewsurface_t {
   uint32_t width;
   uint32_t height;
-  XrSwapchain swapchain;
+  std::shared_ptr<GLESSwapchain> swapchain;
   std::vector<render_target_t> rtarget_array;
 };
-
-static std::vector<viewsurface_t> oxr_create_viewsurface(XrInstance instance,
-                                                         XrSystemId sysid,
-                                                         XrSession session) {
-  uint32_t numConf;
-  XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-  xrEnumerateViewConfigurationViews(instance, sysid, viewType, 0, &numConf,
-                                    NULL);
-  std::vector<XrViewConfigurationView> conf(numConf);
-  for (uint32_t i = 0; i < numConf; i++) {
-    conf[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
-  }
-  xrEnumerateViewConfigurationViews(instance, sysid, viewType, numConf,
-                                    &numConf, conf.data());
-
-  vuloxr::Logger::Info("ViewConfiguration num: %d", numConf);
-  for (uint32_t i = 0; i < numConf; i++) {
-    XrViewConfigurationView &vp = conf[i];
-    vuloxr::Logger::Info(
-        "ViewConfiguration[%d/%d]: MaxWH(%d, %d), MaxSample(%d)", i, numConf,
-        vp.maxImageRectWidth, vp.maxImageRectHeight,
-        vp.maxSwapchainSampleCount);
-    vuloxr::Logger::Info("                        RecWH(%d, %d), RecSample(%d)",
-                         vp.recommendedImageRectWidth,
-                         vp.recommendedImageRectHeight,
-                         vp.recommendedSwapchainSampleCount);
-  }
-
-  std::vector<viewsurface_t> sfcArray;
-  for (uint32_t i = 0; i < numConf; i++) {
-    auto &vp = conf[i];
-    uint32_t vp_w = vp.recommendedImageRectWidth;
-    uint32_t vp_h = vp.recommendedImageRectHeight;
-
-    vuloxr::Logger::Info("Swapchain for view %d: WH(%d, %d), SampleCount=%d", i,
-                         vp_w, vp_h, vp.recommendedSwapchainSampleCount);
-
-    viewsurface_t sfc;
-    sfc.width = vp_w;
-    sfc.height = vp_h;
-    sfc.swapchain = oxr_create_swapchain(session, sfc.width, sfc.height);
-    oxr_alloc_swapchain_rtargets(sfc.swapchain, sfc.width, sfc.height,
-                                 sfc.rtarget_array);
-
-    sfcArray.push_back(sfc);
-  }
-
-  return sfcArray;
-}
 
 static XrEventDataBuffer s_evDataBuf;
 
@@ -331,14 +254,14 @@ static uint32_t oxr_acquire_swapchain_img(XrSwapchain swapchain) {
 int oxr_acquire_viewsurface(viewsurface_t &viewSurface,
                             render_target_t &rtarget,
                             XrSwapchainSubImage &subImg) {
-  subImg.swapchain = viewSurface.swapchain;
+  subImg.swapchain = viewSurface.swapchain->swapchain;
   subImg.imageRect.offset.x = 0;
   subImg.imageRect.offset.y = 0;
   subImg.imageRect.extent.width = viewSurface.width;
   subImg.imageRect.extent.height = viewSurface.height;
   subImg.imageArrayIndex = 0;
 
-  uint32_t imgIdx = oxr_acquire_swapchain_img(viewSurface.swapchain);
+  uint32_t imgIdx = oxr_acquire_swapchain_img(viewSurface.swapchain->swapchain);
   rtarget = viewSurface.rtarget_array[imgIdx];
 
   return 0;
@@ -346,7 +269,7 @@ int oxr_acquire_viewsurface(viewsurface_t &viewSurface,
 
 int oxr_release_viewsurface(viewsurface_t &viewSurface) {
   XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-  xrReleaseSwapchainImage(viewSurface.swapchain, &releaseInfo);
+  xrReleaseSwapchainImage(viewSurface.swapchain->swapchain, &releaseInfo);
 
   return 0;
 }
@@ -369,7 +292,35 @@ static void xr_gles_session(const std::function<bool(bool)> &runLoop,
 
   init_gles_scene();
 
-  auto m_viewSurface = oxr_create_viewsurface(instance, systemId, session);
+  //
+  // setup view swapchain
+  //
+  vuloxr::xr::Stereoscope stereoscope(
+      instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO);
+
+  std::vector<viewsurface_t> m_viewSurface;
+  for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
+    // auto &vp = conf[i];
+    auto &vp = stereoscope.viewConfigurations[i];
+    uint32_t vp_w = vp.recommendedImageRectWidth;
+    uint32_t vp_h = vp.recommendedImageRectHeight;
+
+    vuloxr::Logger::Info("Swapchain for view %d: WH(%d, %d), SampleCount=%d", i,
+                         vp_w, vp_h, vp.recommendedSwapchainSampleCount);
+
+    m_viewSurface.push_back({
+        .width = vp_w,
+        .height = vp_h,
+        // sfc.swapchain = oxr_create_swapchain(session, sfc.width, sfc.height);
+        .swapchain = std::make_shared<GLESSwapchain>(
+            session, i, stereoscope.viewConfigurations[i], GL_RGBA8,
+            XrSwapchainImageOpenGLESKHR{XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR}),
+    });
+
+    auto &sfc = m_viewSurface.back();
+    oxr_alloc_swapchain_rtargets(*sfc.swapchain, sfc.width, sfc.height,
+                                 sfc.rtarget_array);
+  }
 
   while (runLoop(true)) {
     bool exit_loop, req_restart;
