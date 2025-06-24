@@ -1,84 +1,95 @@
+#include <vuloxr/android/userdata.h>
+
 #include "app_engine.h"
-#include <vuloxr.h>
+#include <cstddef>
 
-struct AndroidAppState {
-  ANativeWindow *NativeWindow = nullptr;
-  bool Resumed = false;
-};
+auto APP_NAME = "hello_xr";
 
-static void ProcessAndroidCmd(struct android_app *app, int32_t cmd) {
-  AndroidAppState *appState = (AndroidAppState *)app->userData;
-
-  switch (cmd) {
-  case APP_CMD_START:
-    vuloxr::Logger::Info("APP_CMD_START");
-    break;
-
-  case APP_CMD_RESUME:
-    vuloxr::Logger::Info("APP_CMD_RESUME");
-    appState->Resumed = true;
-    break;
-
-  case APP_CMD_PAUSE:
-    vuloxr::Logger::Info("APP_CMD_PAUSE");
-    appState->Resumed = false;
-    break;
-
-  case APP_CMD_STOP:
-    vuloxr::Logger::Info("APP_CMD_STOP");
-    break;
-
-  case APP_CMD_DESTROY:
-    vuloxr::Logger::Info("APP_CMD_DESTROY");
-    appState->NativeWindow = NULL;
-    break;
-
-  // The window is being shown, get it ready.
-  case APP_CMD_INIT_WINDOW:
-    vuloxr::Logger::Info("APP_CMD_INIT_WINDOW");
-    appState->NativeWindow = app->window;
-    break;
-
-  // The window is being hidden or closed, clean it up.
-  case APP_CMD_TERM_WINDOW:
-    vuloxr::Logger::Info("APP_CMD_TERM_WINDOW");
-    appState->NativeWindow = NULL;
-    break;
+void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
+                       //
+                       AppEngine &engine) {
+  while (runLoop(true)) {
+    engine.UpdateFrame();
   }
 }
 
-/*--------------------------------------------------------------------------- *
- *      M A I N    F U N C T I O N
- *--------------------------------------------------------------------------- */
 void android_main(struct android_app *app) {
-  AndroidAppState appState = {};
-  app->userData = &appState;
-  app->onAppCmd = ProcessAndroidCmd;
+#ifdef NDEBUG
+  vuloxr::Logger::Info("#### [release][android_main] ####");
+#else
+  vuloxr::Logger::Info("#### [debug][android_main] ####");
+#endif
+
+  vuloxr::android::UserData userdata{
+      .pApp = app,
+      ._appName = APP_NAME,
+  };
+  app->userData = &userdata;
+  app->onAppCmd = vuloxr::android::UserData::on_app_cmd;
+  app->onInputEvent = [](android_app *, AInputEvent *) { return 0; };
+
+  JNIEnv *Env;
+  app->activity->vm->AttachCurrentThread(&Env, nullptr);
 
   AppEngine engine(app);
   engine.InitOpenXR_GLES();
 
-  while (app->destroyRequested == 0) {
-    // Read all pending events.
-    for (;;) {
-      int events;
-      struct android_poll_source *source;
+  {
+    {
+      xr_vulkan_session(
+          [app](bool isSessionRunning) {
+            if (app->destroyRequested) {
+              return false;
+            }
 
-      int timeout = -1; // blocking
-      if (appState.Resumed
-          //|| oxr_is_session_running()
-          || app->destroyRequested)
-        timeout = 0; // non blocking
+            // Read all pending events.
+            for (;;) {
+              int events;
+              struct android_poll_source *source;
+              // If the timeout is zero, returns immediately without blocking.
+              // If the timeout is negative, waits indefinitely until an event
+              // appears.
+              const int timeoutMilliseconds =
+                  (!((vuloxr::android::UserData *)app->userData)->_active &&
+                   !isSessionRunning && app->destroyRequested == 0)
+                      ? -1
+                      : 0;
+              if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
+                                   (void **)&source) < 0) {
+                break;
+              }
 
-      if (ALooper_pollOnce(timeout, nullptr, &events, (void **)&source) < 0) {
-        break;
-      }
+              // Process this event.
+              if (source != nullptr) {
+                source->process(app, source);
+              }
+            }
 
-      if (source != nullptr) {
-        source->process(app, source);
-      }
+            return true;
+          },
+          engine
+          //
+      );
+      // session scope
+    }
+    // vulkan scope
+  }
+
+  ANativeActivity_finish(app->activity);
+
+  // Read all pending events.
+  for (;;) {
+    int events;
+    struct android_poll_source *source;
+    if (ALooper_pollOnce(-1, nullptr, &events, (void **)&source) < 0) {
+      break;
     }
 
-    engine.UpdateFrame();
+    // Process this event.
+    if (source != nullptr) {
+      source->process(app, source);
+    }
   }
+
+  app->activity->vm->DetachCurrentThread();
 }

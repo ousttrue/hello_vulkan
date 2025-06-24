@@ -6,12 +6,6 @@ AppEngine::AppEngine(android_app *app) : m_app(app) {}
 AppEngine::~AppEngine() {}
 
 /* ----------------------------------------------------------------------------
- * * Interfaces to android application framework
- * ----------------------------------------------------------------------------
- */
-struct android_app *AppEngine::AndroidApp(void) const { return m_app; }
-
-/* ----------------------------------------------------------------------------
  * * Initialize OpenXR with OpenGLES renderer
  * ----------------------------------------------------------------------------
  */

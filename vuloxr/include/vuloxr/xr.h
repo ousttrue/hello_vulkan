@@ -107,6 +107,7 @@ struct Instance : NonCopyable {
     return XR_SUCCESS;
   }
 
+#ifdef XR_USE_GRAPHICS_API_VULKAN
   static XrResult GetVulkanGraphicsRequirements2KHR(
       XrInstance instance, XrSystemId systemId,
       XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
@@ -318,6 +319,7 @@ struct Instance : NonCopyable {
     return {std::move(instance), vk::PhysicalDevice(vkPhysicalDevice),
             std::move(device)};
   }
+#endif
 };
 
 } // namespace xr
