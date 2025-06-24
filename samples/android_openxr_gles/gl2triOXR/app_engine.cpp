@@ -1,14 +1,13 @@
 #include "app_engine.h"
 #include "render_scene.h"
 
-AppEngine::AppEngine(android_app *app, XrInstance instance, XrSystemId systemId)
-    : m_instance(instance), m_systemId(systemId) {
-  init_gles_scene();
-
-  m_session = oxr_create_session(m_instance, m_systemId);
-  m_appSpace = oxr_create_ref_space(m_session, XR_REFERENCE_SPACE_TYPE_LOCAL);
-
+AppEngine::AppEngine(android_app *app, XrInstance instance, XrSystemId systemId,
+                     XrSession session, XrSpace appSpace)
+    : m_instance(instance), m_systemId(systemId), m_session(session),
+      m_appSpace(appSpace) {
   m_viewSurface = oxr_create_viewsurface(m_instance, m_systemId, m_session);
+
+  init_gles_scene();
 }
 
 /* ------------------------------------------------------------------------------------

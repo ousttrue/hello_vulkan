@@ -11,8 +11,8 @@ struct AppEngine {
   XrSystemId m_systemId;
   std::vector<viewsurface_t> m_viewSurface;
 
-  AppEngine(android_app *app, XrInstance instance, XrSystemId systemId);
-
+  AppEngine(android_app *app, XrInstance instance, XrSystemId systemId,
+            XrSession session, XrSpace appSpace);
   void UpdateFrame();
   void RenderFrame();
   bool RenderLayer(XrTime dpy_time,

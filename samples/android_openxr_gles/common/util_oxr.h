@@ -58,7 +58,6 @@ int         oxr_end_frame   (XrSession session, XrTime dpyTime, std::vector<XrCo
 
 
 /* Space operation */
-XrSpace     oxr_create_ref_space    (XrSession session, XrReferenceSpaceType ref_space_type);
 XrSpace     oxr_create_action_space (XrSession session, XrAction action, XrPath subpath);
 
 
@@ -86,7 +85,6 @@ int         oxr_apply_haptic_feedback_vibrate (XrSession session, XrAction actio
 
 
 /* Session operation */
-XrSession   oxr_create_session (XrInstance instance, XrSystemId sysid);
 int         oxr_begin_session (XrSession session);
 int         oxr_handle_session_state_changed (XrSession session, XrEventDataSessionStateChanged &ev,
                                               bool *exitLoop, bool *reqRestart);

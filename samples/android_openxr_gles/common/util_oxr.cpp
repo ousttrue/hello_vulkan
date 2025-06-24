@@ -307,17 +307,6 @@ int oxr_end_frame(XrSession session, XrTime dpy_time,
  * * Space operation
  * ----------------------------------------------------------------------------
  */
-XrSpace oxr_create_ref_space(XrSession session,
-                             XrReferenceSpaceType ref_space_type) {
-  XrSpace space;
-  XrReferenceSpaceCreateInfo ci = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
-  ci.referenceSpaceType = ref_space_type;
-  ci.poseInReferenceSpace.orientation.w = 1;
-  xrCreateReferenceSpace(session, &ci, &space);
-
-  return space;
-}
-
 XrSpace oxr_create_action_space(XrSession session, XrAction action,
                                 XrPath subpath) {
   XrSpace space;
@@ -476,23 +465,6 @@ int oxr_apply_haptic_feedback_vibrate(XrSession session, XrAction action,
  */
 static XrSessionState s_session_state = XR_SESSION_STATE_UNKNOWN;
 static bool s_session_running = false;
-
-XrSession oxr_create_session(XrInstance instance, XrSystemId sysid) {
-  XrGraphicsBindingOpenGLESAndroidKHR gfxBind = {
-      XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR};
-  gfxBind.display = egl_get_display();
-  gfxBind.config = egl_get_config();
-  gfxBind.context = egl_get_context();
-
-  XrSessionCreateInfo ci = {XR_TYPE_SESSION_CREATE_INFO};
-  ci.next = &gfxBind;
-  ci.systemId = sysid;
-
-  XrSession session;
-  xrCreateSession(instance, &ci, &session);
-
-  return session;
-}
 
 int oxr_begin_session(XrSession session) {
   XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;

@@ -96,30 +96,30 @@ void android_main(struct android_app *app) {
 
   vuloxr::xr::getGLESGraphicsRequirementsKHR(xr_instance.instance,
                                              xr_instance.systemId);
-  AppEngine engine(app, xr_instance.instance, xr_instance.systemId);
-
   {
-
     {
-      // XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = {
-      //     .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
-      //     .display = eglGetCurrentDisplay(),
-      //     .config = _egl_get_config(),
-      //     .context = _egl_get_context(),
-      // };
-      // vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
-      //                             &graphicsBinding);
+      XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = {
+          .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
+          .display = eglGetCurrentDisplay(),
+          .config = _egl_get_config(),
+          .context = _egl_get_context(),
+      };
+      vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
+                                  &graphicsBinding);
 
-      // XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
-      //     .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
-      //     .next = 0,
-      //     .referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL,
-      //     .poseInReferenceSpace = {.orientation = {0, 0, 0, 1.0f},
-      //                              .position = {0, 0, 0}},
-      // };
-      // XrSpace appSpace;
-      // vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
-      //     session, &referenceSpaceCreateInfo, &appSpace));
+      XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
+          .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+          .next = 0,
+          .referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL,
+          .poseInReferenceSpace = {.orientation = {0, 0, 0, 1.0f},
+                                   .position = {0, 0, 0}},
+      };
+      XrSpace appSpace;
+      vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
+          session, &referenceSpaceCreateInfo, &appSpace));
+
+      AppEngine engine(app, xr_instance.instance, xr_instance.systemId, session,
+                       appSpace);
 
       xr_gles_session(
           [app](bool isSessionRunning) {
