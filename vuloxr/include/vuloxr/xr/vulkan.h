@@ -14,7 +14,7 @@
 namespace vuloxr {
 namespace xr {
 
-static XrResult GetVulkanGraphicsRequirements2KHR(
+static XrResult getVulkanGraphicsRequirements2KHR(
     XrInstance instance, XrSystemId systemId,
     XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
   PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
@@ -31,7 +31,7 @@ static XrResult GetVulkanGraphicsRequirements2KHR(
 }
 
 static XrResult
-CreateVulkanInstanceKHR(XrInstance instance,
+createVulkanInstanceKHR(XrInstance instance,
                         const XrVulkanInstanceCreateInfoKHR *createInfo,
                         VkInstance *vulkanInstance, VkResult *vulkanResult) {
   PFN_xrCreateVulkanInstanceKHR pfnCreateVulkanInstanceKHR = nullptr;
@@ -46,7 +46,7 @@ CreateVulkanInstanceKHR(XrInstance instance,
 }
 
 static XrResult
-GetVulkanGraphicsDevice2KHR(XrInstance instance,
+getVulkanGraphicsDevice2KHR(XrInstance instance,
                             const XrVulkanGraphicsDeviceGetInfoKHR *getInfo,
                             VkPhysicalDevice *vulkanPhysicalDevice) {
   PFN_xrGetVulkanGraphicsDevice2KHR pfnGetVulkanGraphicsDevice2KHR = nullptr;
@@ -62,7 +62,7 @@ GetVulkanGraphicsDevice2KHR(XrInstance instance,
 }
 
 static XrResult
-CreateVulkanDeviceKHR(XrInstance instance,
+createVulkanDeviceKHR(XrInstance instance,
                       const XrVulkanDeviceCreateInfoKHR *createInfo,
                       VkDevice *vulkanDevice, VkResult *vulkanResult) {
   PFN_xrCreateVulkanDeviceKHR pfnCreateVulkanDeviceKHR = nullptr;
@@ -84,7 +84,7 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
       .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
   };
-  CheckXrResult(GetVulkanGraphicsRequirements2KHR(xr_instance, xr_systemId,
+  CheckXrResult(getVulkanGraphicsRequirements2KHR(xr_instance, xr_systemId,
                                                   &graphicsRequirements));
 
   vk::Instance instance;
@@ -158,7 +158,7 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   VkInstance vkInstance;
   VkResult err;
   CheckXrResult(
-      CreateVulkanInstanceKHR(xr_instance, &createInfo, &vkInstance, &err));
+      createVulkanInstanceKHR(xr_instance, &createInfo, &vkInstance, &err));
   instance.reset(vkInstance);
 
   XrVulkanGraphicsDeviceGetInfoKHR deviceGetInfo{
@@ -167,7 +167,7 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
       .vulkanInstance = vkInstance,
   };
   VkPhysicalDevice vkPhysicalDevice;
-  CheckXrResult(GetVulkanGraphicsDevice2KHR(xr_instance, &deviceGetInfo,
+  CheckXrResult(getVulkanGraphicsDevice2KHR(xr_instance, &deviceGetInfo,
                                             &vkPhysicalDevice));
 
   float queuePriorities = 0;
@@ -218,7 +218,7 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   };
   VkDevice vkDevice;
   CheckXrResult(
-      CreateVulkanDeviceKHR(xr_instance, &deviceCreateInfo, &vkDevice, &err));
+      createVulkanDeviceKHR(xr_instance, &deviceCreateInfo, &vkDevice, &err));
   device.reset(vkDevice, queueInfo.queueFamilyIndex);
   vk::CheckVkResult(err);
 

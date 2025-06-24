@@ -8,8 +8,8 @@
 
 #include <cstddef>
 #include <vuloxr/android/xr_loader.h>
-#include <vuloxr/xr/session.h>
 #include <vuloxr/xr/egl.h>
+#include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -94,6 +94,8 @@ void android_main(struct android_app *app) {
 
   vuloxr::xr::createEgl(xr_instance.instance, xr_instance.systemId);
 
+  vuloxr::xr::getGLESGraphicsRequirementsKHR(xr_instance.instance,
+                                             xr_instance.systemId);
   AppEngine engine(app, xr_instance.instance, xr_instance.systemId);
 
   {

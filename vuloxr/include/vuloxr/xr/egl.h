@@ -72,22 +72,28 @@ inline void AssertEGLError(const char *lpFile, int nLine) {
   }
 }
 
-// static XrResult GetVulkanGraphicsRequirements2KHR(
-//     XrInstance instance, XrSystemId systemId,
-//     XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
-//   PFN_xrGetVulkanGraphicsRequirements2KHR
-//   pfnGetVulkanGraphicsRequirements2KHR =
-//       nullptr;
-//   if (xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirements2KHR",
-//                             reinterpret_cast<PFN_xrVoidFunction *>(
-//                                 &pfnGetVulkanGraphicsRequirements2KHR)) !=
-//       XR_SUCCESS) {
-//     throw std::runtime_error("xrGetInstanceProcAddr");
-//   }
-//
-//   return pfnGetVulkanGraphicsRequirements2KHR(instance, systemId,
-//                                               graphicsRequirements);
-// }
+inline void getGLESGraphicsRequirementsKHR(XrInstance instance,
+                                           XrSystemId sysid) {
+  PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR;
+  xrGetInstanceProcAddr(
+      instance, "xrGetOpenGLESGraphicsRequirementsKHR",
+      (PFN_xrVoidFunction *)&xrGetOpenGLESGraphicsRequirementsKHR);
+
+  XrGraphicsRequirementsOpenGLESKHR gfxReq = {
+      XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
+  xrGetOpenGLESGraphicsRequirementsKHR(instance, sysid, &gfxReq);
+
+  GLint major, minor;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  XrVersion glver = XR_MAKE_VERSION(major, minor, 0);
+
+  LOGI("GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
+       glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
+
+  assert(glver >= gfxReq.minApiVersionSupported ||
+         glver <= gfxReq.maxApiVersionSupported);
+}
 
 static EGLConfig find_egl_config(int r, int g, int b, int a, int d, int s,
                                  int ms, int sfc_type, int ver) {

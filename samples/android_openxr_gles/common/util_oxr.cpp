@@ -59,39 +59,6 @@ std::string oxr_get_runtime_name(XrInstance instance) {
 }
 
 /* ----------------------------------------------------------------------------
- * * Confirm OpenGLES version.
- * ----------------------------------------------------------------------------
- */
-int oxr_confirm_gfx_requirements(XrInstance instance, XrSystemId sysid) {
-  PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR;
-  xrGetInstanceProcAddr(
-      instance, "xrGetOpenGLESGraphicsRequirementsKHR",
-      (PFN_xrVoidFunction *)&xrGetOpenGLESGraphicsRequirementsKHR);
-
-  XrGraphicsRequirementsOpenGLESKHR gfxReq = {
-      XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
-  xrGetOpenGLESGraphicsRequirementsKHR(instance, sysid, &gfxReq);
-
-  GLint major, minor;
-  glGetIntegerv(GL_MAJOR_VERSION, &major);
-  glGetIntegerv(GL_MINOR_VERSION, &minor);
-  XrVersion glver = XR_MAKE_VERSION(major, minor, 0);
-
-  LOGI("GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
-       glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
-
-  if (glver < gfxReq.minApiVersionSupported ||
-      glver > gfxReq.maxApiVersionSupported) {
-    LOGE("GLES version %" PRIx64 " is not supported. (%" PRIx64 " - %" PRIx64
-         ")\n",
-         glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
-    return -1;
-  }
-
-  return 0;
-}
-
-/* ----------------------------------------------------------------------------
  * * View operation
  * ----------------------------------------------------------------------------
  */

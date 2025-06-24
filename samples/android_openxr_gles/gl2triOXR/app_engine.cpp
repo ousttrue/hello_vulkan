@@ -3,9 +3,6 @@
 
 AppEngine::AppEngine(android_app *app, XrInstance instance, XrSystemId systemId)
     : m_instance(instance), m_systemId(systemId) {
-  // egl_init_with_pbuffer_surface(3, 24, 0, 0, 16, 16);
-  oxr_confirm_gfx_requirements(m_instance, m_systemId);
-
   init_gles_scene();
 
   m_session = oxr_create_session(m_instance, m_systemId);

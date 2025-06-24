@@ -41,10 +41,6 @@ int         oxr_initialize_loader (void *appVM, void *appCtx);
 
 std::string oxr_get_runtime_name (XrInstance instance);
 
-/* Confirm OpenGLES version */
-int         oxr_confirm_gfx_requirements (XrInstance instance, XrSystemId systemId);
-
-
 /* View operation */
 int         oxr_locate_views (XrSession session, XrTime dpy_time, XrSpace space, uint32_t *view_cnt, XrView *view_array);
 
