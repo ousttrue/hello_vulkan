@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../xr.h"
-#include <algorithm>
 #include <magic_enum/magic_enum.hpp>
 
 namespace vuloxr {
@@ -11,23 +10,13 @@ namespace xr {
 struct Session : NonCopyable {
   XrSession session;
   operator XrSession() const { return this->session; }
-  std::vector<VkFormat> formats;
-  Session(XrInstance _instance, XrSystemId _systemId, VkInstance instance,
-          VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
-          VkDevice device) {
+  std::vector<int64_t> formats;
+  Session(XrInstance _instance, XrSystemId _systemId,
+          const void *graphicsBinding) {
     // Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
-    XrGraphicsBindingVulkan2KHR graphicsBinding{
-        .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-        .next = nullptr,
-        .instance = instance,
-        .physicalDevice = physicalDevice,
-        .device = device,
-        .queueFamilyIndex = queueFamilyIndex,
-        .queueIndex = 0,
-    };
     XrSessionCreateInfo createInfo{
         .type = XR_TYPE_SESSION_CREATE_INFO,
-        .next = &graphicsBinding,
+        .next = graphicsBinding,
         .systemId = _systemId,
     };
     CheckXrResult(xrCreateSession(_instance, &createInfo, &this->session));
@@ -37,51 +26,14 @@ struct Session : NonCopyable {
     CheckXrResult(xrEnumerateSwapchainFormats(this->session, 0,
                                               &swapchainFormatCount, nullptr));
     this->formats.resize(swapchainFormatCount);
-    CheckXrResult(xrEnumerateSwapchainFormats(
-        this->session, swapchainFormatCount, &swapchainFormatCount,
-        (int64_t *)formats.data()));
+    CheckXrResult(
+        xrEnumerateSwapchainFormats(this->session, swapchainFormatCount,
+                                    &swapchainFormatCount, formats.data()));
   }
   ~Session() {
     Logger::Info("xro::Session::~Session ...");
     xrEndSession(this->session);
     xrDestroySession(this->session);
-  }
-
-  VkFormat selectColorSwapchainFormat() const {
-    // List of supported color swapchain formats.
-    constexpr VkFormat SupportedColorSwapchainFormats[] = {
-        VK_FORMAT_B8G8R8A8_SRGB,
-        VK_FORMAT_R8G8B8A8_SRGB,
-        VK_FORMAT_B8G8R8A8_UNORM,
-        VK_FORMAT_R8G8B8A8_UNORM,
-    };
-
-    auto swapchainFormatIt =
-        std::find_first_of(formats.begin(), formats.end(),
-                           std::begin(SupportedColorSwapchainFormats),
-                           std::end(SupportedColorSwapchainFormats));
-    if (swapchainFormatIt == formats.end()) {
-      throw std::runtime_error(
-          "No runtime swapchain format supported for color swapchain");
-    }
-
-    // Print swapchain formats and the selected one.
-    {
-      std::string swapchainFormatsString;
-      for (auto format : this->formats) {
-        const bool selected = format == *swapchainFormatIt;
-        swapchainFormatsString += " ";
-        if (selected) {
-          swapchainFormatsString += "[";
-        }
-        swapchainFormatsString += magic_enum::enum_name(format);
-        if (selected) {
-          swapchainFormatsString += "]";
-        }
-      }
-      Logger::Info("Swapchain Formats: %s", swapchainFormatsString.c_str());
-    }
-    return *swapchainFormatIt;
   }
 };
 
@@ -713,13 +665,14 @@ struct InputState {
   }
 };
 
-struct Swapchain {
-  std::vector<XrSwapchainImageVulkan2KHR> swapchainImages;
+template <typename T> // XrSwapchainImageVulkan2KHR
+struct Swapchain : NonCopyable {
+  std::vector<T> swapchainImages;
   XrSwapchainCreateInfo swapchainCreateInfo;
   XrSwapchain swapchain;
 
   Swapchain(XrSession session, uint32_t i, const XrViewConfigurationView &vp,
-            int64_t format) {
+            int64_t format, const T &defaultImage) {
 
     Logger::Info("Creating swapchain for view %d with dimensions "
                  "Width=%d Height=%d SampleCount=%d",
@@ -733,7 +686,7 @@ struct Swapchain {
         .usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT |
                       XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
         .format = format,
-        .sampleCount = VK_SAMPLE_COUNT_1_BIT,
+        .sampleCount = 1,
         .width = vp.recommendedImageRectWidth,
         .height = vp.recommendedImageRectHeight,
         .faceCount = 1,
@@ -746,8 +699,7 @@ struct Swapchain {
     uint32_t imageCount;
     CheckXrResult(
         xrEnumerateSwapchainImages(this->swapchain, 0, &imageCount, nullptr));
-    this->swapchainImages.resize(imageCount,
-                                 {XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+    this->swapchainImages.resize(imageCount, defaultImage);
 
     std::vector<XrSwapchainImageBaseHeader *> pointers;
     for (auto &image : this->swapchainImages) {
@@ -759,7 +711,7 @@ struct Swapchain {
 
   ~Swapchain() { xrDestroySwapchain(this->swapchain); }
 
-  std::tuple<VkImage, XrCompositionLayerProjectionView>
+  std::tuple<T, XrCompositionLayerProjectionView>
   AcquireSwapchain(const XrView &view) {
     XrSwapchainImageAcquireInfo acquireInfo{
         .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
@@ -775,7 +727,7 @@ struct Swapchain {
     CheckXrResult(xrWaitSwapchainImage(this->swapchain, &waitInfo));
 
     return {
-        this->swapchainImages[swapchainImageIndex].image,
+        this->swapchainImages[swapchainImageIndex],
         {
             .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
             .pose = view.pose,
@@ -800,19 +752,6 @@ struct Swapchain {
         .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
     };
     CheckXrResult(xrReleaseSwapchainImage(this->swapchain, &releaseInfo));
-  }
-
-  VkExtent2D extent() const {
-    return {this->swapchainCreateInfo.width, this->swapchainCreateInfo.height};
-  }
-
-  VkFormat format() const {
-    return static_cast<VkFormat>(this->swapchainCreateInfo.format);
-  }
-
-  VkSampleCountFlagBits sampleCountFlagBits() const {
-    return static_cast<VkSampleCountFlagBits>(
-        this->swapchainCreateInfo.sampleCount);
   }
 };
 

@@ -351,7 +351,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
   indices.memory.mapWrite(c_cubeIndices, sizeof(c_cubeIndices));
 
   // Create resources for each view.
-  std::vector<std::shared_ptr<vuloxr::xr::Swapchain>> swapchains;
+  using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
+  std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
   std::vector<std::shared_ptr<ViewRenderer>> renderers;
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
@@ -365,8 +366,9 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
-    auto swapchain = std::make_shared<vuloxr::xr::Swapchain>(
-        session, i, stereoscope.viewConfigurations[i], viewFormat);
+    auto swapchain = std::make_shared<VulkanSwapchain>(
+        session, i, stereoscope.viewConfigurations[i], viewFormat,
+        XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
     swapchains.push_back(swapchain);
 
     // pieline
@@ -390,7 +392,10 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         fs.pipelineShaderStageCreateInfo,
     };
 
-    auto extent = swapchain->extent();
+    VkExtent2D extent = {
+        swapchain->swapchainCreateInfo.width,
+        swapchain->swapchainCreateInfo.height,
+    };
     VkRect2D scissor = {{0, 0}, extent};
     // Will invert y after projection
     VkViewport viewport = {
@@ -408,8 +413,9 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                                    {viewport}, {scissor}, {});
 
     auto ptr = std::make_shared<ViewRenderer>(
-        physicalDevice, device, queueFamilyIndex, swapchain->extent(),
-        swapchain->format(), depthFormat, swapchain->sampleCountFlagBits(),
+        physicalDevice, device, queueFamilyIndex, extent,
+        (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
+        (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
         std::move(pipeline));
     renderers.push_back(ptr);
   }
@@ -464,8 +470,13 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->AcquireSwapchain(stereoscope.views[i]);
           composition.pushView(projectionLayer);
 
+          VkExtent2D extent = {
+              swapchain->swapchainCreateInfo.width,
+              swapchain->swapchainCreateInfo.height,
+          };
           renderers[i]->render(
-              image, swapchain->extent(), swapchain->format(), depthFormat,
+              image.image, extent,
+              (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
               clearColor, vertices.buffer, indices.buffer, indices.drawCount,
               projectionLayer.pose, projectionLayer.fov, cubes);
 

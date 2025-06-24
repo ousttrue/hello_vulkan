@@ -8,6 +8,14 @@
 
 auto APP_NAME = "hello_xr";
 
+// List of supported color swapchain formats.
+constexpr VkFormat SupportedColorSwapchainFormats[] = {
+    VK_FORMAT_B8G8R8A8_SRGB,
+    VK_FORMAT_R8G8B8A8_SRGB,
+    VK_FORMAT_B8G8R8A8_UNORM,
+    VK_FORMAT_R8G8B8A8_UNORM,
+};
+
 void android_main(struct android_app *app) {
 #ifdef NDEBUG
   vuloxr::Logger::Info("#### [release][android_main] ####");
@@ -39,9 +47,21 @@ void android_main(struct android_app *app) {
         vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
+      XrGraphicsBindingVulkan2KHR graphicsBinding{
+          .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+          .next = nullptr,
+          .instance = instance,
+          .physicalDevice = physicalDevice,
+          .device = device,
+          .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
+          .queueIndex = 0,
+      };
+
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
-                                  instance, physicalDevice,
-                                  physicalDevice.graphicsFamilyIndex, device);
+                                  &graphicsBinding);
+      auto selectedFormat = vuloxr::vk::selectColorSwapchainFormat(
+          session.formats, SupportedColorSwapchainFormats);
+      assert(selectedFormat);
 
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
           .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
@@ -87,8 +107,8 @@ void android_main(struct android_app *app) {
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
           //
-          session.selectColorSwapchainFormat(), physicalDevice,
-          physicalDevice.graphicsFamilyIndex, device,
+          *selectedFormat, physicalDevice, physicalDevice.graphicsFamilyIndex,
+          device,
           //
           {{0.184313729f, 0.309803933f, 0.309803933f, 1.0f}});
       // session scope

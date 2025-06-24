@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <list>
 #include <magic_enum/magic_enum.hpp>
+#include <span>
 #include <vector>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
@@ -665,6 +666,35 @@ struct Device : NonCopyable {
   }
 };
 
+inline std::optional<VkFormat>
+selectColorSwapchainFormat(const std::vector<int64_t> formats,
+                           std::span<const VkFormat> candidates) {
+  auto b = std::begin(candidates);
+  auto e = std::end(candidates);
+
+  std::optional<VkFormat> selected = {};
+  std::string swapchainFormatsString;
+  for (auto _format : formats) {
+    auto format = (VkFormat)_format;
+
+    auto found = std::find(b, e, format);
+    swapchainFormatsString += " ";
+    if (found != e) {
+      swapchainFormatsString += "[";
+    }
+    swapchainFormatsString += magic_enum::enum_name(format);
+    if (found != e) {
+      swapchainFormatsString += "]";
+    }
+
+    if (!selected && found != e) {
+      selected = *found;
+    }
+  }
+  vuloxr::Logger::Info("Swapchain Formats: %s", swapchainFormatsString.c_str());
+
+  return selected;
+}
 struct Swapchain : public NonCopyable {
   VkInstance instance;
   VkSurfaceKHR surface;

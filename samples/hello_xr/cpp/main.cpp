@@ -4,6 +4,14 @@
 #include <vuloxr/xr/session.h>
 #include <vuloxr/xr/vulkan.h>
 
+// List of supported color swapchain formats.
+constexpr VkFormat SupportedColorSwapchainFormats[] = {
+    VK_FORMAT_B8G8R8A8_SRGB,
+    VK_FORMAT_R8G8B8A8_SRGB,
+    VK_FORMAT_B8G8R8A8_UNORM,
+    VK_FORMAT_R8G8B8A8_UNORM,
+};
+
 int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
   static bool quitKeyPressed = false;
@@ -27,9 +35,18 @@ int main(int argc, char *argv[]) {
 
     {
       // XrSession
+      XrGraphicsBindingVulkan2KHR graphicsBinding{
+          .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+          .next = nullptr,
+          .instance = instance,
+          .physicalDevice = physicalDevice,
+          .device = device,
+          .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
+          .queueIndex = 0,
+      };
+
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
-                                  instance, physicalDevice,
-                                  physicalDevice.graphicsFamilyIndex, device);
+                                  &graphicsBinding);
 
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
           .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
@@ -53,8 +70,9 @@ int main(int argc, char *argv[]) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          session.selectColorSwapchainFormat(), physicalDevice,
-          physicalDevice.graphicsFamilyIndex, device,
+          *vuloxr::vk::selectColorSwapchainFormat(
+              session.formats, SupportedColorSwapchainFormats),
+          physicalDevice, physicalDevice.graphicsFamilyIndex, device,
           //
           clearColor);
 
