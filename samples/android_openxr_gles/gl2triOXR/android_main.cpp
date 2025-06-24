@@ -83,16 +83,15 @@ void android_main(struct android_app *app) {
   JNIEnv *Env;
   app->activity->vm->AttachCurrentThread(&Env, nullptr);
 
-  AppEngine engine(app);
-  engine.InitOpenXR_GLES();
+  vuloxr::xr::Instance xr_instance;
+  xr_instance.extensions.push_back(
+      XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+  xr_instance.extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
 
-  // vuloxr::xr::Instance xr_instance;
-  // xr_instance.extensions.push_back(
-  //     XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
-  // xr_instance.extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
+  auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
+  vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
 
-  // auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
-  // vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
+  AppEngine engine(app, xr_instance.instance, xr_instance.systemId);
 
   {
 

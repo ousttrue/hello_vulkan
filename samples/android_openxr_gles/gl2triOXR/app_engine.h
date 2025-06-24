@@ -11,10 +11,8 @@ struct AppEngine {
   XrSystemId m_systemId;
   std::vector<viewsurface_t> m_viewSurface;
 
-  AppEngine(android_app *app);
-  ~AppEngine();
+  AppEngine(android_app *app, XrInstance instance, XrSystemId systemId);
 
-  void InitOpenXR_GLES();
   void UpdateFrame();
   void RenderFrame();
   bool RenderLayer(XrTime dpy_time,

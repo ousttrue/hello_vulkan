@@ -39,8 +39,6 @@ typedef struct viewsurface_t
 /* Initialize OpenXR Loader */
 int         oxr_initialize_loader (void *appVM, void *appCtx);
 
-/* Create OpenXR Instance with Android/OpenGLES binding */
-XrInstance  oxr_create_instance   (void *appVM, void *appCtx);
 std::string oxr_get_runtime_name (XrInstance instance);
 
 /*  Get OpenXR Sysem */
@@ -124,10 +122,8 @@ int         oxr_resume_passthrough_layer (XrInstance instance, XrPassthroughLaye
 #endif
 
 
-/* Error handling */
-void        oxr_check_errors (XrResult ret, const char *func, const char *fname, int line);
 
-#define OXR_CHECK(func) oxr_check_errors(func, #func, __FILE__, __LINE__);
+#define OXR_CHECK(func) ;
 
 
 #endif

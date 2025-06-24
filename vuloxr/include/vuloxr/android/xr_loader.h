@@ -13,7 +13,6 @@ namespace vuloxr {
 namespace xr {
 
 inline XrInstanceCreateInfoAndroidKHR androidLoader(android_app *app) {
-  // Initialize the loader for this platform
   PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
   if (XR_SUCCEEDED(
           xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",

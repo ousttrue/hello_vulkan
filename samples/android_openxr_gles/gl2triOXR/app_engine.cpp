@@ -1,22 +1,15 @@
 #include "app_engine.h"
 #include "render_scene.h"
 
-AppEngine::AppEngine(android_app *app) : m_app(app) {}
-
-AppEngine::~AppEngine() {}
-
-/* ----------------------------------------------------------------------------
- * * Initialize OpenXR with OpenGLES renderer
- * ----------------------------------------------------------------------------
- */
-void AppEngine::InitOpenXR_GLES() {
-  void *vm = m_app->activity->vm;
-  void *clazz = m_app->activity->clazz;
-
-  oxr_initialize_loader(vm, clazz);
-
-  m_instance = oxr_create_instance(vm, clazz);
-  m_systemId = oxr_get_system(m_instance);
+AppEngine::AppEngine(android_app *app, XrInstance instance, XrSystemId systemId)
+    : m_instance(instance), m_systemId(systemId) {
+  // void *vm = m_app->activity->vm;
+  // void *clazz = m_app->activity->clazz;
+  //
+  // oxr_initialize_loader(vm, clazz);
+  //
+  // m_instance = oxr_create_instance(vm, clazz);
+  // m_systemId = oxr_get_system(m_instance);
 
   egl_init_with_pbuffer_surface(3, 24, 0, 0, 16, 16);
   oxr_confirm_gfx_requirements(m_instance, m_systemId);
