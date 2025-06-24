@@ -59,52 +59,6 @@ std::string oxr_get_runtime_name(XrInstance instance) {
 }
 
 /* ----------------------------------------------------------------------------
- * * Get OpenXR Sysem
- * ----------------------------------------------------------------------------
- */
-XrSystemId oxr_get_system(XrInstance instance) {
-  XrSystemGetInfo sysInfo = {XR_TYPE_SYSTEM_GET_INFO};
-  sysInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-
-  XrSystemId sysid;
-  OXR_CHECK(xrGetSystem(instance, &sysInfo, &sysid));
-
-  /* query system properties*/
-  XrSystemProperties prop = {XR_TYPE_SYSTEM_PROPERTIES};
-#if defined(USE_OXR_HANDTRACK)
-  XrSystemHandTrackingPropertiesEXT handTrackProp{
-      XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT};
-  prop.next = &handTrackProp;
-#endif
-  xrGetSystemProperties(instance, sysid, &prop);
-
-  LOGI("-----------------------------------------------------------------");
-  LOGI("System Properties         : Name=\"%s\", VendorId=%x", prop.systemName,
-       prop.vendorId);
-  LOGI("System Graphics Properties: SwapchainMaxWH=(%d, %d), MaxLayers=%d",
-       prop.graphicsProperties.maxSwapchainImageWidth,
-       prop.graphicsProperties.maxSwapchainImageHeight,
-       prop.graphicsProperties.maxLayerCount);
-  LOGI("System Tracking Properties: Orientation=%d, Position=%d",
-       prop.trackingProperties.orientationTracking,
-       prop.trackingProperties.positionTracking);
-#if defined(USE_OXR_HANDTRACK)
-  LOGI("System HandTracking Props : %d", handTrackProp.supportsHandTracking);
-#endif
-  LOGI("-----------------------------------------------------------------");
-
-  return sysid;
-}
-
-std::string oxr_get_system_name(XrInstance instance, XrSystemId sysid) {
-  XrSystemProperties prop = {XR_TYPE_SYSTEM_PROPERTIES};
-  xrGetSystemProperties(instance, sysid, &prop);
-
-  std::string sys_name = prop.systemName;
-  return sys_name;
-}
-
-/* ----------------------------------------------------------------------------
  * * Confirm OpenGLES version.
  * ----------------------------------------------------------------------------
  */

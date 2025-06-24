@@ -79,6 +79,14 @@ CreateVulkanDeviceKHR(XrInstance instance,
 std::tuple<vk::Instance, vk::PhysicalDevice, vk::Device>
 createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
              PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback = nullptr) {
+  // Create the Vulkan device for the adapter associated with the system.
+  // Extension function must be loaded by name
+  XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
+      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
+  };
+  CheckXrResult(GetVulkanGraphicsRequirements2KHR(xr_instance, xr_systemId,
+                                                  &graphicsRequirements));
+
   vk::Instance instance;
   instance.appInfo.pApplicationName = "hello_xr";
   instance.appInfo.pEngineName = "hello_xr";
@@ -108,14 +116,6 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   instance.addExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME) ||
       instance.addExtension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 #endif
-
-  // Create the Vulkan device for the adapter associated with the system.
-  // Extension function must be loaded by name
-  XrGraphicsRequirementsVulkan2KHR graphicsRequirements{
-      .type = XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR,
-  };
-  CheckXrResult(GetVulkanGraphicsRequirements2KHR(xr_instance, xr_systemId,
-                                                  &graphicsRequirements));
 
   for (auto name : instance.layers) {
     Logger::Info("  vulkan layer: %s", name);
@@ -217,8 +217,8 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
       .vulkanAllocator = nullptr,
   };
   VkDevice vkDevice;
-  CheckXrResult(CreateVulkanDeviceKHR(xr_instance, &deviceCreateInfo,
-                                      &vkDevice, &err));
+  CheckXrResult(
+      CreateVulkanDeviceKHR(xr_instance, &deviceCreateInfo, &vkDevice, &err));
   device.reset(vkDevice, queueInfo.queueFamilyIndex);
   vk::CheckVkResult(err);
 

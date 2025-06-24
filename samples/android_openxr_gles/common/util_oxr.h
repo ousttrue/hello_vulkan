@@ -41,10 +41,6 @@ int         oxr_initialize_loader (void *appVM, void *appCtx);
 
 std::string oxr_get_runtime_name (XrInstance instance);
 
-/*  Get OpenXR Sysem */
-XrSystemId  oxr_get_system (XrInstance instance);
-std::string oxr_get_system_name (XrInstance instance, XrSystemId sysid);
-
 /* Confirm OpenGLES version */
 int         oxr_confirm_gfx_requirements (XrInstance instance, XrSystemId systemId);
 

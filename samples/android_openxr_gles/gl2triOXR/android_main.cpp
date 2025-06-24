@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <vuloxr/android/xr_loader.h>
 #include <vuloxr/xr/session.h>
+#include <vuloxr/xr/egl.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -90,6 +91,8 @@ void android_main(struct android_app *app) {
 
   auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
   vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
+
+  vuloxr::xr::createEgl(xr_instance.instance, xr_instance.systemId);
 
   AppEngine engine(app, xr_instance.instance, xr_instance.systemId);
 

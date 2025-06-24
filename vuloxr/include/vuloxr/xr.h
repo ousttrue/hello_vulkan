@@ -84,6 +84,15 @@ struct Instance : NonCopyable {
       .formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
   };
 
+  XrSystemProperties systemProperties{
+      .type = XR_TYPE_SYSTEM_PROPERTIES,
+  };
+  // #if defined(USE_OXR_HANDTRACK)
+  //   XrSystemHandTrackingPropertiesEXT handTrackProp{
+  //       XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT};
+  //   prop.next = &handTrackProp;
+  // #endif
+
   ~Instance() {
     if (this->instance != XR_NULL_HANDLE) {
       Logger::Info("xro::Instance::~Instance ...");
@@ -124,35 +133,37 @@ struct Instance : NonCopyable {
       return result;
     }
 
-    // Read graphics properties for preferred swapchain length and logging.
-    XrSystemProperties systemProperties{
-        .type = XR_TYPE_SYSTEM_PROPERTIES,
-    };
     CheckXrResult(xrGetSystemProperties(this->instance, this->systemId,
-                                        &systemProperties));
-
-    // Log system properties.
-    Logger::Info("System Properties: Name=%s VendorId=%d",
-                 systemProperties.systemName, systemProperties.vendorId);
-    Logger::Info(
-        "System Graphics Properties: MaxWidth=%d MaxHeight=%d MaxLayers=%d",
-        systemProperties.graphicsProperties.maxSwapchainImageWidth,
-        systemProperties.graphicsProperties.maxSwapchainImageHeight,
-        systemProperties.graphicsProperties.maxLayerCount);
-    Logger::Info("System Tracking Properties: OrientationTracking=%s "
-                 "PositionTracking=%s",
-                 systemProperties.trackingProperties.orientationTracking ==
-                         XR_TRUE
-                     ? "True"
-                     : "False",
-                 systemProperties.trackingProperties.positionTracking == XR_TRUE
-                     ? "True"
-                     : "False");
+                                        &this->systemProperties));
 
     return XR_SUCCESS;
+  }
+
+  // Log system properties.
+  void logSystemProperties() {
+    Logger::Info("System Properties: Name=%s VendorId=%d",
+                 this->systemProperties.systemName,
+                 this->systemProperties.vendorId);
+    Logger::Info(
+        "System Graphics Properties: MaxWidth=%d MaxHeight=%d MaxLayers=%d",
+        this->systemProperties.graphicsProperties.maxSwapchainImageWidth,
+        this->systemProperties.graphicsProperties.maxSwapchainImageHeight,
+        this->systemProperties.graphicsProperties.maxLayerCount);
+    Logger::Info(
+        "System Tracking Properties: OrientationTracking=%s "
+        "PositionTracking=%s",
+        this->systemProperties.trackingProperties.orientationTracking == XR_TRUE
+            ? "True"
+            : "False",
+        this->systemProperties.trackingProperties.positionTracking == XR_TRUE
+            ? "True"
+            : "False");
+    // #if defined(USE_OXR_HANDTRACK)
+    //   LOGI("System HandTracking Props : %d",
+    //   handTrackProp.supportsHandTracking);
+    // #endif
   }
 };
 
 } // namespace xr
-
 } // namespace vuloxr

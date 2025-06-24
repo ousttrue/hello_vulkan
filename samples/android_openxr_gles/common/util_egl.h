@@ -14,8 +14,8 @@ extern "C" {
 #include <EGL/eglext.h>
 
 int egl_init_with_pbuffer_surface (int gles_version, int depth_size, int stencil_size, int sample_num, int win_w, int win_h);
-int egl_init_with_window_surface (int gles_version, void *window, int depth_size, int stencil_size, int sample_num);
-int egl_init_with_platform_window_surface (int gles_version, int depth_size, int stencil_size, int sample_num, int win_w, int win_h);
+// int egl_init_with_window_surface (int gles_version, void *window, int depth_size, int stencil_size, int sample_num);
+// int egl_init_with_platform_window_surface (int gles_version, int depth_size, int stencil_size, int sample_num, int win_w, int win_h);
 int egl_init_with_platform_device_surface (int gles_version, int depth_size, int stencil_size, int sample_num, int win_w, int win_h);
 int egl_init_with_eglstream_surface       (int gles_version, int depth_size, int stencil_size, int sample_num, int win_w, int win_h, int stream_fd);
 int egl_init_and_create_eglstream         (int *stream_fd);
