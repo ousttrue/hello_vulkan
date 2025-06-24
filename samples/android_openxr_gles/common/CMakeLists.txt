@@ -3,7 +3,6 @@ add_library(
   ${TARGET_NAME} STATIC
   assertgl.c
   util_oxr.cpp
-  util_debugstr.c
   util_egl.c
   util_matrix.c
   util_render2d.c
