@@ -3,60 +3,6 @@
  * Copyright (c) 2022 terryky1220@gmail.com
  * ------------------------------------------------ */
 #include "util_oxr.h"
-#include "util_egl.h"
-#include <GLES3/gl31.h>
-#include <string>
-
-#define ENUM_CASE_STR(name, val)                                               \
-  case name:                                                                   \
-    return #name;
-#define MAKE_TO_STRING_FUNC(enumType)                                          \
-  inline const char *to_string(enumType e) {                                   \
-    switch (e) {                                                               \
-      XR_LIST_ENUM_##enumType(ENUM_CASE_STR) default                           \
-          : return "Unknown " #enumType;                                       \
-    }                                                                          \
-  }
-
-MAKE_TO_STRING_FUNC(XrReferenceSpaceType);
-MAKE_TO_STRING_FUNC(XrViewConfigurationType);
-MAKE_TO_STRING_FUNC(XrEnvironmentBlendMode);
-MAKE_TO_STRING_FUNC(XrSessionState);
-MAKE_TO_STRING_FUNC(XrResult);
-MAKE_TO_STRING_FUNC(XrFormFactor);
-
-static XrInstance s_instance = XR_NULL_HANDLE;
-
-/* ----------------------------------------------------------------------------
- * * Initialize OpenXR Loader
- * ----------------------------------------------------------------------------
- */
-int oxr_initialize_loader(void *appVM, void *appCtx) {
-  PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR;
-  xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
-                        (PFN_xrVoidFunction *)&xrInitializeLoaderKHR);
-
-  XrLoaderInitInfoAndroidKHR info = {XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
-  info.applicationVM = appVM;
-  info.applicationContext = appCtx;
-
-  xrInitializeLoaderKHR((XrLoaderInitInfoBaseHeaderKHR *)&info);
-
-  return 0;
-}
-
-std::string oxr_get_runtime_name(XrInstance instance) {
-  XrInstanceProperties prop = {XR_TYPE_INSTANCE_PROPERTIES};
-  xrGetInstanceProperties(instance, &prop);
-
-  char strbuf[128];
-  snprintf(strbuf, 127, "%s (%u.%u.%u)", prop.runtimeName,
-           XR_VERSION_MAJOR(prop.runtimeVersion),
-           XR_VERSION_MINOR(prop.runtimeVersion),
-           XR_VERSION_PATCH(prop.runtimeVersion));
-  std::string runtime_name = strbuf;
-  return runtime_name;
-}
 
 /* ----------------------------------------------------------------------------
  * * View operation
@@ -483,8 +429,8 @@ int oxr_handle_session_state_changed(XrSession session,
   XrSessionState new_state = ev.state;
   s_session_state = new_state;
 
-  LOGI("  [SessionState]: %s -> %s (session=%p, time=%ld)",
-       to_string(old_state), to_string(new_state), ev.session, ev.time);
+  // LOGI("  [SessionState]: %s -> %s (session=%p, time=%ld)",
+  //      to_string(old_state), to_string(new_state), ev.session, ev.time);
 
   if ((ev.session != XR_NULL_HANDLE) && (ev.session != session)) {
     LOGE("XrEventDataSessionStateChanged for unknown session");
