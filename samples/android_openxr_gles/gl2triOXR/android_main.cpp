@@ -1,11 +1,8 @@
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-
 #include <vuloxr/android/userdata.h>
 
-#include <cstddef>
-#include <vuloxr/android/xr_loader.h>
-#include <vuloxr/xr/egl.h>
+#include <vuloxr/xr/platform/android.h>
+
+#include <vuloxr/xr/graphics/egl.h>
 #include <vuloxr/xr/session.h>
 
 #include "render_scene.h"
@@ -74,15 +71,12 @@ static void xr_gles_session(const std::function<bool(bool)> &runLoop,
       continue;
     }
 
-    // RenderFrame();
     std::vector<XrCompositionLayerBaseHeader *> all_layers;
 
     XrTime dpy_time;
     oxr_begin_frame(session, &dpy_time);
 
     std::vector<XrCompositionLayerProjectionView> layerViews;
-
-    // RenderLayer(dpy_time, projLayerViews, projLayer);
 
     /* Acquire View Location */
     uint32_t viewCount = (uint32_t)m_viewSurface.size();

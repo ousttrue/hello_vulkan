@@ -2,9 +2,9 @@
 
 #include "xr_vulkan_session.h"
 #include <cstddef>
-#include <vuloxr/android/xr_loader.h>
+#include <vuloxr/xr/graphics/vulkan.h>
+#include <vuloxr/xr/platform/android.h>
 #include <vuloxr/xr/session.h>
-#include <vuloxr/xr/vulkan.h>
 
 auto APP_NAME = "hello_xr";
 

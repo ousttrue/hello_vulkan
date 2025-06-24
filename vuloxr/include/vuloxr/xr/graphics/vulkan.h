@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../vk.h"
+#include "../../vk.h"
+#include "../../xr.h"
 
 #ifdef XR_USE_PLATFORM_ANDROID
 #include <android_native_app_glue.h>
