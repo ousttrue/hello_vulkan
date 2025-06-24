@@ -13,7 +13,7 @@ struct Session : NonCopyable {
   std::vector<int64_t> formats;
   Session(XrInstance _instance, XrSystemId _systemId,
           const void *graphicsBinding) {
-    // Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
+    Logger::Info("Creating session...");
     XrSessionCreateInfo createInfo{
         .type = XR_TYPE_SESSION_CREATE_INFO,
         .next = graphicsBinding,
