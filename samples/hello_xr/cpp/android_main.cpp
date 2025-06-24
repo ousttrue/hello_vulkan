@@ -2,7 +2,9 @@
 
 #include "xr_vulkan_session.h"
 #include <cstddef>
+#include <vuloxr/android/xr_loader.h>
 #include <vuloxr/xr/session.h>
+#include <vuloxr/xr/vulkan.h>
 
 auto APP_NAME = "hello_xr";
 
@@ -24,33 +26,17 @@ void android_main(struct android_app *app) {
   JNIEnv *Env;
   app->activity->vm->AttachCurrentThread(&Env, nullptr);
 
-  // Initialize the loader for this platform
-  PFN_xrInitializeLoaderKHR initializeLoader = nullptr;
-  if (XR_SUCCEEDED(
-          xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR",
-                                (PFN_xrVoidFunction *)(&initializeLoader)))) {
-    XrLoaderInitInfoAndroidKHR loaderInitInfoAndroid = {
-        .type = XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
-        .applicationVM = app->activity->vm,
-        .applicationContext = app->activity->clazz,
-    };
-    initializeLoader(
-        (const XrLoaderInitInfoBaseHeaderKHR *)&loaderInitInfoAndroid);
-  }
-
-  XrInstanceCreateInfoAndroidKHR instanceCreateInfoAndroid{
-      .type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
-      .applicationVM = app->activity->vm,
-      .applicationActivity = app->activity->clazz,
-  };
   vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+
+  auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
   vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
 
   {
-    auto [instance, physicalDevice, device] = xr_instance.createVulkan();
+    auto [instance, physicalDevice, device] =
+        vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,

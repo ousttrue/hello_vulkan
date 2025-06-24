@@ -2,6 +2,7 @@
 #include <thread>
 #include <vuloxr/xr.h>
 #include <vuloxr/xr/session.h>
+#include <vuloxr/xr/vulkan.h>
 
 int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
@@ -21,7 +22,8 @@ int main(int argc, char *argv[]) {
   }
 
   {
-    auto [instance, physicalDevice, device] = xr_instance.createVulkan();
+    auto [instance, physicalDevice, device] =
+        vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
       // XrSession

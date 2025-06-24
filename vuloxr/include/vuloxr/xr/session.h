@@ -1,6 +1,8 @@
 #pragma once
+
 #include "../xr.h"
 #include <algorithm>
+#include <magic_enum/magic_enum.hpp>
 
 namespace vuloxr {
 

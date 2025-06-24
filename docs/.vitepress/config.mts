@@ -71,7 +71,16 @@ export default defineConfig({
       // },
       {
         text: "OpenXR",
-        items: [{ text: "初期化", link: "/openxr/initialization" }],
+        items: [
+          { text: "初期化", link: "/openxr/initialization" },
+          {
+            text: "Extensions", items: [
+              { text: "Hand Tracking", link: "/openxr/extensions/hand_tracking" },
+              { text: "Spatial Entities", link: "/openxr/extensions/spatial_entities" },
+              { text: "Android XR", link: "/openxr/extensions/android_xr" },
+            ],
+          },
+        ],
       },
       {
         text: "Gtk",
