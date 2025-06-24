@@ -2,7 +2,6 @@ set(TARGET_NAME android_openxr_gles)
 add_library(
   ${TARGET_NAME} STATIC
   assertgl.c
-  util_oxr.cpp
   util_matrix.c
   util_render2d.c
   util_render_target.c

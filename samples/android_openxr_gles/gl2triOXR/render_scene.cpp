@@ -1,4 +1,4 @@
-#include "util_oxr.h"
+#include "util_render_target.h"
 #include "util_shader.h"
 #include <GLES3/gl31.h>
 
@@ -40,15 +40,10 @@ int init_gles_scene() {
   return 0;
 }
 
-int render_gles_scene(render_target_t &rtarget, XrRect2Di imgRect) {
-  int view_x = imgRect.offset.x;
-  int view_y = imgRect.offset.y;
-  int view_w = imgRect.extent.width;
-  int view_h = imgRect.extent.height;
-
+int render_gles_scene(render_target_t &rtarget, int view_w, int view_h) {
   glBindFramebuffer(GL_FRAMEBUFFER, rtarget.fbo_id);
 
-  glViewport(view_x, view_y, view_w, view_h);
+  glViewport(0, 0, view_w, view_h);
 
   glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
