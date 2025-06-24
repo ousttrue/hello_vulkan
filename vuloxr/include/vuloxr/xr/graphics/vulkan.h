@@ -227,5 +227,20 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
           std::move(device)};
 }
 
+inline XrGraphicsBindingVulkan2KHR
+getGraphicsBindingVulkan2KHR(VkInstance instance,
+                             VkPhysicalDevice physicalDevice,
+                             uint32_t graphicsFamilyIndex, VkDevice device) {
+  return XrGraphicsBindingVulkan2KHR{
+      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+      .next = nullptr,
+      .instance = instance,
+      .physicalDevice = physicalDevice,
+      .device = device,
+      .queueFamilyIndex = graphicsFamilyIndex,
+      .queueIndex = 0,
+  };
+}
+
 } // namespace xr
 } // namespace vuloxr

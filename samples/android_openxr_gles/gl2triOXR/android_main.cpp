@@ -9,86 +9,6 @@
 
 auto APP_NAME = "hello_xr";
 
-static EGLConfig _egl_get_config() {
-  auto dpy = eglGetCurrentDisplay();
-  if (dpy == EGL_NO_DISPLAY) {
-    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
-    return EGL_NO_CONTEXT;
-  }
-
-  auto ctx = eglGetCurrentContext();
-  if (ctx == EGL_NO_CONTEXT) {
-    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
-    return EGL_NO_CONTEXT;
-  }
-
-  int cfg_id;
-  eglQueryContext(dpy, ctx, EGL_CONFIG_ID, &cfg_id);
-
-  EGLint cfg_attribs[] = {EGL_CONFIG_ID, 0, EGL_NONE};
-  cfg_attribs[1] = cfg_id;
-
-  int ival;
-  EGLConfig cfg;
-  if (eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &ival) != EGL_TRUE) {
-    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
-    return EGL_NO_CONTEXT;
-  }
-
-  return cfg;
-}
-
-EGLContext _egl_get_context() {
-  auto dpy = eglGetCurrentDisplay();
-  if (dpy == EGL_NO_DISPLAY) {
-    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
-    return EGL_NO_CONTEXT;
-  }
-
-  auto ctx = eglGetCurrentContext();
-  if (ctx == EGL_NO_CONTEXT) {
-    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
-    return EGL_NO_CONTEXT;
-  }
-
-  return ctx;
-}
-
-static XrViewConfigurationView *oxr_enumerate_viewconfig(XrInstance instance,
-                                                         XrSystemId sysid,
-                                                         uint32_t *numview) {
-  uint32_t numConf;
-  XrViewConfigurationView *conf;
-  XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-
-  xrEnumerateViewConfigurationViews(instance, sysid, viewType, 0, &numConf,
-                                    NULL);
-
-  conf = (XrViewConfigurationView *)calloc(sizeof(XrViewConfigurationView),
-                                           numConf);
-  for (uint32_t i = 0; i < numConf; i++)
-    conf[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
-
-  xrEnumerateViewConfigurationViews(instance, sysid, viewType, numConf,
-                                    &numConf, conf);
-
-  vuloxr::Logger::Info("ViewConfiguration num: %d", numConf);
-  for (uint32_t i = 0; i < numConf; i++) {
-    XrViewConfigurationView &vp = conf[i];
-    vuloxr::Logger::Info(
-        "ViewConfiguration[%d/%d]: MaxWH(%d, %d), MaxSample(%d)", i, numConf,
-        vp.maxImageRectWidth, vp.maxImageRectHeight,
-        vp.maxSwapchainSampleCount);
-    vuloxr::Logger::Info("                        RecWH(%d, %d), RecSample(%d)",
-                         vp.recommendedImageRectWidth,
-                         vp.recommendedImageRectHeight,
-                         vp.recommendedSwapchainSampleCount);
-  }
-
-  *numview = numConf;
-  return conf;
-}
-
 /* ----------------------------------------------------------------------------
  * * Swapchain operation
  * ----------------------------------------------------------------------------
@@ -193,14 +113,33 @@ struct viewsurface_t {
 static std::vector<viewsurface_t> oxr_create_viewsurface(XrInstance instance,
                                                          XrSystemId sysid,
                                                          XrSession session) {
+  uint32_t numConf;
+  XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+  xrEnumerateViewConfigurationViews(instance, sysid, viewType, 0, &numConf,
+                                    NULL);
+  std::vector<XrViewConfigurationView> conf(numConf);
+  for (uint32_t i = 0; i < numConf; i++) {
+    conf[i].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+  }
+  xrEnumerateViewConfigurationViews(instance, sysid, viewType, numConf,
+                                    &numConf, conf.data());
+
+  vuloxr::Logger::Info("ViewConfiguration num: %d", numConf);
+  for (uint32_t i = 0; i < numConf; i++) {
+    XrViewConfigurationView &vp = conf[i];
+    vuloxr::Logger::Info(
+        "ViewConfiguration[%d/%d]: MaxWH(%d, %d), MaxSample(%d)", i, numConf,
+        vp.maxImageRectWidth, vp.maxImageRectHeight,
+        vp.maxSwapchainSampleCount);
+    vuloxr::Logger::Info("                        RecWH(%d, %d), RecSample(%d)",
+                         vp.recommendedImageRectWidth,
+                         vp.recommendedImageRectHeight,
+                         vp.recommendedSwapchainSampleCount);
+  }
+
   std::vector<viewsurface_t> sfcArray;
-
-  uint32_t viewCount;
-  XrViewConfigurationView *conf_views =
-      oxr_enumerate_viewconfig(instance, sysid, &viewCount);
-
-  for (uint32_t i = 0; i < viewCount; i++) {
-    const XrViewConfigurationView &vp = conf_views[i];
+  for (uint32_t i = 0; i < numConf; i++) {
+    auto &vp = conf[i];
     uint32_t vp_w = vp.recommendedImageRectWidth;
     uint32_t vp_h = vp.recommendedImageRectHeight;
 
@@ -519,12 +458,7 @@ void android_main(struct android_app *app) {
                                              xr_instance.systemId);
   {
     {
-      XrGraphicsBindingOpenGLESAndroidKHR graphicsBinding = {
-          .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
-          .display = eglGetCurrentDisplay(),
-          .config = _egl_get_config(),
-          .context = _egl_get_context(),
-      };
+      auto graphicsBinding = vuloxr::xr::getGraphicsBindingOpenGLESAndroidKHR();
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
 

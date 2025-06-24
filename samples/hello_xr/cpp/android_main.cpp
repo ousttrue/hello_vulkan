@@ -47,16 +47,8 @@ void android_main(struct android_app *app) {
         vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
-      XrGraphicsBindingVulkan2KHR graphicsBinding{
-          .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-          .next = nullptr,
-          .instance = instance,
-          .physicalDevice = physicalDevice,
-          .device = device,
-          .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
-          .queueIndex = 0,
-      };
-
+      auto graphicsBinding = vuloxr::xr::getGraphicsBindingVulkan2KHR(
+          instance, physicalDevice, physicalDevice.graphicsFamilyIndex, device);
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
       auto selectedFormat = vuloxr::vk::selectColorSwapchainFormat(

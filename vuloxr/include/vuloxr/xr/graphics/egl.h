@@ -6,6 +6,7 @@
 #include <GLES3/gl31.h>
 
 #include <openxr/openxr.h>
+#include <openxr/openxr_platform.h>
 
 #include <assert.h>
 #include <stdio.h>
@@ -15,6 +16,61 @@
 
 namespace vuloxr {
 namespace xr {
+
+inline EGLConfig _egl_get_config() {
+  auto dpy = eglGetCurrentDisplay();
+  if (dpy == EGL_NO_DISPLAY) {
+    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
+    return EGL_NO_CONTEXT;
+  }
+
+  auto ctx = eglGetCurrentContext();
+  if (ctx == EGL_NO_CONTEXT) {
+    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
+    return EGL_NO_CONTEXT;
+  }
+
+  int cfg_id;
+  eglQueryContext(dpy, ctx, EGL_CONFIG_ID, &cfg_id);
+
+  EGLint cfg_attribs[] = {EGL_CONFIG_ID, 0, EGL_NONE};
+  cfg_attribs[1] = cfg_id;
+
+  int ival;
+  EGLConfig cfg;
+  if (eglChooseConfig(dpy, cfg_attribs, &cfg, 1, &ival) != EGL_TRUE) {
+    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
+    return EGL_NO_CONTEXT;
+  }
+
+  return cfg;
+}
+
+inline EGLContext _egl_get_context() {
+  auto dpy = eglGetCurrentDisplay();
+  if (dpy == EGL_NO_DISPLAY) {
+    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
+    return EGL_NO_CONTEXT;
+  }
+
+  auto ctx = eglGetCurrentContext();
+  if (ctx == EGL_NO_CONTEXT) {
+    fprintf(stderr, "ERR: %s(%d)\n", __FILE__, __LINE__);
+    return EGL_NO_CONTEXT;
+  }
+
+  return ctx;
+}
+
+inline XrGraphicsBindingOpenGLESAndroidKHR
+getGraphicsBindingOpenGLESAndroidKHR() {
+  return XrGraphicsBindingOpenGLESAndroidKHR{
+      .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
+      .display = eglGetCurrentDisplay(),
+      .config = _egl_get_config(),
+      .context = _egl_get_context(),
+  };
+}
 
 inline const char *GetEGLErrMsg(int nCode) {
   switch (nCode) {
