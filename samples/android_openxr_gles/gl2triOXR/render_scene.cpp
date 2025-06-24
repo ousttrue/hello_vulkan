@@ -1,4 +1,3 @@
-#include "util_egl.h"
 #include "util_oxr.h"
 #include "util_shader.h"
 #include <GLES3/gl31.h>

@@ -9,7 +9,6 @@
 #include <GLES2/gl2ext.h>
 #include "assertgl.h"
 #include "util_render_target.h"
-#include "util_egl.h"
 
 #define UNUSED(x) (void)(x)
 

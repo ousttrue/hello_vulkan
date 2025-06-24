@@ -12,7 +12,8 @@
 #include <sys/system_properties.h>
 #endif
 
-#include "util_egl.h"
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES3/gl31.h>
 
 #include <array>
