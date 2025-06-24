@@ -68,7 +68,6 @@ create_render_target (render_target_t *rtarget, int w, int h, unsigned int flags
     return 0;
 }
 
-
 int
 destroy_render_target (render_target_t *rtarget)
 {
@@ -76,30 +75,6 @@ destroy_render_target (render_target_t *rtarget)
     glDeleteTextures (1, &rtarget->texz_id);
     glDeleteFramebuffers (1, &rtarget->fbo_id);
     memset (rtarget, 0, sizeof (*rtarget));
-
-    GLASSERT();
-
-    return 0;
-}
-
-int
-set_render_target (render_target_t *rtarget)
-{
-    if (rtarget)
-    {
-        glBindFramebuffer (GL_FRAMEBUFFER, rtarget->fbo_id);
-        glViewport (0, 0, rtarget->width, rtarget->height);
-        glScissor  (0, 0, rtarget->width, rtarget->height);
-    }
-    else
-    {
-        glBindFramebuffer (GL_FRAMEBUFFER, 0);
-
-        int w, h;
-        egl_get_current_surface_dimension (&w, &h);
-        glViewport (0, 0, w, h);
-        glScissor  (0, 0, w, h);
-    }
 
     GLASSERT();
 
