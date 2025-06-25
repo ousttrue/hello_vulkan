@@ -41,6 +41,7 @@ inline XrFrameState beginFrame(XrSession session) {
   XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
   XrFrameState frameState{XR_TYPE_FRAME_STATE};
   CheckXrResult(xrWaitFrame(session, &frameWaitInfo, &frameState));
+
   XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
   CheckXrResult(xrBeginFrame(session, &frameBeginInfo));
   return frameState;

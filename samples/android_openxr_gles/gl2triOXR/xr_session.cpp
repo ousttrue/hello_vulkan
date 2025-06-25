@@ -110,18 +110,6 @@ static int oxr_acquire_viewsurface(viewsurface_t &viewSurface,
   return 0;
 }
 
-static int oxr_begin_frame(XrSession session, XrTime *dpy_time) {
-  XrFrameWaitInfo frameWait = {XR_TYPE_FRAME_WAIT_INFO};
-  XrFrameState frameState = {XR_TYPE_FRAME_STATE};
-  xrWaitFrame(session, &frameWait, &frameState);
-
-  XrFrameBeginInfo frameBegin = {XR_TYPE_FRAME_BEGIN_INFO};
-  xrBeginFrame(session, &frameBegin);
-
-  *dpy_time = frameState.predictedDisplayTime;
-  return (int)frameState.shouldRender;
-}
-
 static int oxr_locate_views(XrSession session, XrTime dpy_time, XrSpace space,
                             uint32_t *view_cnt, XrView *view_array) {
   XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -215,8 +203,7 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
     std::vector<XrCompositionLayerBaseHeader *> all_layers;
 
-    XrTime dpy_time;
-    oxr_begin_frame(session, &dpy_time);
+    auto frameState = vuloxr::xr::beginFrame(session);
 
     std::vector<XrCompositionLayerProjectionView> layerViews;
 
@@ -224,7 +211,8 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
     uint32_t viewCount = (uint32_t)m_viewSurface.size();
 
     std::vector<XrView> views(viewCount, {XR_TYPE_VIEW});
-    oxr_locate_views(session, dpy_time, appSpace, &viewCount, views.data());
+    oxr_locate_views(session, frameState.predictedDisplayTime, appSpace,
+                     &viewCount, views.data());
 
     layerViews.resize(viewCount);
 
@@ -256,6 +244,6 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
         reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
 
     /* Compose all layers */
-    oxr_end_frame(session, dpy_time, all_layers);
+    oxr_end_frame(session, frameState.predictedDisplayTime, all_layers);
   }
 }
