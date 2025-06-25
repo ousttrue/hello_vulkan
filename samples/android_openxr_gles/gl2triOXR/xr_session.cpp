@@ -1,5 +1,6 @@
 #include "xr_session.h"
 #include "render_scene.h"
+#include <thread>
 #include <vuloxr/xr/session.h>
 
 using GLESSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageOpenGLESKHR>;
@@ -77,122 +78,6 @@ oxr_alloc_swapchain_rtargets(GLESSwapchain &swapchain, uint32_t width,
     vuloxr::Logger::Info(
         "SwapchainImage[%d/%d] FBO:%d, TEXC:%d, TEXZ:%d, WH(%d, %d)", i,
         swapchain.swapchainImages.size(), fbo, tex_c, tex_z, width, height);
-  }
-  return 0;
-}
-
-static XrEventDataBaseHeader *oxr_poll_event(XrInstance instance,
-                                             XrSession session) {
-  XrEventDataBaseHeader *ev =
-      reinterpret_cast<XrEventDataBaseHeader *>(&s_evDataBuf);
-  *ev = {XR_TYPE_EVENT_DATA_BUFFER};
-
-  XrResult xr = xrPollEvent(instance, &s_evDataBuf);
-  if (xr == XR_EVENT_UNAVAILABLE)
-    return nullptr;
-
-  if (xr != XR_SUCCESS) {
-    vuloxr::Logger::Error("xrPollEvent");
-    return NULL;
-  }
-
-  if (ev->type == XR_TYPE_EVENT_DATA_EVENTS_LOST) {
-    XrEventDataEventsLost *evLost =
-        reinterpret_cast<XrEventDataEventsLost *>(ev);
-    vuloxr::Logger::Warn("%p events lost", evLost);
-  }
-  return ev;
-}
-
-static int oxr_begin_session(XrSession session) {
-  XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-
-  XrSessionBeginInfo bi{XR_TYPE_SESSION_BEGIN_INFO};
-  bi.primaryViewConfigurationType = viewType;
-  xrBeginSession(session, &bi);
-
-  return 0;
-}
-
-static int oxr_handle_session_state_changed(XrSession session,
-                                            XrEventDataSessionStateChanged &ev,
-                                            bool *exitLoop, bool *reqRestart) {
-  XrSessionState old_state = s_session_state;
-  XrSessionState new_state = ev.state;
-  s_session_state = new_state;
-
-  // LOGI("  [SessionState]: %s -> %s (session=%p, time=%ld)",
-  //      to_string(old_state), to_string(new_state), ev.session, ev.time);
-
-  if ((ev.session != XR_NULL_HANDLE) && (ev.session != session)) {
-    vuloxr::Logger::Error("XrEventDataSessionStateChanged for unknown session");
-    return -1;
-  }
-
-  switch (new_state) {
-  case XR_SESSION_STATE_READY:
-    oxr_begin_session(session);
-    s_session_running = true;
-    break;
-
-  case XR_SESSION_STATE_STOPPING:
-    xrEndSession(session);
-    s_session_running = false;
-    break;
-
-  case XR_SESSION_STATE_EXITING:
-    *exitLoop = true;
-    *reqRestart =
-        false; // Do not attempt to restart because user closed this session.
-    break;
-
-  case XR_SESSION_STATE_LOSS_PENDING:
-    *exitLoop = true;
-    *reqRestart = true; // Poll for a new instance.
-    break;
-
-  default:
-    break;
-  }
-  return 0;
-}
-
-static int oxr_poll_events(XrInstance instance, XrSession session,
-                           bool *exit_loop, bool *req_restart) {
-  *exit_loop = false;
-  *req_restart = false;
-
-  // Process all pending messages.
-  while (XrEventDataBaseHeader *ev = oxr_poll_event(instance, session)) {
-    switch (ev->type) {
-    case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
-      vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING");
-      *exit_loop = true;
-      *req_restart = true;
-      return -1;
-    }
-
-    case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
-      vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED");
-      XrEventDataSessionStateChanged sess_ev =
-          *(XrEventDataSessionStateChanged *)ev;
-      oxr_handle_session_state_changed(session, sess_ev, exit_loop,
-                                       req_restart);
-      break;
-    }
-
-    case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
-      vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED");
-      break;
-
-    case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
-      vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING");
-      break;
-
-    default:
-      vuloxr::Logger::Error("Unknown event type %d", ev->type);
-      break;
-    }
   }
   return 0;
 }
@@ -286,8 +171,10 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
   //
   // setup view swapchain
   //
-  vuloxr::xr::Stereoscope stereoscope(
-      instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO);
+  auto viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+  vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
+  vuloxr::xr::Stereoscope stereoscope(instance, systemId,
+                                      viewConfigurationType);
 
   std::vector<viewsurface_t> m_viewSurface;
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
@@ -313,11 +200,16 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
                                  sfc.rtarget_array);
   }
 
-  while (runLoop(true)) {
-    bool exit_loop, req_restart;
-    oxr_poll_events(instance, session, &exit_loop, &req_restart);
+  // mainloop
+  while (runLoop(state.m_sessionRunning)) {
+    state.PollEvents();
+    if (state.m_exitRenderLoop) {
+      break;
+    }
 
-    if (!oxr_is_session_running()) {
+    if (!state.m_sessionRunning) {
+      // Throttle loop since xrWaitFrame won't be called.
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
       continue;
     }
 

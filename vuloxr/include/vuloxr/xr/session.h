@@ -155,38 +155,36 @@ class SessionState {
 
 public:
   bool m_sessionRunning = false;
+  bool m_exitRenderLoop = false;
+  bool m_requestRestart = false;
   SessionState(XrInstance instance, XrSession session,
                XrViewConfigurationType viewConfigurationType)
       : m_instance(instance), m_session(session),
         m_viewConfigurationType(viewConfigurationType) {}
 
-  // Process any events in the event queue.
-  struct PollResult {
-    bool exitRenderLoop;
-    bool requestRestart;
-  };
-  PollResult PollEvents() {
-    PollResult res{
-        .exitRenderLoop = false,
-        .requestRestart = false,
-    };
-
-    // Process all pending messages.
+  void PollEvents() {
     while (const XrEventDataBaseHeader *event = TryReadNextEvent()) {
       switch (event->type) {
+      case XR_TYPE_EVENT_DATA_EVENTS_LOST: {
+        const XrEventDataEventsLost *const eventsLost =
+            reinterpret_cast<const XrEventDataEventsLost *>(event);
+        Logger::Error("%d events lost", eventsLost->lostEventCount);
+        break;
+      }
+
       case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
         const auto &instanceLossPending =
             *reinterpret_cast<const XrEventDataInstanceLossPending *>(event);
         Logger::Error("XrEventDataInstanceLossPending by %lld",
                       instanceLossPending.lossTime);
-        return {true, true};
+        this->m_exitRenderLoop = true;
+        this->m_requestRestart = true;
+        return;
       }
 
       case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
-        auto sessionStateChangedEvent =
-            *reinterpret_cast<const XrEventDataSessionStateChanged *>(event);
         HandleSessionStateChangedEvent(
-            sessionStateChangedEvent, &res.exitRenderLoop, &res.requestRestart);
+            *reinterpret_cast<const XrEventDataSessionStateChanged *>(event));
         break;
       }
 
@@ -194,43 +192,156 @@ public:
         // m_input.Log(m_session);
         break;
 
-      // case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
+      case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
       default: {
         Logger::Info("Ignoring event type %d", event->type);
         break;
       }
       }
     }
-
-    return res;
   }
+
+  // static XrEventDataBaseHeader *oxr_poll_event(XrInstance instance,
+  //                                              XrSession session) {
+  //   XrEventDataBaseHeader *ev =
+  //       reinterpret_cast<XrEventDataBaseHeader *>(&s_evDataBuf);
+  //   *ev = {XR_TYPE_EVENT_DATA_BUFFER};
+  //
+  //   XrResult xr = xrPollEvent(instance, &s_evDataBuf);
+  //   if (xr == XR_EVENT_UNAVAILABLE)
+  //     return nullptr;
+  //
+  //   if (xr != XR_SUCCESS) {
+  //     vuloxr::Logger::Error("xrPollEvent");
+  //     return NULL;
+  //   }
+  //
+  //   if (ev->type == XR_TYPE_EVENT_DATA_EVENTS_LOST) {
+  //     XrEventDataEventsLost *evLost =
+  //         reinterpret_cast<XrEventDataEventsLost *>(ev);
+  //     vuloxr::Logger::Warn("%p events lost", evLost);
+  //   }
+  //   return ev;
+  // }
+
+  // static int oxr_begin_session(XrSession session) {
+  //   XrViewConfigurationType viewType =
+  //   XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+  //
+  //   XrSessionBeginInfo bi{XR_TYPE_SESSION_BEGIN_INFO};
+  //   bi.primaryViewConfigurationType = viewType;
+  //   xrBeginSession(session, &bi);
+  //
+  //   return 0;
+  // }
+
+  // static int oxr_handle_session_state_changed(XrSession session,
+  //                                             XrEventDataSessionStateChanged
+  //                                             &ev, bool *exitLoop, bool
+  //                                             *reqRestart) {
+  //   XrSessionState old_state = s_session_state;
+  //   XrSessionState new_state = ev.state;
+  //   s_session_state = new_state;
+  //
+  //   // LOGI("  [SessionState]: %s -> %s (session=%p, time=%ld)",
+  //   //      to_string(old_state), to_string(new_state), ev.session, ev.time);
+  //
+  //   if ((ev.session != XR_NULL_HANDLE) && (ev.session != session)) {
+  //     vuloxr::Logger::Error("XrEventDataSessionStateChanged for unknown
+  //     session"); return -1;
+  //   }
+  //
+  //   switch (new_state) {
+  //   case XR_SESSION_STATE_READY:
+  //     oxr_begin_session(session);
+  //     s_session_running = true;
+  //     break;
+  //
+  //   case XR_SESSION_STATE_STOPPING:
+  //     xrEndSession(session);
+  //     s_session_running = false;
+  //     break;
+  //
+  //   case XR_SESSION_STATE_EXITING:
+  //     *exitLoop = true;
+  //     *reqRestart =
+  //         false; // Do not attempt to restart because user closed this
+  //         session.
+  //     break;
+  //
+  //   case XR_SESSION_STATE_LOSS_PENDING:
+  //     *exitLoop = true;
+  //     *reqRestart = true; // Poll for a new instance.
+  //     break;
+  //
+  //   default:
+  //     break;
+  //   }
+  //   return 0;
+  // }
+
+  // static int oxr_poll_events(XrInstance instance, XrSession session,
+  //                            bool *exit_loop, bool *req_restart) {
+  //   *exit_loop = false;
+  //   *req_restart = false;
+  //
+  //   // Process all pending messages.
+  //   while (XrEventDataBaseHeader *ev = oxr_poll_event(instance, session)) {
+  //     switch (ev->type) {
+  //     case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
+  //       vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING");
+  //       *exit_loop = true;
+  //       *req_restart = true;
+  //       return -1;
+  //     }
+  //
+  //     case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
+  //       vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED");
+  //       XrEventDataSessionStateChanged sess_ev =
+  //           *(XrEventDataSessionStateChanged *)ev;
+  //       oxr_handle_session_state_changed(session, sess_ev, exit_loop,
+  //                                        req_restart);
+  //       break;
+  //     }
+  //
+  //     case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
+  //       vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED");
+  //       break;
+  //
+  //     case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
+  //       vuloxr::Logger::Warn("XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING");
+  //       break;
+  //
+  //     default:
+  //       vuloxr::Logger::Error("Unknown event type %d", ev->type);
+  //       break;
+  //     }
+  //   }
+  //   return 0;
+  // }
 
 private:
   // Return event if one is available, otherwise return null.
   const XrEventDataBaseHeader *TryReadNextEvent() {
     // It is sufficient to clear the just the XrEventDataBuffer header to
     // XR_TYPE_EVENT_DATA_BUFFER
-    XrEventDataBaseHeader *baseHeader =
+    auto baseHeader =
         reinterpret_cast<XrEventDataBaseHeader *>(&m_eventDataBuffer);
     *baseHeader = {XR_TYPE_EVENT_DATA_BUFFER};
-    const XrResult xr = xrPollEvent(m_instance, &m_eventDataBuffer);
-    if (xr == XR_SUCCESS) {
-      if (baseHeader->type == XR_TYPE_EVENT_DATA_EVENTS_LOST) {
-        const XrEventDataEventsLost *const eventsLost =
-            reinterpret_cast<const XrEventDataEventsLost *>(baseHeader);
-        Logger::Error("%d events lost", eventsLost->lostEventCount);
-      }
+    auto xr = xrPollEvent(m_instance, &m_eventDataBuffer);
 
+    switch (xr) {
+    case XR_SUCCESS:
       return baseHeader;
-    }
-    if (xr == XR_EVENT_UNAVAILABLE) {
+    case XR_EVENT_UNAVAILABLE:
       return nullptr;
+    default:
+      ThrowXrResult(xr, "xrPollEvent");
     }
-    ThrowXrResult(xr, "xrPollEvent");
   }
+
   void HandleSessionStateChangedEvent(
-      const XrEventDataSessionStateChanged &stateChangedEvent,
-      bool *exitRenderLoop, bool *requestRestart) {
+      const XrEventDataSessionStateChanged &stateChangedEvent) {
     const XrSessionState oldState = m_sessionState;
     m_sessionState = stateChangedEvent.state;
 
@@ -262,15 +373,15 @@ private:
       break;
     }
     case XR_SESSION_STATE_EXITING: {
-      *exitRenderLoop = true;
+      m_exitRenderLoop = true;
       // Do not attempt to restart because user closed this session.
-      *requestRestart = false;
+      m_requestRestart = false;
       break;
     }
     case XR_SESSION_STATE_LOSS_PENDING: {
-      *exitRenderLoop = true;
+      m_exitRenderLoop = true;
       // Poll for a new instance.
-      *requestRestart = true;
+      m_requestRestart = true;
       break;
     }
     default:

@@ -422,8 +422,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
   // mainloop
   while (runLoop(state.m_sessionRunning)) {
-    auto poll = state.PollEvents();
-    if (poll.exitRenderLoop) {
+    state.PollEvents();
+    if (state.m_exitRenderLoop) {
       break;
     }
 
