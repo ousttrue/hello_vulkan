@@ -427,7 +427,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
       break;
     }
 
-    if (!poll.isSessionRunning) {
+    if (!state.m_sessionRunning) {
       // Throttle loop since xrWaitFrame won't be called.
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
       continue;

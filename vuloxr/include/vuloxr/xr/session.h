@@ -164,7 +164,6 @@ public:
   struct PollResult {
     bool exitRenderLoop;
     bool requestRestart;
-    bool isSessionRunning;
   };
   PollResult PollEvents() {
     PollResult res{
@@ -180,7 +179,7 @@ public:
             *reinterpret_cast<const XrEventDataInstanceLossPending *>(event);
         Logger::Error("XrEventDataInstanceLossPending by %lld",
                       instanceLossPending.lossTime);
-        return {true, true, m_sessionRunning};
+        return {true, true};
       }
 
       case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
@@ -203,7 +202,6 @@ public:
       }
     }
 
-    res.isSessionRunning = m_sessionRunning;
     return res;
   }
 
