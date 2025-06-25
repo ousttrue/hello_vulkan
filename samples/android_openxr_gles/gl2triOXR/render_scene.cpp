@@ -1,5 +1,8 @@
 #include "util_render_target.h"
 #include "util_shader.h"
+
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES3/gl31.h>
 
 static shader_obj_t s_sobj;

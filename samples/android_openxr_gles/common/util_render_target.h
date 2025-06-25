@@ -4,6 +4,8 @@
  * ------------------------------------------------ */
 #ifndef UTIL_RENDER_TARGET_H
 #define UTIL_RENDER_TARGET_H
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES3/gl31.h>
 
 #define RTARGET_DEFAULT     (0 << 0)
