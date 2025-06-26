@@ -7,6 +7,7 @@
 
 #include <thread>
 #include <vuloxr/xr/session.h>
+#include <vuloxr/xr/swapchain.h>
 
 void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
                 XrSystemId systemId, XrSession session, XrSpace appSpace) {

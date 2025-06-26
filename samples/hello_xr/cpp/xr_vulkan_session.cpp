@@ -8,6 +8,7 @@
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 #include <vuloxr/xr/session.h>
+#include <vuloxr/xr/swapchain.h>
 
 char VertexShaderGlsl[] = {
 #embed "shader.vert"
