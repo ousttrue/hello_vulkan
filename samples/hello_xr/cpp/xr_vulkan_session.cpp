@@ -436,7 +436,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
     input.PollActions();
 
     auto frameState = vuloxr::xr::beginFrame(session);
-    vuloxr::xr::LayerComposition composition(blendMode, appSpace);
+    vuloxr::xr::LayerComposition composition(appSpace, blendMode);
 
     if (frameState.shouldRender == XR_TRUE) {
       if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
@@ -487,8 +487,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
 
     // std::vector<XrCompositionLayerBaseHeader *>
     auto &layers = composition.commitLayers();
-    vuloxr::xr::endFrame(session, frameState.predictedDisplayTime, blendMode,
-                         layers);
+    vuloxr::xr::endFrame(session, frameState.predictedDisplayTime, layers,
+                         blendMode);
   }
 
   vkDeviceWaitIdle(device);

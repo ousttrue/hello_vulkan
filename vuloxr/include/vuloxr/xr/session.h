@@ -47,10 +47,49 @@ inline XrFrameState beginFrame(XrSession session) {
   return frameState;
 }
 
+class LayerComposition {
+  std::vector<XrCompositionLayerBaseHeader *> layers;
+  XrCompositionLayerProjection layer;
+  std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+
+public:
+  LayerComposition(XrSpace appSpace, XrEnvironmentBlendMode blendMode =
+                                         XR_ENVIRONMENT_BLEND_MODE_OPAQUE) {
+    this->layer = {
+        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+        .layerFlags = static_cast<XrCompositionLayerFlags>(
+            blendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
+                ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                      XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                : 0),
+        .space = appSpace,
+        .viewCount = 0,
+        .views = nullptr,
+    };
+  }
+
+  // left / right
+  void pushView(const XrCompositionLayerProjectionView &view) {
+    this->projectionLayerViews.push_back(view);
+  }
+
+  const std::vector<XrCompositionLayerBaseHeader *> &commitLayers() {
+    this->layers.clear();
+    if (projectionLayerViews.size()) {
+      this->layer.viewCount =
+          static_cast<uint32_t>(projectionLayerViews.size());
+      this->layer.views = projectionLayerViews.data();
+      this->layers.push_back(
+          reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
+    }
+    return this->layers;
+  }
+};
+
 inline void
 endFrame(XrSession session, XrTime predictedDisplayTime,
-         XrEnvironmentBlendMode blendMode,
-         const std::vector<XrCompositionLayerBaseHeader *> &layers) {
+         const std::vector<XrCompositionLayerBaseHeader *> &layers,
+         XrEnvironmentBlendMode blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE) {
   XrFrameEndInfo frameEndInfo{
       .type = XR_TYPE_FRAME_END_INFO,
       .displayTime = predictedDisplayTime,
@@ -894,44 +933,6 @@ struct Swapchain : NonCopyable {
         .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO,
     };
     CheckXrResult(xrReleaseSwapchainImage(this->swapchain, &releaseInfo));
-  }
-};
-
-class LayerComposition {
-  std::vector<XrCompositionLayerBaseHeader *> layers;
-  XrCompositionLayerProjection layer;
-  std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
-
-public:
-  LayerComposition(XrEnvironmentBlendMode blendMode, XrSpace appSpace) {
-    this->layer = {
-        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-        .layerFlags = static_cast<XrCompositionLayerFlags>(
-            blendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
-                ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                      XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-                : 0),
-        .space = appSpace,
-        .viewCount = 0,
-        .views = nullptr,
-    };
-  }
-
-  // left / right
-  void pushView(const XrCompositionLayerProjectionView &view) {
-    this->projectionLayerViews.push_back(view);
-  }
-
-  const std::vector<XrCompositionLayerBaseHeader *> &commitLayers() {
-    this->layers.clear();
-    if (projectionLayerViews.size()) {
-      this->layer.viewCount =
-          static_cast<uint32_t>(projectionLayerViews.size());
-      this->layer.views = projectionLayerViews.data();
-      this->layers.push_back(
-          reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
-    }
-    return this->layers;
   }
 };
 

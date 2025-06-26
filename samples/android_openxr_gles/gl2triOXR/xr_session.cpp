@@ -201,11 +201,8 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
       continue;
     }
 
-    std::vector<XrCompositionLayerBaseHeader *> all_layers;
-
     auto frameState = vuloxr::xr::beginFrame(session);
-
-    std::vector<XrCompositionLayerProjectionView> layerViews;
+    vuloxr::xr::LayerComposition composition(appSpace);
 
     /* Acquire View Location */
     uint32_t viewCount = (uint32_t)m_viewSurface.size();
@@ -213,8 +210,6 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
     std::vector<XrView> views(viewCount, {XR_TYPE_VIEW});
     oxr_locate_views(session, frameState.predictedDisplayTime, appSpace,
                      &viewCount, views.data());
-
-    layerViews.resize(viewCount);
 
     /* Render each view */
     for (uint32_t i = 0; i < viewCount; i++) {
@@ -227,23 +222,15 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
       oxr_release_viewsurface(m_viewSurface[i]);
 
-      layerViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
-      layerViews[i].pose = views[i].pose;
-      layerViews[i].fov = views[i].fov;
-      layerViews[i].subImage = subImg;
+      composition.pushView({
+          .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+          .pose = views[i].pose,
+          .fov = views[i].fov,
+          .subImage = subImg,
+      });
     }
 
-    XrCompositionLayerProjection layer{
-        .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-        .space = appSpace,
-        .viewCount = (uint32_t)layerViews.size(),
-        .views = layerViews.data(),
-    };
-
-    all_layers.push_back(
-        reinterpret_cast<XrCompositionLayerBaseHeader *>(&layer));
-
-    /* Compose all layers */
-    oxr_end_frame(session, frameState.predictedDisplayTime, all_layers);
+    auto &layers = composition.commitLayers();
+    vuloxr::xr::endFrame(session, frameState.predictedDisplayTime, layers);
   }
 }
