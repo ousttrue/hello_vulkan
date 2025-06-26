@@ -144,7 +144,7 @@ build_shader (const char *strVS, const char *strFS)
 }
 
 int
-generate_shader (shader_obj_t *sobj, char *str_vs, char *str_fs)
+generate_shader (shader_obj_t *sobj, const char *str_vs, const char *str_fs)
 {
   GLuint fs, vs, program;
 
