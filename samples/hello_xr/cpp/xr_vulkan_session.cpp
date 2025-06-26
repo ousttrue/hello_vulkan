@@ -1,5 +1,5 @@
 #include "xr_vulkan_session.h"
-#include "xr_linear.h"
+#include "ViewRenderer.h"
 #include <map>
 #include <thread>
 
@@ -70,173 +70,6 @@ constexpr unsigned short c_cubeIndices[] = {
     18, 19, 20, 21, 22, 23, // +Y
     24, 25, 26, 27, 28, 29, // -Z
     30, 31, 32, 33, 34, 35, // +Z
-};
-
-struct Cube {
-  XrPosef pose;
-  XrVector3f scale;
-};
-
-struct ViewRenderer {
-  VkDevice device;
-  VkQueue queue;
-  vuloxr::vk::Pipeline pipeline;
-  vuloxr::vk::DepthImage depthBuffer;
-  std::map<VkImage, std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>>
-      framebufferMap;
-  vuloxr::vk::Fence execFence;
-  VkCommandPool commandPool = VK_NULL_HANDLE;
-  VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
-
-  ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
-               VkDevice _device, uint32_t queueFamilyIndex, VkExtent2D extent,
-               VkFormat colorFormat, VkFormat depthFormat,
-               VkSampleCountFlagBits sampleCountFlagBits,
-               vuloxr::vk::Pipeline _pipeline)
-      : device(_device), execFence(_device, true),
-        pipeline(std::move(_pipeline)),
-        depthBuffer(_device, extent, depthFormat, sampleCountFlagBits) {
-    vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
-
-    VkCommandPoolCreateInfo cmdPoolInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = queueFamilyIndex,
-    };
-    vuloxr::vk::CheckVkResult(vkCreateCommandPool(this->device, &cmdPoolInfo,
-                                                  nullptr, &this->commandPool));
-    // if (vko::SetDebugUtilsObjectNameEXT(
-    //         device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)this->commandPool,
-    //         "hello_xr command pool") != VK_SUCCESS) {
-    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    // }
-
-    VkCommandBufferAllocateInfo cmd{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = this->commandPool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    vuloxr::vk::CheckVkResult(
-        vkAllocateCommandBuffers(this->device, &cmd, &this->commandBuffer));
-    // if (vko::SetDebugUtilsObjectNameEXT(device,
-    // VK_OBJECT_TYPE_COMMAND_BUFFER,
-    //                                     (uint64_t)this->commandBuffer,
-    //                                     "hello_xr command buffer") !=
-    //     VK_SUCCESS) {
-    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    // }
-
-    {
-      this->depthBuffer.memory =
-          physicalDevice.allocForTransfer(device, this->depthBuffer.image);
-
-      vuloxr::vk::CommandScope(this->commandBuffer)
-          .transitionDepthLayout(
-              depthBuffer.image, VK_IMAGE_LAYOUT_UNDEFINED,
-              VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-      VkSubmitInfo submitInfo{
-          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-          .commandBufferCount = 1,
-          .pCommandBuffers = &this->commandBuffer,
-      };
-      vuloxr::vk::CheckVkResult(
-          vkQueueSubmit(this->queue, 1, &submitInfo, nullptr));
-      vkQueueWaitIdle(this->queue);
-    }
-  }
-
-  ~ViewRenderer() {
-    vkFreeCommandBuffers(this->device, this->commandPool, 1,
-                         &this->commandBuffer);
-    vkDestroyCommandPool(this->device, this->commandPool, nullptr);
-  }
-
-  void render(VkImage image, VkExtent2D size, VkFormat colorFormat,
-              VkFormat depthFormat, const VkClearColorValue &clearColor,
-              VkBuffer vertices, VkBuffer indices, uint32_t drawCount,
-              const XrPosef &hmdPose, XrFovf fov,
-              const std::vector<Cube> &cubes) {
-    auto found = this->framebufferMap.find(image);
-    if (found == this->framebufferMap.end()) {
-      auto rt = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-          this->device, image, size, colorFormat, this->pipeline.renderPass,
-          this->depthBuffer.image, depthFormat);
-      found = this->framebufferMap.insert({image, rt}).first;
-    }
-
-    // Waiting on a not-in-flight command buffer is a no-op
-    execFence.wait();
-    execFence.reset();
-
-    vuloxr::vk::CheckVkResult(vkResetCommandBuffer(this->commandBuffer, 0));
-
-    VkClearValue clearValues[] = {
-        {
-            .color = clearColor,
-        },
-        {
-            .depthStencil =
-                {
-                    .depth = 1.0f,
-                    .stencil = 0,
-                },
-        },
-    };
-
-    {
-      vuloxr::vk::RenderPassRecording recording(
-          this->commandBuffer, this->pipeline.pipelineLayout,
-          this->pipeline.renderPass, found->second->framebuffer, size,
-          clearValues, std::size(clearValues));
-
-      vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        this->pipeline);
-
-      // Bind index and vertex buffers
-      vkCmdBindIndexBuffer(this->commandBuffer, indices, 0,
-                           VK_INDEX_TYPE_UINT16);
-      VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &vertices, &offset);
-
-      // Render each cube
-      for (auto &cube : cubes) {
-        // Compute the view-projection transform. Note all matrixes
-        // (including OpenXR's) are column-major, right-handed.
-        XrMatrix4x4f proj;
-        XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, fov, 0.05f,
-                                         100.0f);
-        XrMatrix4x4f toView;
-        XrMatrix4x4f_CreateFromRigidTransform(&toView, &hmdPose);
-        XrMatrix4x4f view;
-        XrMatrix4x4f_InvertRigidBody(&view, &toView);
-        XrMatrix4x4f vp;
-        XrMatrix4x4f_Multiply(&vp, &proj, &view);
-
-        // Compute the model-view-projection transform and push it.
-        XrMatrix4x4f model;
-        XrMatrix4x4f_CreateTranslationRotationScale(
-            &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
-        XrMatrix4x4f mvp;
-        XrMatrix4x4f_Multiply(&mvp, &vp, &model);
-        vkCmdPushConstants(this->commandBuffer, this->pipeline.pipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mvp),
-                           &mvp.m[0]);
-
-        // Draw the cube.
-        vkCmdDrawIndexed(this->commandBuffer, drawCount, 1, 0, 0, 0);
-      }
-    }
-
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &this->commandBuffer,
-    };
-    vuloxr::vk::CheckVkResult(
-        vkQueueSubmit(this->queue, 1, &submitInfo, execFence));
-  }
 };
 
 inline XrPosef RotateCCWAboutYAxis(float radians, XrVector3f translation) {
@@ -312,9 +145,6 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                        VkClearColorValue clearColor,
                        XrEnvironmentBlendMode blendMode,
                        XrViewConfigurationType viewConfigurationType) {
-  // debug
-  // vko::g_vkSetDebugUtilsObjectNameEXT(vkInstance);
-
   vuloxr::vk::PhysicalDevice physicalDevice(_physicalDevice);
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
