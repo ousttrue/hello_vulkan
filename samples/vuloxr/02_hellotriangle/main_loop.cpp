@@ -90,8 +90,8 @@ void main_loop(const std::function<bool()> &runLoop,
                      mesh.bindings, mesh.attributes, {}, {},
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
-      swapchain.images.size());
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>>
+      backbuffers(swapchain.images.size());
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
@@ -104,9 +104,10 @@ void main_loop(const std::function<bool()> &runLoop,
     if (res == VK_SUCCESS) {
       auto backbuffer = backbuffers[acquired.imageIndex];
       if (!backbuffer) {
-        backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-            device, acquired.image, swapchain.createInfo.imageExtent,
-            swapchain.createInfo.imageFormat, renderPass);
+        backbuffer =
+            std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
+                device, acquired.image, swapchain.createInfo.imageExtent,
+                swapchain.createInfo.imageFormat, renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
       }
 

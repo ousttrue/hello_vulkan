@@ -215,8 +215,8 @@ void main_loop(const std::function<bool()> &runLoop,
       vertexBuffer.bindings, vertexBuffer.attributes, {}, {},
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
-      swapchain.images.size());
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>>
+      backbuffers(swapchain.images.size());
   std::vector<std::shared_ptr<vuloxr::vk::UniformBuffer<UniformBufferObject>>>
       uniformBuffers(swapchain.images.size());
 
@@ -253,9 +253,10 @@ void main_loop(const std::function<bool()> &runLoop,
                               },
                               texture.descriptorInfo);
 
-        backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-            device, acquired.image, swapchain.createInfo.imageExtent,
-            swapchain.createInfo.imageFormat, pipeline.renderPass);
+        backbuffer =
+            std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
+                device, acquired.image, swapchain.createInfo.imageExtent,
+                swapchain.createInfo.imageFormat, pipeline.renderPass);
         backbuffers[acquired.imageIndex] = backbuffer;
 
         {
