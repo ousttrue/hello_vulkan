@@ -892,7 +892,7 @@ struct Swapchain : NonCopyable {
 
   ~Swapchain() { xrDestroySwapchain(this->swapchain); }
 
-  std::tuple<T, XrCompositionLayerProjectionView>
+  std::tuple<uint32_t, T, XrCompositionLayerProjectionView>
   AcquireSwapchain(const XrView &view) {
     XrSwapchainImageAcquireInfo acquireInfo{
         .type = XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO,
@@ -908,6 +908,7 @@ struct Swapchain : NonCopyable {
     CheckXrResult(xrWaitSwapchainImage(this->swapchain, &waitInfo));
 
     return {
+        swapchainImageIndex,
         this->swapchainImages[swapchainImageIndex],
         {
             .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,

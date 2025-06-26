@@ -12,12 +12,6 @@ struct viewsurface_t {
   std::vector<render_target_t> rtarget_array;
 };
 
-static XrEventDataBuffer s_evDataBuf;
-static XrSessionState s_session_state = XR_SESSION_STATE_UNKNOWN;
-static bool s_session_running = false;
-
-bool oxr_is_session_running() { return s_session_running; }
-
 /* ----------------------------------------------------------------------------
  * * Swapchain operation
  * ----------------------------------------------------------------------------
@@ -82,71 +76,9 @@ oxr_alloc_swapchain_rtargets(GLESSwapchain &swapchain, uint32_t width,
   return 0;
 }
 
-static uint32_t oxr_acquire_swapchain_img(XrSwapchain swapchain) {
-  uint32_t imgIdx;
-  XrSwapchainImageAcquireInfo acquireInfo{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-  xrAcquireSwapchainImage(swapchain, &acquireInfo, &imgIdx);
-
-  XrSwapchainImageWaitInfo waitInfo{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-  waitInfo.timeout = XR_INFINITE_DURATION;
-  xrWaitSwapchainImage(swapchain, &waitInfo);
-
-  return imgIdx;
-}
-
-static int oxr_acquire_viewsurface(viewsurface_t &viewSurface,
-                                   render_target_t &rtarget,
-                                   XrSwapchainSubImage &subImg) {
-  subImg.swapchain = viewSurface.swapchain->swapchain;
-  subImg.imageRect.offset.x = 0;
-  subImg.imageRect.offset.y = 0;
-  subImg.imageRect.extent.width = viewSurface.width;
-  subImg.imageRect.extent.height = viewSurface.height;
-  subImg.imageArrayIndex = 0;
-
-  uint32_t imgIdx = oxr_acquire_swapchain_img(viewSurface.swapchain->swapchain);
-  rtarget = viewSurface.rtarget_array[imgIdx];
-
-  return 0;
-}
-
-static int oxr_locate_views(XrSession session, XrTime dpy_time, XrSpace space,
-                            uint32_t *view_cnt, XrView *view_array) {
-  XrViewConfigurationType viewType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-
-  XrViewState viewstat = {XR_TYPE_VIEW_STATE};
-  uint32_t view_cnt_in = *view_cnt;
-  uint32_t view_cnt_out;
-
-  XrViewLocateInfo vloc = {XR_TYPE_VIEW_LOCATE_INFO};
-  vloc.viewConfigurationType = viewType;
-  vloc.displayTime = dpy_time;
-  vloc.space = space;
-  xrLocateViews(session, &vloc, &viewstat, view_cnt_in, &view_cnt_out,
-                view_array);
-
-  if ((viewstat.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
-      (viewstat.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-    *view_cnt = 0; // There is no valid tracking poses for the views.
-  }
-  return 0;
-}
-
 static int oxr_release_viewsurface(viewsurface_t &viewSurface) {
   XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
   xrReleaseSwapchainImage(viewSurface.swapchain->swapchain, &releaseInfo);
-
-  return 0;
-}
-
-static int oxr_end_frame(XrSession session, XrTime dpy_time,
-                         std::vector<XrCompositionLayerBaseHeader *> &layers) {
-  XrFrameEndInfo frameEnd{XR_TYPE_FRAME_END_INFO};
-  frameEnd.displayTime = dpy_time;
-  frameEnd.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-  frameEnd.layerCount = (uint32_t)layers.size();
-  frameEnd.layers = layers.data();
-  xrEndFrame(session, &frameEnd);
 
   return 0;
 }
@@ -204,33 +136,33 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
     auto frameState = vuloxr::xr::beginFrame(session);
     vuloxr::xr::LayerComposition composition(appSpace);
 
-    /* Acquire View Location */
-    uint32_t viewCount = (uint32_t)m_viewSurface.size();
+    if (frameState.shouldRender == XR_TRUE) {
+      if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
+                             viewConfigurationType)) {
 
-    std::vector<XrView> views(viewCount, {XR_TYPE_VIEW});
-    oxr_locate_views(session, frameState.predictedDisplayTime, appSpace,
-                     &viewCount, views.data());
+        /* Render each view */
+        for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
+          auto swapchain = m_viewSurface[i].swapchain;
+          auto [index, image, projectionLayer] =
+              swapchain->AcquireSwapchain(stereoscope.views[i]);
 
-    /* Render each view */
-    for (uint32_t i = 0; i < viewCount; i++) {
-      XrSwapchainSubImage subImg;
-      render_target_t rtarget;
-      oxr_acquire_viewsurface(m_viewSurface[i], rtarget, subImg);
+          {
+            auto rtarget = m_viewSurface[i].rtarget_array[index];
 
-      render_gles_scene(rtarget, subImg.imageRect.extent.width,
-                        subImg.imageRect.extent.height);
+            render_gles_scene(rtarget,
+                              projectionLayer.subImage.imageRect.extent.width,
+                              projectionLayer.subImage.imageRect.extent.height);
 
-      oxr_release_viewsurface(m_viewSurface[i]);
+            oxr_release_viewsurface(m_viewSurface[i]);
+          }
 
-      composition.pushView({
-          .type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-          .pose = views[i].pose,
-          .fov = views[i].fov,
-          .subImage = subImg,
-      });
+          composition.pushView(projectionLayer);
+        }
+      }
     }
 
     auto &layers = composition.commitLayers();
     vuloxr::xr::endFrame(session, frameState.predictedDisplayTime, layers);
-  }
+
+  } // while
 }

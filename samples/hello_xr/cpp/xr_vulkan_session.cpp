@@ -466,7 +466,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
-          auto [image, projectionLayer] =
+          auto [_, image, projectionLayer] =
               swapchain->AcquireSwapchain(stereoscope.views[i]);
           composition.pushView(projectionLayer);
 
