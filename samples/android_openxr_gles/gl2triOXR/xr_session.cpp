@@ -18,15 +18,14 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
   // swapchain
   using GLESSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageOpenGLESKHR>;
   std::vector<std::shared_ptr<GLESSwapchain>> swapchains;
-  std::vector<std::shared_ptr<ViewRenderer>> renderers;
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     auto swapchain = std::make_shared<GLESSwapchain>(
         session, i, stereoscope.viewConfigurations[i], GL_RGBA8,
         XrSwapchainImageOpenGLESKHR{XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR});
     swapchains.push_back(swapchain);
-
-    renderers.push_back(std::make_shared<ViewRenderer>());
   }
+
+  ViewRenderer renderer;
 
   // mainloop
   while (runLoop(state.m_sessionRunning)) {
@@ -53,10 +52,9 @@ void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
           auto [_, image, projectionLayer] =
               swapchain->AcquireSwapchain(stereoscope.views[i]);
 
-          auto renderer = renderers[i];
-          renderer->render(image.image,
-                           projectionLayer.subImage.imageRect.extent.width,
-                           projectionLayer.subImage.imageRect.extent.height);
+          renderer.render(image.image,
+                          projectionLayer.subImage.imageRect.extent.width,
+                          projectionLayer.subImage.imageRect.extent.height);
 
           composition.pushView(projectionLayer);
 
