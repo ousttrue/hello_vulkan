@@ -37,6 +37,7 @@ selectColorSwapchainFormat(const std::vector<int64_t> formats,
 
   return selected;
 }
+
 struct Swapchain : public NonCopyable {
   VkInstance instance;
   VkSurfaceKHR surface;
@@ -509,11 +510,27 @@ struct SwapchainFramebuffer {
 
   VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
+  SwapchainFramebuffer(const vuloxr::vk::PhysicalDevice &physicalDevice,
+                       VkDevice _device, VkImage image, VkExtent2D extent,
+                       VkFormat format, VkRenderPass renderPass,
+                       VkFormat depthFormat,
+                       VkSampleCountFlagBits sampleCountFlagBits)
+      : device(_device),
+        depth(this->device, extent, depthFormat, sampleCountFlagBits) {
+    depth.memory = physicalDevice.allocForTransfer(device, depth.image);
+    initialize(image, extent, format, depthFormat, renderPass);
+  }
+
   SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
                        VkFormat format, VkRenderPass renderPass,
                        DepthImage &&_depth, VkFormat depthFormat)
       : device(_device), depth(std::move(_depth)) {
+    initialize(image, extent, format, depthFormat, renderPass);
+  }
 
+private:
+  void initialize(VkImage image, VkExtent2D extent, VkFormat format,
+                  VkFormat depthFormat, VkRenderPass renderPass) {
     // imageView
     this->imageViewCreateInfo.image = image;
     this->imageViewCreateInfo.format = format;
@@ -540,6 +557,7 @@ struct SwapchainFramebuffer {
         this->device, &framebufferInfo, nullptr, &this->framebuffer));
   }
 
+public:
   ~SwapchainFramebuffer() {
     vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
     vkDestroyImageView(this->device, this->imageView, nullptr);

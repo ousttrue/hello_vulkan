@@ -55,16 +55,10 @@ void ViewRenderer::render(const vuloxr::vk::PhysicalDevice &physicalDevice,
                           XrFovf fov, const std::vector<Cube> &cubes) {
   auto found = this->framebufferMap.find(image);
   if (found == this->framebufferMap.end()) {
-    vuloxr::vk::DepthImage depth(this->device, extent, depthFormat,
-                                 sampleCountFlagBits);
-    depth.memory = physicalDevice.allocForTransfer(device, depth.image);
 
-    // SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
-    //                      VkFormat format, VkRenderPass renderPass,
-    //                      DepthImage &&_depth, VkFormat depthFormat)
     auto rt = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-        this->device, image, extent, colorFormat, this->pipeline.renderPass,
-        std::move(depth), depthFormat);
+        physicalDevice, this->device, image, extent, colorFormat,
+        this->pipeline.renderPass, depthFormat, sampleCountFlagBits);
     found = this->framebufferMap.insert({image, rt}).first;
 
     {
@@ -72,7 +66,7 @@ void ViewRenderer::render(const vuloxr::vk::PhysicalDevice &physicalDevice,
       // after use vkCmdPushConstants
       vuloxr::vk::CommandScope(this->commandBuffer)
           .transitionDepthLayout(
-              depth.image, VK_IMAGE_LAYOUT_UNDEFINED,
+              rt->depth.image, VK_IMAGE_LAYOUT_UNDEFINED,
               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
       VkSubmitInfo submitInfo{
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
