@@ -45,6 +45,7 @@ struct Swapchain : public NonCopyable {
   uint32_t presentFamily;
   VkDevice device;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  operator VkSwapchainKHR() const { return this->swapchain; }
   std::vector<VkImage> images;
 
   std::vector<VkSurfaceFormatKHR> formats;

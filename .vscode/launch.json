@@ -8,7 +8,7 @@
             "name": "05",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/vuloxr/05_cube/05_cube.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr/05_cube.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

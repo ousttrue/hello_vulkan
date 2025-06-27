@@ -1,75 +1,21 @@
+#define WIN32
+
 // https://github.com/LunarG/VulkanSamples/blob/master/API-Samples/15-draw_cube/15-draw_cube.cpp
-/*
- * Vulkan Samples
- *
- * Copyright (C) 2015-2020 Valve Corporation
- * Copyright (C) 2015-2020 LunarG, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/*
-VULKAN_SAMPLE_SHORT_DESCRIPTION
-Draw Cube
-*/
-
-/* This is part of the draw cube progression */
-#include <Windows.h>
-
-#include <vulkan/vulkan.h>
-
-#include <vulkan/vulkan_win32.h>
-
+#include "../main_loop.h"
 #include "cube_data.h"
 #include <assert.h>
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string.h>
+#include <thread>
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/shaderc.h>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#ifdef _WIN32
-#pragma comment(linker, "/subsystem:console")
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef VK_USE_PLATFORM_WIN32_KHR
-#define VK_USE_PLATFORM_WIN32_KHR
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX /* Don't let Windows define min() or max() */
-#endif
-#define APP_NAME_STR_LEN 80
-#elif defined(__ANDROID__)
-// Include files for Android
-#include "vulkan_wrapper.h" // Include Vulkan_wrapper and dynamically load symbols.
-#include <android/log.h>
-#include <unistd.h>
-#elif defined(__IPHONE_OS_VERSION_MAX_ALLOWED) ||                              \
-    defined(__MAC_OS_X_VERSION_MAX_ALLOWED)
-#include <MoltenVK/mvk_vulkan.h>
-#include <unistd.h>
-#else
-#include "vulkan/vk_sdk_platform.h"
-#include <unistd.h>
-#endif
-
-#include <vulkan/vulkan.h>
 
 /* Number of descriptor sets needs to be the same at alloc,       */
 /* pipeline layout creation, and descriptor set layout creation   */
@@ -160,29 +106,6 @@ typedef struct {
  * by utility functions.
  */
 struct sample_info {
-#ifdef _WIN32
-#define APP_NAME_STR_LEN 80
-  HINSTANCE connection;        // hInstance - Windows Instance
-  char name[APP_NAME_STR_LEN]; // Name to put on the window/icon
-  HWND window;                 // hWnd - window handle
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-  void *caMetalLayer;
-#elif defined(__ANDROID__)
-  PFN_vkCreateAndroidSurfaceKHR fpCreateAndroidSurfaceKHR;
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-  wl_display *display;
-  wl_registry *registry;
-  wl_compositor *compositor;
-  wl_surface *window;
-  wl_shell *shell;
-  wl_shell_surface *shell_surface;
-#else
-  xcb_connection_t *connection;
-  xcb_screen_t *screen;
-  xcb_window_t window;
-  xcb_intern_atom_reply_t *atom_wm_delete_window;
-#endif // _WIN32
-  VkSurfaceKHR surface;
   bool prepared;
   bool use_staging_buffer;
   bool save_images;
@@ -301,9 +224,6 @@ std::string get_file_directory();
 typedef unsigned long long timestamp_t;
 timestamp_t get_milliseconds();
 
-// Main entry point of samples
-int sample_main(int argc, char *argv[]);
-
 #ifdef __ANDROID__
 // Android specific definitions & helpers.
 #define LOGI(...)                                                              \
@@ -335,30 +255,21 @@ VkResult init_global_extension_properties(layer_properties &layer_props);
 VkResult init_device_extension_properties(struct sample_info &info,
                                           layer_properties &layer_props);
 
-VkResult init_device(struct sample_info &info);
-VkResult init_enumerate_device(struct sample_info &info,
-                               uint32_t gpu_count = 1);
 VkBool32 demo_check_layers(const std::vector<layer_properties> &layer_props,
                            const std::vector<const char *> &layer_names);
-void init_connection(struct sample_info &info);
-void init_window(struct sample_info &info);
 void init_queue_family_index(struct sample_info &info);
 void init_presentable_image(struct sample_info &info);
 void execute_queue_cmdbuf(struct sample_info &info,
                           const VkCommandBuffer *cmd_bufs, VkFence &fence);
 void execute_pre_present_barrier(struct sample_info &info);
 void execute_present_image(struct sample_info &info);
-void init_swapchain_extension(struct sample_info &info);
+
 void init_command_pool(struct sample_info &info);
 void init_command_buffer(struct sample_info &info);
 void execute_begin_command_buffer(struct sample_info &info);
 void execute_end_command_buffer(struct sample_info &info);
 void execute_queue_command_buffer(struct sample_info &info);
 void init_device_queue(struct sample_info &info);
-void init_swap_chain(
-    struct sample_info &info,
-    VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
 void init_depth_buffer(struct sample_info &info);
 void init_uniform_buffer(struct sample_info &info);
 void init_descriptor_and_pipeline_layouts(
@@ -397,8 +308,6 @@ void init_clear_color_and_depth(struct sample_info &info,
                                 VkClearValue *clear_values);
 void init_render_pass_begin_info(struct sample_info &info,
                                  VkRenderPassBeginInfo &rp_begin);
-void init_window_size(struct sample_info &info, int32_t default_width,
-                      int32_t default_height);
 
 VkResult init_debug_report_callback(struct sample_info &info,
                                     PFN_vkDebugReportCallbackEXT dbgFunc);
@@ -417,24 +326,15 @@ void destroy_depth_buffer(struct sample_info &info);
 void destroy_swap_chain(struct sample_info &info);
 void destroy_command_buffer(struct sample_info &info);
 void destroy_command_pool(struct sample_info &info);
-void destroy_device(struct sample_info &info);
-void destroy_instance(struct sample_info &info);
-void destroy_window(struct sample_info &info);
 
 // For timestamp code (get_milliseconds)
-#ifdef WIN32
-#include <Windows.h>
-#else
-#include <sys/time.h>
-#endif
+// #ifdef WIN32
+// #include <Windows.h>
+// #else
+// #include <sys/time.h>
+// #endif
 
 using namespace std;
-
-#if !(defined(__ANDROID__) || defined(VK_USE_PLATFORM_METAL_EXT))
-// Android, iOS, and macOS: main() implemented externally to allow access to
-// Objective-C components
-int main(int argc, char **argv) { return sample_main(argc, argv); }
-#endif
 
 void extract_version(uint32_t version, uint32_t &major, uint32_t &minor,
                      uint32_t &patch) {
@@ -703,32 +603,33 @@ bool GLSLtoSPV(const VkShaderStageFlagBits shader_type, const char *pshader,
 #endif // IOS or macOS
 
 void wait_seconds(int seconds) {
-#ifdef WIN32
-  Sleep(seconds * 1000);
-#elif defined(__ANDROID__)
-  sleep(seconds);
-#else
-  sleep(seconds);
-#endif
+  std::this_thread::sleep_for(std::chrono::seconds(seconds));
+  // #ifdef WIN32
+  //   Sleep(seconds * 1000);
+  // #elif defined(__ANDROID__)
+  //   sleep(seconds);
+  // #else
+  //   sleep(seconds);
+  // #endif
 }
 
-timestamp_t get_milliseconds() {
-#ifdef WIN32
-  LARGE_INTEGER frequency;
-  BOOL useQPC = QueryPerformanceFrequency(&frequency);
-  if (useQPC) {
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return (1000LL * now.QuadPart) / frequency.QuadPart;
-  } else {
-    return GetTickCount();
-  }
-#else
-  struct timeval now;
-  gettimeofday(&now, NULL);
-  return (now.tv_usec / 1000) + (timestamp_t)now.tv_sec;
-#endif
-}
+// timestamp_t get_milliseconds() {
+// #ifdef WIN32
+//   LARGE_INTEGER frequency;
+//   BOOL useQPC = QueryPerformanceFrequency(&frequency);
+//   if (useQPC) {
+//     LARGE_INTEGER now;
+//     QueryPerformanceCounter(&now);
+//     return (1000LL * now.QuadPart) / frequency.QuadPart;
+//   } else {
+//     return GetTickCount();
+//   }
+// #else
+//   struct timeval now;
+//   gettimeofday(&now, NULL);
+//   return (now.tv_usec / 1000) + (timestamp_t)now.tv_sec;
+// #endif
+// }
 
 void print_UUID(uint8_t *pipelineCacheUUID) {
   for (int j = 0; j < VK_UUID_SIZE; ++j) {
@@ -1232,63 +1133,6 @@ VkBool32 demo_check_layers(const std::vector<layer_properties> &layer_props,
   return 1;
 }
 
-VkResult init_device(struct sample_info &info) {
-  VkResult res;
-  VkDeviceQueueCreateInfo queue_info = {};
-
-  float queue_priorities[1] = {0.0};
-  queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  queue_info.pNext = NULL;
-  queue_info.queueCount = 1;
-  queue_info.pQueuePriorities = queue_priorities;
-  queue_info.queueFamilyIndex = info.graphics_queue_family_index;
-
-  VkDeviceCreateInfo device_info = {};
-  device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_info.pNext = NULL;
-  device_info.queueCreateInfoCount = 1;
-  device_info.pQueueCreateInfos = &queue_info;
-  device_info.enabledExtensionCount = info.device_extension_names.size();
-  device_info.ppEnabledExtensionNames = device_info.enabledExtensionCount
-                                            ? info.device_extension_names.data()
-                                            : NULL;
-  device_info.pEnabledFeatures = NULL;
-
-  res = vkCreateDevice(info.gpus[0], &device_info, NULL, &info.device);
-  assert(res == VK_SUCCESS);
-
-  return res;
-}
-
-VkResult init_enumerate_device(struct sample_info &info, uint32_t gpu_count) {
-  uint32_t const U_ASSERT_ONLY req_count = gpu_count;
-  VkResult res = vkEnumeratePhysicalDevices(info.inst, &gpu_count, NULL);
-  assert(gpu_count);
-  info.gpus.resize(gpu_count);
-
-  res = vkEnumeratePhysicalDevices(info.inst, &gpu_count, info.gpus.data());
-  assert(!res && gpu_count >= req_count);
-
-  vkGetPhysicalDeviceQueueFamilyProperties(info.gpus[0],
-                                           &info.queue_family_count, NULL);
-  assert(info.queue_family_count >= 1);
-
-  info.queue_props.resize(info.queue_family_count);
-  vkGetPhysicalDeviceQueueFamilyProperties(
-      info.gpus[0], &info.queue_family_count, info.queue_props.data());
-  assert(info.queue_family_count >= 1);
-
-  /* This is as good a place as any to do this */
-  vkGetPhysicalDeviceMemoryProperties(info.gpus[0], &info.memory_properties);
-  vkGetPhysicalDeviceProperties(info.gpus[0], &info.gpu_props);
-  /* query device extensions for enabled layers */
-  for (auto &layer_props : info.instance_layer_properties) {
-    init_device_extension_properties(info, layer_props);
-  }
-
-  return res;
-}
-
 void init_queue_family_index(struct sample_info &info) {
   /* This routine simply finds a graphics queue for a later vkCreateDevice,
    * without consideration for which queue family can present an image.
@@ -1418,235 +1262,6 @@ static const wl_registry_listener registry_listener = {
 
 #endif
 
-void init_connection(struct sample_info &info) {
-#if defined(VK_USE_PLATFORM_XCB_KHR)
-  const xcb_setup_t *setup;
-  xcb_screen_iterator_t iter;
-  int scr;
-
-  info.connection = xcb_connect(NULL, &scr);
-  if (info.connection == NULL || xcb_connection_has_error(info.connection)) {
-    std::cout << "Unable to make an XCB connection\n";
-    exit(-1);
-  }
-
-  setup = xcb_get_setup(info.connection);
-  iter = xcb_setup_roots_iterator(setup);
-  while (scr-- > 0)
-    xcb_screen_next(&iter);
-
-  info.screen = iter.data;
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-  info.display = wl_display_connect(nullptr);
-
-  if (info.display == nullptr) {
-    printf("Cannot find a compatible Vulkan installable client driver "
-           "(ICD).\nExiting ...\n");
-    fflush(stdout);
-    exit(1);
-  }
-
-  info.registry = wl_display_get_registry(info.display);
-  wl_registry_add_listener(info.registry, &registry_listener, &info);
-  wl_display_dispatch(info.display);
-#endif
-}
-#ifdef _WIN32
-static void run(struct sample_info *info) { /* Placeholder for samples that want
-                                               to show dynamic content */
-}
-
-// MS-Windows event handling function:
-LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-  struct sample_info *info = reinterpret_cast<struct sample_info *>(
-      GetWindowLongPtr(hWnd, GWLP_USERDATA));
-
-  switch (uMsg) {
-  case WM_CLOSE:
-    PostQuitMessage(0);
-    break;
-  case WM_PAINT:
-    run(info);
-    return 0;
-  default:
-    break;
-  }
-  return (DefWindowProc(hWnd, uMsg, wParam, lParam));
-}
-
-void init_window(struct sample_info &info) {
-  WNDCLASSEX win_class;
-  assert(info.width > 0);
-  assert(info.height > 0);
-
-  info.connection = GetModuleHandle(NULL);
-  sprintf(info.name, "Sample");
-
-  // Initialize the window class structure:
-  win_class.cbSize = sizeof(WNDCLASSEX);
-  win_class.style = CS_HREDRAW | CS_VREDRAW;
-  win_class.lpfnWndProc = WndProc;
-  win_class.cbClsExtra = 0;
-  win_class.cbWndExtra = 0;
-  win_class.hInstance = info.connection; // hInstance
-  win_class.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-  win_class.hCursor = LoadCursor(NULL, IDC_ARROW);
-  win_class.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
-  win_class.lpszMenuName = NULL;
-  win_class.lpszClassName = info.name;
-  win_class.hIconSm = LoadIcon(NULL, IDI_WINLOGO);
-  // Register window class:
-  if (!RegisterClassEx(&win_class)) {
-    // It didn't work, so try to give a useful error:
-    printf("Unexpected error trying to start the application!\n");
-    fflush(stdout);
-    exit(1);
-  }
-  // Create window with the registered class:
-  RECT wr = {0, 0, info.width, info.height};
-  AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
-  info.window = CreateWindowEx(0,
-                               info.name,            // class name
-                               info.name,            // app name
-                               WS_OVERLAPPEDWINDOW | // window style
-                                   WS_VISIBLE | WS_SYSMENU,
-                               100, 100,           // x/y coords
-                               wr.right - wr.left, // width
-                               wr.bottom - wr.top, // height
-                               NULL,               // handle to parent
-                               NULL,               // handle to menu
-                               info.connection,    // hInstance
-                               NULL);              // no extra parameters
-  if (!info.window) {
-    // It didn't work, so try to give a useful error:
-    printf("Cannot create a window in which to draw!\n");
-    fflush(stdout);
-    exit(1);
-  }
-  SetWindowLongPtr(info.window, GWLP_USERDATA, (LONG_PTR)&info);
-}
-
-void destroy_window(struct sample_info &info) {
-  vkDestroySurfaceKHR(info.inst, info.surface, NULL);
-  DestroyWindow(info.window);
-}
-
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-
-// iOS & macOS: init_window() implemented externally to allow access to
-// Objective-C components
-
-void destroy_window(struct sample_info &info) { info.caMetalLayer = NULL; }
-
-#elif defined(__ANDROID__)
-// Android implementation.
-void init_window(struct sample_info &info) {}
-
-void destroy_window(struct sample_info &info) {}
-
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-
-void init_window(struct sample_info &info) {
-  assert(info.width > 0);
-  assert(info.height > 0);
-
-  info.window = wl_compositor_create_surface(info.compositor);
-  if (!info.window) {
-    printf("Can not create wayland_surface from compositor!\n");
-    fflush(stdout);
-    exit(1);
-  }
-
-  info.shell_surface = wl_shell_get_shell_surface(info.shell, info.window);
-  if (!info.shell_surface) {
-    printf("Can not get shell_surface from wayland_surface!\n");
-    fflush(stdout);
-    exit(1);
-  }
-
-  wl_shell_surface_add_listener(info.shell_surface, &shell_surface_listener,
-                                &info);
-  wl_shell_surface_set_toplevel(info.shell_surface);
-}
-
-void destroy_window(struct sample_info &info) {
-  wl_shell_surface_destroy(info.shell_surface);
-  wl_surface_destroy(info.window);
-  wl_shell_destroy(info.shell);
-  wl_compositor_destroy(info.compositor);
-  wl_registry_destroy(info.registry);
-  wl_display_disconnect(info.display);
-}
-
-#else
-
-void init_window(struct sample_info &info) {
-  assert(info.width > 0);
-  assert(info.height > 0);
-
-  uint32_t value_mask, value_list[32];
-
-  info.window = xcb_generate_id(info.connection);
-
-  value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
-  value_list[0] = info.screen->black_pixel;
-  value_list[1] = XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_EXPOSURE;
-
-  xcb_create_window(info.connection, XCB_COPY_FROM_PARENT, info.window,
-                    info.screen->root, 0, 0, info.width, info.height, 0,
-                    XCB_WINDOW_CLASS_INPUT_OUTPUT, info.screen->root_visual,
-                    value_mask, value_list);
-
-  /* Magic code that will send notification when window is destroyed */
-  xcb_intern_atom_cookie_t cookie =
-      xcb_intern_atom(info.connection, 1, 12, "WM_PROTOCOLS");
-  xcb_intern_atom_reply_t *reply =
-      xcb_intern_atom_reply(info.connection, cookie, 0);
-
-  xcb_intern_atom_cookie_t cookie2 =
-      xcb_intern_atom(info.connection, 0, 16, "WM_DELETE_WINDOW");
-  info.atom_wm_delete_window =
-      xcb_intern_atom_reply(info.connection, cookie2, 0);
-
-  xcb_change_property(info.connection, XCB_PROP_MODE_REPLACE, info.window,
-                      (*reply).atom, 4, 32, 1,
-                      &(*info.atom_wm_delete_window).atom);
-  free(reply);
-
-  xcb_map_window(info.connection, info.window);
-
-  // Force the x/y coordinates to 100,100 results are identical in consecutive
-  // runs
-  const uint32_t coords[] = {100, 100};
-  xcb_configure_window(info.connection, info.window,
-                       XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, coords);
-  xcb_flush(info.connection);
-
-  xcb_generic_event_t *e;
-  while ((e = xcb_wait_for_event(info.connection))) {
-    if ((e->response_type & ~0x80) == XCB_EXPOSE)
-      break;
-  }
-}
-
-void destroy_window(struct sample_info &info) {
-  vkDestroySurfaceKHR(info.inst, info.surface, NULL);
-  xcb_destroy_window(info.connection, info.window);
-  xcb_disconnect(info.connection);
-}
-
-#endif // _WIN32
-
-void init_window_size(struct sample_info &info, int32_t default_width,
-                      int32_t default_height) {
-#ifdef __ANDROID__
-  AndroidGetWindowSize(&info.width, &info.height);
-#else
-  info.width = default_width;
-  info.height = default_height;
-#endif
-}
-
 void init_depth_buffer(struct sample_info &info) {
   VkResult U_ASSERT_ONLY res;
   bool U_ASSERT_ONLY pass;
@@ -1768,123 +1383,6 @@ void init_depth_buffer(struct sample_info &info) {
  */
 #define PREFERRED_SURFACE_FORMAT VK_FORMAT_B8G8R8A8_UNORM
 
-void init_swapchain_extension(struct sample_info &info) {
-  /* DEPENDS on init_connection() and init_window() */
-
-  VkResult U_ASSERT_ONLY res;
-
-// Construct the surface description:
-#ifdef _WIN32
-  VkWin32SurfaceCreateInfoKHR createInfo = {};
-  createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext = NULL;
-  createInfo.hinstance = info.connection;
-  createInfo.hwnd = info.window;
-  res = vkCreateWin32SurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
-#elif defined(__ANDROID__)
-  GET_INSTANCE_PROC_ADDR(info.inst, CreateAndroidSurfaceKHR);
-
-  VkAndroidSurfaceCreateInfoKHR createInfo;
-  createInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext = nullptr;
-  createInfo.flags = 0;
-  createInfo.window = AndroidGetApplicationWindow();
-  res = info.fpCreateAndroidSurfaceKHR(info.inst, &createInfo, nullptr,
-                                       &info.surface);
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-  VkMetalSurfaceCreateInfoEXT createInfo = {};
-  createInfo.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
-  createInfo.pNext = NULL;
-  createInfo.flags = 0;
-  createInfo.pLayer = info.caMetalLayer;
-  res = vkCreateMetalSurfaceEXT(info.inst, &createInfo, NULL, &info.surface);
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-  VkWaylandSurfaceCreateInfoKHR createInfo = {};
-  createInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext = NULL;
-  createInfo.display = info.display;
-  createInfo.surface = info.window;
-  res = vkCreateWaylandSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
-#else
-  VkXcbSurfaceCreateInfoKHR createInfo = {};
-  createInfo.sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR;
-  createInfo.pNext = NULL;
-  createInfo.connection = info.connection;
-  createInfo.window = info.window;
-  res = vkCreateXcbSurfaceKHR(info.inst, &createInfo, NULL, &info.surface);
-#endif // __ANDROID__  && _WIN32
-  assert(res == VK_SUCCESS);
-
-  // Iterate over each queue to learn whether it supports presenting:
-  VkBool32 *pSupportsPresent =
-      (VkBool32 *)malloc(info.queue_family_count * sizeof(VkBool32));
-  for (uint32_t i = 0; i < info.queue_family_count; i++) {
-    vkGetPhysicalDeviceSurfaceSupportKHR(info.gpus[0], i, info.surface,
-                                         &pSupportsPresent[i]);
-  }
-
-  // Search for a graphics and a present queue in the array of queue
-  // families, try to find one that supports both
-  info.graphics_queue_family_index = UINT32_MAX;
-  info.present_queue_family_index = UINT32_MAX;
-  for (uint32_t i = 0; i < info.queue_family_count; ++i) {
-    if ((info.queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
-      if (info.graphics_queue_family_index == UINT32_MAX)
-        info.graphics_queue_family_index = i;
-
-      if (pSupportsPresent[i] == VK_TRUE) {
-        info.graphics_queue_family_index = i;
-        info.present_queue_family_index = i;
-        break;
-      }
-    }
-  }
-
-  if (info.present_queue_family_index == UINT32_MAX) {
-    // If didn't find a queue that supports both graphics and present, then
-    // find a separate present queue.
-    for (size_t i = 0; i < info.queue_family_count; ++i)
-      if (pSupportsPresent[i] == VK_TRUE) {
-        info.present_queue_family_index = i;
-        break;
-      }
-  }
-  free(pSupportsPresent);
-
-  // Generate error if could not find queues that support graphics
-  // and present
-  if (info.graphics_queue_family_index == UINT32_MAX ||
-      info.present_queue_family_index == UINT32_MAX) {
-    std::cout << "Could not find a queues for both graphics and present";
-    exit(-1);
-  }
-
-  // Get the list of VkFormats that are supported:
-  uint32_t formatCount;
-  res = vkGetPhysicalDeviceSurfaceFormatsKHR(info.gpus[0], info.surface,
-                                             &formatCount, NULL);
-  assert(res == VK_SUCCESS);
-  VkSurfaceFormatKHR *surfFormats =
-      (VkSurfaceFormatKHR *)malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-  res = vkGetPhysicalDeviceSurfaceFormatsKHR(info.gpus[0], info.surface,
-                                             &formatCount, surfFormats);
-  assert(res == VK_SUCCESS);
-
-  // If the device supports our preferred surface format, use it.
-  // Otherwise, use whatever the device's first reported surface
-  // format is.
-  assert(formatCount >= 1);
-  info.format = surfFormats[0].format;
-  for (size_t i = 0; i < formatCount; ++i) {
-    if (surfFormats[i].format == PREFERRED_SURFACE_FORMAT) {
-      info.format = PREFERRED_SURFACE_FORMAT;
-      break;
-    }
-  }
-
-  free(surfFormats);
-}
-
 void init_presentable_image(struct sample_info &info) {
   /* DEPENDS on init_swap_chain() */
 
@@ -1972,174 +1470,6 @@ void execute_present_image(struct sample_info &info) {
   // TODO: Deal with the VK_SUBOPTIMAL_WSI and VK_ERROR_OUT_OF_DATE_WSI
   // return codes
   assert(!res);
-}
-
-void init_swap_chain(struct sample_info &info, VkImageUsageFlags usageFlags) {
-  /* DEPENDS on info.cmd and info.queue initialized */
-
-  VkResult U_ASSERT_ONLY res;
-  VkSurfaceCapabilitiesKHR surfCapabilities;
-
-  res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(info.gpus[0], info.surface,
-                                                  &surfCapabilities);
-  assert(res == VK_SUCCESS);
-
-  uint32_t presentModeCount;
-  res = vkGetPhysicalDeviceSurfacePresentModesKHR(info.gpus[0], info.surface,
-                                                  &presentModeCount, NULL);
-  assert(res == VK_SUCCESS);
-  VkPresentModeKHR *presentModes =
-      (VkPresentModeKHR *)malloc(presentModeCount * sizeof(VkPresentModeKHR));
-  assert(presentModes);
-  res = vkGetPhysicalDeviceSurfacePresentModesKHR(
-      info.gpus[0], info.surface, &presentModeCount, presentModes);
-  assert(res == VK_SUCCESS);
-
-  VkExtent2D swapchainExtent;
-  // width and height are either both 0xFFFFFFFF, or both not 0xFFFFFFFF.
-  if (surfCapabilities.currentExtent.width == 0xFFFFFFFF) {
-    // If the surface size is undefined, the size is set to
-    // the size of the images requested.
-    swapchainExtent.width = info.width;
-    swapchainExtent.height = info.height;
-    if (swapchainExtent.width < surfCapabilities.minImageExtent.width) {
-      swapchainExtent.width = surfCapabilities.minImageExtent.width;
-    } else if (swapchainExtent.width > surfCapabilities.maxImageExtent.width) {
-      swapchainExtent.width = surfCapabilities.maxImageExtent.width;
-    }
-
-    if (swapchainExtent.height < surfCapabilities.minImageExtent.height) {
-      swapchainExtent.height = surfCapabilities.minImageExtent.height;
-    } else if (swapchainExtent.height >
-               surfCapabilities.maxImageExtent.height) {
-      swapchainExtent.height = surfCapabilities.maxImageExtent.height;
-    }
-  } else {
-    // If the surface size is defined, the swap chain size must match
-    swapchainExtent = surfCapabilities.currentExtent;
-  }
-
-  // The FIFO present mode is guaranteed by the spec to be supported
-  // Also note that current Android driver only supports FIFO
-  VkPresentModeKHR swapchainPresentMode = VK_PRESENT_MODE_FIFO_KHR;
-
-  // Determine the number of VkImage's to use in the swap chain.
-  // We need to acquire only 1 presentable image at at time.
-  // Asking for minImageCount images ensures that we can acquire
-  // 1 presentable image as long as we present it before attempting
-  // to acquire another.
-  uint32_t desiredNumberOfSwapChainImages = surfCapabilities.minImageCount;
-
-  VkSurfaceTransformFlagBitsKHR preTransform;
-  if (surfCapabilities.supportedTransforms &
-      VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
-    preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-  } else {
-    preTransform = surfCapabilities.currentTransform;
-  }
-
-  // Find a supported composite alpha mode - one of these is guaranteed to be
-  // set
-  VkCompositeAlphaFlagBitsKHR compositeAlpha =
-      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  VkCompositeAlphaFlagBitsKHR compositeAlphaFlags[4] = {
-      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
-      VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
-      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-  };
-  for (uint32_t i = 0;
-       i < sizeof(compositeAlphaFlags) / sizeof(compositeAlphaFlags[0]); i++) {
-    if (surfCapabilities.supportedCompositeAlpha & compositeAlphaFlags[i]) {
-      compositeAlpha = compositeAlphaFlags[i];
-      break;
-    }
-  }
-
-  VkSwapchainCreateInfoKHR swapchain_ci = {};
-  swapchain_ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swapchain_ci.pNext = NULL;
-  swapchain_ci.surface = info.surface;
-  swapchain_ci.minImageCount = desiredNumberOfSwapChainImages;
-  swapchain_ci.imageFormat = info.format;
-  swapchain_ci.imageExtent.width = swapchainExtent.width;
-  swapchain_ci.imageExtent.height = swapchainExtent.height;
-  swapchain_ci.preTransform = preTransform;
-  swapchain_ci.compositeAlpha = compositeAlpha;
-  swapchain_ci.imageArrayLayers = 1;
-  swapchain_ci.presentMode = swapchainPresentMode;
-  swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
-#ifndef __ANDROID__
-  swapchain_ci.clipped = true;
-#else
-  swapchain_ci.clipped = false;
-#endif
-  swapchain_ci.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-  swapchain_ci.imageUsage = usageFlags;
-  swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  swapchain_ci.queueFamilyIndexCount = 0;
-  swapchain_ci.pQueueFamilyIndices = NULL;
-  uint32_t queueFamilyIndices[2] = {(uint32_t)info.graphics_queue_family_index,
-                                    (uint32_t)info.present_queue_family_index};
-  if (info.graphics_queue_family_index != info.present_queue_family_index) {
-    // If the graphics and present queues are from different queue families,
-    // we either have to explicitly transfer ownership of images between the
-    // queues, or we have to create the swapchain with imageSharingMode
-    // as VK_SHARING_MODE_CONCURRENT
-    swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-    swapchain_ci.queueFamilyIndexCount = 2;
-    swapchain_ci.pQueueFamilyIndices = queueFamilyIndices;
-  }
-
-  res =
-      vkCreateSwapchainKHR(info.device, &swapchain_ci, NULL, &info.swap_chain);
-  assert(res == VK_SUCCESS);
-
-  res = vkGetSwapchainImagesKHR(info.device, info.swap_chain,
-                                &info.swapchainImageCount, NULL);
-  assert(res == VK_SUCCESS);
-
-  VkImage *swapchainImages =
-      (VkImage *)malloc(info.swapchainImageCount * sizeof(VkImage));
-  assert(swapchainImages);
-  res = vkGetSwapchainImagesKHR(info.device, info.swap_chain,
-                                &info.swapchainImageCount, swapchainImages);
-  assert(res == VK_SUCCESS);
-
-  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
-    swap_chain_buffer sc_buffer;
-
-    VkImageViewCreateInfo color_image_view = {};
-    color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    color_image_view.pNext = NULL;
-    color_image_view.format = info.format;
-    color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
-    color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
-    color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
-    color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
-    color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    color_image_view.subresourceRange.baseMipLevel = 0;
-    color_image_view.subresourceRange.levelCount = 1;
-    color_image_view.subresourceRange.baseArrayLayer = 0;
-    color_image_view.subresourceRange.layerCount = 1;
-    color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    color_image_view.flags = 0;
-
-    sc_buffer.image = swapchainImages[i];
-
-    color_image_view.image = sc_buffer.image;
-
-    res = vkCreateImageView(info.device, &color_image_view, NULL,
-                            &sc_buffer.view);
-    info.buffers.push_back(sc_buffer);
-    assert(res == VK_SUCCESS);
-  }
-  free(swapchainImages);
-  info.current_buffer = 0;
-
-  if (NULL != presentModes) {
-    free(presentModes);
-  }
 }
 
 void init_uniform_buffer(struct sample_info &info) {
@@ -3290,15 +2620,6 @@ void destroy_renderpass(struct sample_info &info) {
   vkDestroyRenderPass(info.device, info.render_pass, NULL);
 }
 
-void destroy_device(struct sample_info &info) {
-  vkDeviceWaitIdle(info.device);
-  vkDestroyDevice(info.device, NULL);
-}
-
-void destroy_instance(struct sample_info &info) {
-  vkDestroyInstance(info.inst, NULL);
-}
-
 void destroy_textures(struct sample_info &info) {
   for (size_t i = 0; i < info.textures.size(); i++) {
     vkDestroySampler(info.device, info.textures[i].sampler, NULL);
@@ -3317,35 +2638,58 @@ void destroy_textures(struct sample_info &info) {
  * struct   */
 /* into a generated header file */
 
-int sample_main(int argc, char *argv[]) {
-  VkResult U_ASSERT_ONLY res;
-  struct sample_info info = {};
-  char sample_title[] = "Draw Cube";
-  const bool depthPresent = true;
+void main_loop(const std::function<bool()> &runLoop,
+               const vuloxr::vk::Instance &instance,
+               vuloxr::vk::Swapchain &swapchain,
+               const vuloxr::vk::PhysicalDevice &physicalDevice,
+               const vuloxr::vk::Device &device, void *window) {
+  struct sample_info info = {
+      .inst = instance,
+      .gpus = {physicalDevice},
+      .device = device,
+      .memory_properties = physicalDevice.memoryProps,
+      .width = static_cast<int>(swapchain.createInfo.imageExtent.width),
+      .height = static_cast<int>(swapchain.createInfo.imageExtent.height),
+      .format = swapchain.createInfo.imageFormat,
+      .swapchainImageCount = static_cast<uint32_t>(swapchain.images.size()),
+      .swap_chain = swapchain,
+  };
+  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
+    swap_chain_buffer sc_buffer;
 
-  // init_instance(info, sample_title, &debugUtilsMessengerCreateInfo);
-  vuloxr::vk::Instance instance;
-  instance.addLayer("VK_LAYER_KHRONOS_validation");
-  instance.addExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-  instance.addExtension(VK_KHR_SURFACE_EXTENSION_NAME);
-  instance.addExtension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+    VkImageViewCreateInfo color_image_view = {};
+    color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    color_image_view.pNext = NULL;
+    color_image_view.format = info.format;
+    color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
+    color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
+    color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
+    color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
+    color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    color_image_view.subresourceRange.baseMipLevel = 0;
+    color_image_view.subresourceRange.levelCount = 1;
+    color_image_view.subresourceRange.baseArrayLayer = 0;
+    color_image_view.subresourceRange.layerCount = 1;
+    color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    color_image_view.flags = 0;
 
-  instance.create();
-  info.inst = instance;
+    sc_buffer.image = swapchain.images[i];
 
-  init_enumerate_device(info);
-  init_window_size(info, 500, 500);
-  init_connection(info);
-  init_window(info);
-  init_swapchain_extension(info);
-  info.device_extension_names.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-  init_device(info);
+    color_image_view.image = sc_buffer.image;
+
+    auto res = vkCreateImageView(info.device, &color_image_view, NULL,
+                            &sc_buffer.view);
+    info.buffers.push_back(sc_buffer);
+    assert(res == VK_SUCCESS);
+  }
+  info.current_buffer = 0;
 
   init_command_pool(info);
   init_command_buffer(info);
   execute_begin_command_buffer(info);
   init_device_queue(info);
-  init_swap_chain(info);
+
+  const bool depthPresent = true;
   init_depth_buffer(info);
   init_uniform_buffer(info);
   init_descriptor_and_pipeline_layouts(info, false);
@@ -3399,99 +2743,103 @@ int sample_main(int argc, char *argv[]) {
   imageAcquiredSemaphoreCreateInfo.pNext = NULL;
   imageAcquiredSemaphoreCreateInfo.flags = 0;
 
-  res = vkCreateSemaphore(info.device, &imageAcquiredSemaphoreCreateInfo, NULL,
-                          &imageAcquiredSemaphore);
+  auto res = vkCreateSemaphore(info.device, &imageAcquiredSemaphoreCreateInfo,
+                               NULL, &imageAcquiredSemaphore);
   assert(res == VK_SUCCESS);
 
-  // Get the index of the next available swapchain image:
-  res = vkAcquireNextImageKHR(info.device, info.swap_chain, UINT64_MAX,
-                              imageAcquiredSemaphore, VK_NULL_HANDLE,
-                              &info.current_buffer);
-  // TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
-  // return codes
-  assert(res == VK_SUCCESS);
+  while (runLoop()) {
 
-  VkRenderPassBeginInfo rp_begin;
-  rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  rp_begin.pNext = NULL;
-  rp_begin.renderPass = info.render_pass;
-  rp_begin.framebuffer = info.framebuffers[info.current_buffer];
-  rp_begin.renderArea.offset.x = 0;
-  rp_begin.renderArea.offset.y = 0;
-  rp_begin.renderArea.extent.width = info.width;
-  rp_begin.renderArea.extent.height = info.height;
-  rp_begin.clearValueCount = 2;
-  rp_begin.pClearValues = clear_values;
+    // Get the index of the next available swapchain image:
+    res = vkAcquireNextImageKHR(info.device, info.swap_chain, UINT64_MAX,
+                                imageAcquiredSemaphore, VK_NULL_HANDLE,
+                                &info.current_buffer);
+    // TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
+    // return codes
+    assert(res == VK_SUCCESS);
 
-  vkCmdBeginRenderPass(info.cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+    VkRenderPassBeginInfo rp_begin;
+    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rp_begin.pNext = NULL;
+    rp_begin.renderPass = info.render_pass;
+    rp_begin.framebuffer = info.framebuffers[info.current_buffer];
+    rp_begin.renderArea.offset.x = 0;
+    rp_begin.renderArea.offset.y = 0;
+    rp_begin.renderArea.extent.width = info.width;
+    rp_begin.renderArea.extent.height = info.height;
+    rp_begin.clearValueCount = 2;
+    rp_begin.pClearValues = clear_values;
 
-  vkCmdBindPipeline(info.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, info.pipeline);
-  vkCmdBindDescriptorSets(info.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          info.pipeline_layout, 0, NUM_DESCRIPTOR_SETS,
-                          info.desc_set.data(), 0, NULL);
+    vkCmdBeginRenderPass(info.cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-  const VkDeviceSize offsets[1] = {0};
-  vkCmdBindVertexBuffers(info.cmd, 0, 1, &info.vertex_buffer.buf, offsets);
+    vkCmdBindPipeline(info.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, info.pipeline);
+    vkCmdBindDescriptorSets(info.cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            info.pipeline_layout, 0, NUM_DESCRIPTOR_SETS,
+                            info.desc_set.data(), 0, NULL);
 
-  init_viewports(info);
-  init_scissors(info);
+    const VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(info.cmd, 0, 1, &info.vertex_buffer.buf, offsets);
 
-  vkCmdDraw(info.cmd, 12 * 3, 1, 0, 0);
-  vkCmdEndRenderPass(info.cmd);
-  res = vkEndCommandBuffer(info.cmd);
-  const VkCommandBuffer cmd_bufs[] = {info.cmd};
-  VkFenceCreateInfo fenceInfo;
-  VkFence drawFence;
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceInfo.pNext = NULL;
-  fenceInfo.flags = 0;
-  vkCreateFence(info.device, &fenceInfo, NULL, &drawFence);
+    init_viewports(info);
+    init_scissors(info);
 
-  VkPipelineStageFlags pipe_stage_flags =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  VkSubmitInfo submit_info[1] = {};
-  submit_info[0].pNext = NULL;
-  submit_info[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info[0].waitSemaphoreCount = 1;
-  submit_info[0].pWaitSemaphores = &imageAcquiredSemaphore;
-  submit_info[0].pWaitDstStageMask = &pipe_stage_flags;
-  submit_info[0].commandBufferCount = 1;
-  submit_info[0].pCommandBuffers = cmd_bufs;
-  submit_info[0].signalSemaphoreCount = 0;
-  submit_info[0].pSignalSemaphores = NULL;
+    vkCmdDraw(info.cmd, 12 * 3, 1, 0, 0);
+    vkCmdEndRenderPass(info.cmd);
+    res = vkEndCommandBuffer(info.cmd);
+    const VkCommandBuffer cmd_bufs[] = {info.cmd};
+    VkFenceCreateInfo fenceInfo;
+    VkFence drawFence;
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.pNext = NULL;
+    fenceInfo.flags = 0;
+    vkCreateFence(info.device, &fenceInfo, NULL, &drawFence);
 
-  /* Queue the command buffer for execution */
-  res = vkQueueSubmit(info.graphics_queue, 1, submit_info, drawFence);
-  assert(res == VK_SUCCESS);
+    VkPipelineStageFlags pipe_stage_flags =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit_info[1] = {};
+    submit_info[0].pNext = NULL;
+    submit_info[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info[0].waitSemaphoreCount = 1;
+    submit_info[0].pWaitSemaphores = &imageAcquiredSemaphore;
+    submit_info[0].pWaitDstStageMask = &pipe_stage_flags;
+    submit_info[0].commandBufferCount = 1;
+    submit_info[0].pCommandBuffers = cmd_bufs;
+    submit_info[0].signalSemaphoreCount = 0;
+    submit_info[0].pSignalSemaphores = NULL;
 
-  /* Now present the image in the window */
+    /* Queue the command buffer for execution */
+    res = vkQueueSubmit(info.graphics_queue, 1, submit_info, drawFence);
+    assert(res == VK_SUCCESS);
 
-  VkPresentInfoKHR present;
-  present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present.pNext = NULL;
-  present.swapchainCount = 1;
-  present.pSwapchains = &info.swap_chain;
-  present.pImageIndices = &info.current_buffer;
-  present.pWaitSemaphores = NULL;
-  present.waitSemaphoreCount = 0;
-  present.pResults = NULL;
+    /* Now present the image in the window */
 
-  /* Make sure command buffer is finished before presenting */
-  do {
-    res = vkWaitForFences(info.device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
-  } while (res == VK_TIMEOUT);
+    VkPresentInfoKHR present;
+    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present.pNext = NULL;
+    present.swapchainCount = 1;
+    present.pSwapchains = &info.swap_chain;
+    present.pImageIndices = &info.current_buffer;
+    present.pWaitSemaphores = NULL;
+    present.waitSemaphoreCount = 0;
+    present.pResults = NULL;
 
-  assert(res == VK_SUCCESS);
-  res = vkQueuePresentKHR(info.present_queue, &present);
-  assert(res == VK_SUCCESS);
+    /* Make sure command buffer is finished before presenting */
+    do {
+      res = vkWaitForFences(info.device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
+    } while (res == VK_TIMEOUT);
 
-  wait_seconds(1);
-  /* VULKAN_KEY_END */
-  if (info.save_images)
-    write_ppm(info, "15-draw_cube");
+    assert(res == VK_SUCCESS);
+    res = vkQueuePresentKHR(info.present_queue, &present);
+    assert(res == VK_SUCCESS);
+
+    // wait_seconds(1);
+    /* VULKAN_KEY_END */
+    // if (info.save_images)
+    //   write_ppm(info, "15-draw_cube");
+
+    vkDestroyFence(info.device, drawFence, NULL);
+  }
 
   vkDestroySemaphore(info.device, imageAcquiredSemaphore, NULL);
-  vkDestroyFence(info.device, drawFence, NULL);
   destroy_pipeline(info);
   destroy_pipeline_cache(info);
   destroy_descriptor_pool(info);
@@ -3505,7 +2853,4 @@ int sample_main(int argc, char *argv[]) {
   destroy_swap_chain(info);
   destroy_command_buffer(info);
   destroy_command_pool(info);
-  destroy_device(info);
-  destroy_window(info);
-  return 0;
 }
