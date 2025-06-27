@@ -29,7 +29,7 @@ Draw Cube
 #include <assert.h>
 #include <cstdlib>
 #include <string.h>
-#include <util_init.hpp>
+#include "util.hpp"
 #include <vuloxr/vk/shaderc.h>
 
 auto VS = "";
