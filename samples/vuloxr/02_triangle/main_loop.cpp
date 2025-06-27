@@ -1,10 +1,10 @@
 #include "../main_loop.h"
-#include "../glsl_to_spv.h"
 #include "vuloxr/vk.h"
 #include <assert.h>
 #include <vulkan/vulkan_core.h>
 #include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
+#include <vuloxr/vk/shaderc.h>
 
 const char VS[] = {
 #embed "shader.vert"
@@ -24,9 +24,9 @@ void main_loop(const std::function<bool()> &runLoop,
   //
   vuloxr::Logger::Info("convert glsl to spv and create shader module...");
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
-      device, glsl_vs_to_spv(VS), "main");
+      device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
-      device, glsl_fs_to_spv(FS), "main");
+      device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
   auto pipelineLayout = vuloxr::vk::createEmptyPipelineLayout(device);
 

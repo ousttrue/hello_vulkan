@@ -1,9 +1,9 @@
 #include "../main_loop.h"
-#include "../glsl_to_spv.h"
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
+#include <vuloxr/vk/shaderc.h>
 
 const char VS[] = {
 #embed "texture.vert"
@@ -200,9 +200,9 @@ void main_loop(const std::function<bool()> &runLoop,
                                                    nullptr, &pipelineLayout));
 
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
-      device, glsl_vs_to_spv(VS), "main");
+      device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
-      device, glsl_fs_to_spv(FS), "main");
+      device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
   vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;

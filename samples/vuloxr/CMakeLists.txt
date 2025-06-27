@@ -31,10 +31,9 @@ else()
 endif()
 
 add_vuloxr_sample(01_clear 01_clear/main_loop.cpp)
-add_vuloxr_sample(02_triangle glsl_to_spv.cpp 02_triangle/main_loop.cpp)
-add_vuloxr_sample(02_hellotriangle glsl_to_spv.cpp
-                  02_hellotriangle/main_loop.cpp)
-add_vuloxr_sample(03_texture glsl_to_spv.cpp 03_texture/main_loop.cpp)
+add_vuloxr_sample(02_triangle 02_triangle/main_loop.cpp)
+add_vuloxr_sample(02_hellotriangle 02_hellotriangle/main_loop.cpp)
+add_vuloxr_sample(03_texture 03_texture/main_loop.cpp)
 
 if(ANDROID)
 
