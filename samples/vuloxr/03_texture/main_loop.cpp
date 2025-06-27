@@ -113,16 +113,16 @@ void main_loop(const std::function<bool()> &runLoop,
       {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // bottom-right and BLUE
       {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}} // bottom-left and WHITE
   };
-  auto vertexBuffer = vuloxr::vk::VertexBuffer::create(
-      device, sizeof(vertices), std::size(vertices),
-      {
+  vuloxr::vk::VertexBuffer vertexBuffer{
+      .bindings =
           {
-              .binding = 0,
-              .stride = static_cast<uint32_t>(sizeof(Vertex)),
-              .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              {
+                  .binding = 0,
+                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
+                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              },
           },
-      },
-      {
+      .attributes = {
           // describes position
           {
               .location = 0,
@@ -144,15 +144,12 @@ void main_loop(const std::function<bool()> &runLoop,
               .format = VK_FORMAT_R32G32_SFLOAT,
               .offset = offsetof(Vertex, texCoord),
           },
-      });
-  vertexBuffer.memory = physicalDevice.allocForMap(device, vertexBuffer.buffer);
-  vertexBuffer.memory.mapWrite(vertices, sizeof(vertices));
+      }};
+  vertexBuffer.allocate(physicalDevice, device,
+                        std::span<const Vertex>(vertices));
 
-  uint16_t indices[] = {0, 1, 2, 2, 3, 0};
-  auto indexBuffer = vuloxr::vk::IndexBuffer::create(
-      device, sizeof(indices), std::size(indices), VK_INDEX_TYPE_UINT16);
-  indexBuffer.memory = physicalDevice.allocForMap(device, indexBuffer.buffer);
-  indexBuffer.memory.mapWrite(indices, sizeof(indices));
+  vuloxr::vk::IndexBuffer indexBuffer(
+      physicalDevice, device, std::span<const uint16_t>({0, 1, 2, 2, 3, 0}));
 
   vuloxr::vk::DescriptorSets descriptorSets(
       device,

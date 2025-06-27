@@ -51,35 +51,31 @@ template <typename T> struct UniformBuffer : NonCopyable {
 };
 
 struct VertexBuffer : NonCopyable {
-  VkDevice device = VK_NULL_HANDLE;
-  Buffer buffer;
-  Memory memory;
-  uint32_t drawCount = 0;
   std::vector<VkVertexInputBindingDescription> bindings;
   std::vector<VkVertexInputAttributeDescription> attributes;
 
+  uint32_t drawCount = 0;
+  Buffer buffer;
+  Memory memory;
+
   VertexBuffer &operator=(VertexBuffer &&rhs) {
-    this->device = rhs.device;
-    this->buffer = std::move(rhs.buffer);
-    this->memory = std::move(rhs.memory);
     this->drawCount = rhs.drawCount;
     std::swap(this->bindings, rhs.bindings);
     std::swap(this->attributes, rhs.attributes);
+    this->buffer = std::move(rhs.buffer);
+    this->memory = std::move(rhs.memory);
     return *this;
   }
 
-  static VertexBuffer
-  create(VkDevice device, uint32_t bufferSize, uint32_t drawCount,
-         const std::vector<VkVertexInputBindingDescription> &bindings,
-         const std::vector<VkVertexInputAttributeDescription> &attributes) {
-    return {
-        .device = device,
-        .buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-        .memory = Memory(device),
-        .drawCount = drawCount,
-        .bindings = bindings,
-        .attributes = attributes,
-    };
+  template <typename T>
+  void allocate(const PhysicalDevice &physicalDevice, VkDevice device,
+                std::span<const T> values) {
+    auto bufferSize = sizeof(T) * values.size();
+    this->buffer =
+        Buffer(device, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+    this->memory = physicalDevice.allocForMap(device, this->buffer);
+    this->memory.mapWrite(values.data(), bufferSize);
+    this->drawCount = values.size();
   }
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline) {
@@ -92,31 +88,53 @@ struct VertexBuffer : NonCopyable {
 };
 
 struct IndexBuffer : NonCopyable {
-  VkDevice device = VK_NULL_HANDLE;
+  VkIndexType indexType;
+
+  uint32_t drawCount;
   Buffer buffer;
   Memory memory;
-  uint32_t drawCount;
-  VkIndexType indexType = VK_INDEX_TYPE_UINT16;
 
   IndexBuffer &operator=(IndexBuffer &&rhs) {
-    this->device = rhs.device;
+    this->indexType = rhs.indexType;
+    this->drawCount = rhs.drawCount;
     this->buffer = std::move(rhs.buffer);
     this->memory = std::move(rhs.memory);
-    this->drawCount = rhs.drawCount;
-    this->indexType = rhs.indexType;
     return *this;
   }
 
-  static IndexBuffer create(VkDevice device, uint32_t bufferSize,
-                            uint32_t drawCount, VkIndexType indexType) {
-    return {
-        .device = device,
-        .buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
-        .memory = Memory(device),
-        .drawCount = drawCount,
-        .indexType = indexType,
-    };
+  template <typename T>
+  IndexBuffer(const PhysicalDevice &physicalDevice, VkDevice device,
+              std::span<const T> values) {
+    switch (sizeof(T)) {
+    case 2:
+      this->indexType = VK_INDEX_TYPE_UINT16;
+      break;
+
+    case 4:
+      this->indexType = VK_INDEX_TYPE_UINT32;
+      break;
+
+    default:
+      throw std::runtime_error("unknown index type");
+    }
+
+    auto bufferSize = sizeof(T) * values.size();
+    this->buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
+    this->memory = physicalDevice.allocForMap(device, this->buffer);
+    this->memory.mapWrite(values.data(), bufferSize);
+    this->drawCount = values.size();
   }
+
+  // static IndexBuffer create(VkDevice device, uint32_t bufferSize,
+  //                           uint32_t drawCount, VkIndexType indexType) {
+  //   return {
+  //       .device = device,
+  //       .buffer = Buffer(device, bufferSize,
+  //       VK_BUFFER_USAGE_INDEX_BUFFER_BIT), .memory = Memory(device),
+  //       .drawCount = drawCount,
+  //       .indexType = indexType,
+  //   };
+  // }
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline, VkBuffer vertices) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);

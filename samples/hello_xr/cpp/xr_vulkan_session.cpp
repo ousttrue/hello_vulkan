@@ -137,16 +137,16 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
   vuloxr::vk::PhysicalDevice physicalDevice(_physicalDevice);
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
-  auto vertices = vuloxr::vk::VertexBuffer::create(
-      device, sizeof(c_cubeVertices), std::size(c_cubeVertices),
-      {
+  vuloxr::vk::VertexBuffer vertices{
+      .bindings =
           {
-              .binding = 0,
-              .stride = static_cast<uint32_t>(sizeof(Vertex)),
-              .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              {
+                  .binding = 0,
+                  .stride = static_cast<uint32_t>(sizeof(Vertex)),
+                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              },
           },
-      },
-      {
+      .attributes = {
           {
               .location = 0,
               .binding = 0,
@@ -159,15 +159,12 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               .format = VK_FORMAT_R32G32B32_SFLOAT,
               .offset = offsetof(Vertex, Color),
           },
-      });
-  vertices.memory = physicalDevice.allocForMap(device, vertices.buffer);
-  vertices.memory.mapWrite(c_cubeVertices, sizeof(c_cubeVertices));
+      }};
+  vertices.allocate(physicalDevice, device,
+                    std::span<const Vertex>(c_cubeVertices));
 
-  auto indices = vuloxr::vk::IndexBuffer::create(device, sizeof(c_cubeIndices),
-                                                 std::size(c_cubeIndices),
-                                                 VK_INDEX_TYPE_UINT16);
-  indices.memory = physicalDevice.allocForMap(device, indices.buffer);
-  indices.memory.mapWrite(c_cubeIndices, sizeof(c_cubeIndices));
+  vuloxr::vk::IndexBuffer indices(
+      physicalDevice, device, std::span<const unsigned short>(c_cubeIndices));
 
   // Create resources for each view.
   using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;

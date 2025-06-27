@@ -44,14 +44,13 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  auto mesh = vuloxr::vk::VertexBuffer::create(
-      device, sizeof(data), std::size(data),
-      {{
+  vuloxr::vk::VertexBuffer mesh{
+      .bindings = {{
           .binding = 0,
           .stride = sizeof(Vertex),
           .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
       }},
-      {
+      .attributes = {
           {
               .location = 0,
               .binding = 0,
@@ -64,10 +63,8 @@ void main_loop(const std::function<bool()> &runLoop,
               .format = VK_FORMAT_R32G32B32A32_SFLOAT,
               .offset = offsetof(Vertex, color), // 4 * sizeof(float),
           },
-      });
-
-  auto meshMemory = physicalDevice.allocForMap(device, mesh.buffer);
-  meshMemory.mapWrite(data, sizeof(data));
+      }};
+  mesh.allocate(physicalDevice, device, std::span<const Vertex>(data));
 
   auto renderPass = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
