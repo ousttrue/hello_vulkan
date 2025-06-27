@@ -40,4 +40,6 @@ if(ANDROID)
 else()
   add_vuloxr_sample(04_imgui 04_imgui/main_loop.cpp)
   target_link_libraries(04_imgui PRIVATE vuloxr imgui jsoncpp_static)
+
+  subdirs(05_cube)
 endif()

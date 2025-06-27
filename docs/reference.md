@@ -15,7 +15,13 @@
 Pixel3 で動作成功。
 Swapchain の semaphore 周りが難読。
 
-# KhronosGroup/OpenXR-SDK-Source
+# Khronos
+
+## Vulkan-Samples
+
+https://github.com/KhronosGroup/Vulkan-Samples/tree/main/samples/api
+
+## OpenXR-SDK-Source
 
 `Platform(WIN32, ANDROID...etc)` x `Graphics(D3D11, D3D12, OpenGL, OpenGLES, Vulkan...etc)`
 
@@ -23,6 +29,11 @@ Swapchain の semaphore 周りが難読。
 
 cross platform(win, android...) x cross gpu(vulkan, opengl, d3d...) で難読。
 Swapchain 周りが難読。
+
+# LunarG
+
+- https://vulkan.lunarg.com/doc/view/latest/windows/samples_index.html
+  - https://github.com/LunarG/VulkanSamples
 
 # googlesamples/android-vulkan-tutorials
 
@@ -47,4 +58,3 @@ https://github.com/terryky/android_openxr_gles
 # openxr-vulkan-example
 
 https://github.com/janhsimon/openxr-vulkan-example
-
