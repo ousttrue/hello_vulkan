@@ -243,11 +243,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                                    vertices.bindings, vertices.attributes,
                                    {viewport}, {scissor}, {});
 
-    auto ptr = std::make_shared<ViewRenderer>(
-        physicalDevice, device, queueFamilyIndex, extent,
-        (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
-        (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
-        std::move(pipeline));
+    auto ptr = std::make_shared<ViewRenderer>(device, queueFamilyIndex,
+                                              std::move(pipeline));
     renderers.push_back(ptr);
   }
 
@@ -306,8 +303,9 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.height,
           };
           renderers[i]->render(
-              image.image, extent,
+              physicalDevice, image.image, extent,
               (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
+              (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
               clearColor, vertices.buffer, indices.buffer, indices.drawCount,
               projectionLayer.pose, projectionLayer.fov, cubes);
 

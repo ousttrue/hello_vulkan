@@ -2,14 +2,11 @@
 #include "xr_linear.h"
 #include <vuloxr/vk/command.h>
 
-ViewRenderer::ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
-                           VkDevice _device, uint32_t queueFamilyIndex,
-                           VkExtent2D extent, VkFormat colorFormat,
-                           VkFormat depthFormat,
-                           VkSampleCountFlagBits sampleCountFlagBits,
+ViewRenderer::ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex,
+
                            vuloxr::vk::Pipeline _pipeline)
-    : device(_device), execFence(_device, true), pipeline(std::move(_pipeline)),
-      depthBuffer(_device, extent, depthFormat, sampleCountFlagBits) {
+    : device(_device), execFence(_device, true),
+      pipeline(std::move(_pipeline)) {
   vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
   VkCommandPoolCreateInfo cmdPoolInfo{
@@ -40,25 +37,6 @@ ViewRenderer::ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
   //     VK_SUCCESS) {
   //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
   // }
-
-  {
-    this->depthBuffer.memory =
-        physicalDevice.allocForTransfer(device, this->depthBuffer.image);
-
-    vuloxr::vk::CommandScope(this->commandBuffer)
-        .transitionDepthLayout(
-            depthBuffer.image, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &this->commandBuffer,
-    };
-    vuloxr::vk::CheckVkResult(
-        vkQueueSubmit(this->queue, 1, &submitInfo, nullptr));
-    vkQueueWaitIdle(this->queue);
-  }
 }
 
 ViewRenderer::~ViewRenderer() {
@@ -67,18 +45,44 @@ ViewRenderer::~ViewRenderer() {
   vkDestroyCommandPool(this->device, this->commandPool, nullptr);
 }
 
-void ViewRenderer::render(VkImage image, VkExtent2D size, VkFormat colorFormat,
-                          VkFormat depthFormat,
+void ViewRenderer::render(const vuloxr::vk::PhysicalDevice &physicalDevice,
+                          VkImage image, VkExtent2D extent,
+                          VkFormat colorFormat, VkFormat depthFormat,
+                          VkSampleCountFlagBits sampleCountFlagBits,
                           const VkClearColorValue &clearColor,
                           VkBuffer vertices, VkBuffer indices,
                           uint32_t drawCount, const XrPosef &hmdPose,
                           XrFovf fov, const std::vector<Cube> &cubes) {
   auto found = this->framebufferMap.find(image);
   if (found == this->framebufferMap.end()) {
+    vuloxr::vk::DepthImage depth(this->device, extent, depthFormat,
+                                 sampleCountFlagBits);
+    depth.memory = physicalDevice.allocForTransfer(device, depth.image);
+
+    // SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
+    //                      VkFormat format, VkRenderPass renderPass,
+    //                      DepthImage &&_depth, VkFormat depthFormat)
     auto rt = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-        this->device, image, size, colorFormat, this->pipeline.renderPass,
-        this->depthBuffer.image, depthFormat);
+        this->device, image, extent, colorFormat, this->pipeline.renderPass,
+        std::move(depth), depthFormat);
     found = this->framebufferMap.insert({image, rt}).first;
+
+    {
+      // once record
+      // after use vkCmdPushConstants
+      vuloxr::vk::CommandScope(this->commandBuffer)
+          .transitionDepthLayout(
+              depth.image, VK_IMAGE_LAYOUT_UNDEFINED,
+              VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+      VkSubmitInfo submitInfo{
+          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+          .commandBufferCount = 1,
+          .pCommandBuffers = &this->commandBuffer,
+      };
+      vuloxr::vk::CheckVkResult(
+          vkQueueSubmit(this->queue, 1, &submitInfo, nullptr));
+      vkQueueWaitIdle(this->queue);
+    }
   }
 
   // Waiting on a not-in-flight command buffer is a no-op
@@ -103,7 +107,7 @@ void ViewRenderer::render(VkImage image, VkExtent2D size, VkFormat colorFormat,
   {
     vuloxr::vk::RenderPassRecording recording(
         this->commandBuffer, this->pipeline.pipelineLayout,
-        this->pipeline.renderPass, found->second->framebuffer, size,
+        this->pipeline.renderPass, found->second->framebuffer, extent,
         clearValues, std::size(clearValues));
 
     vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,

@@ -219,7 +219,7 @@ void main_loop(const std::function<bool()> &runLoop,
   bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebuffer>> backbuffers(
+  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>> backbuffers(
       swapchain.images.size());
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
@@ -301,7 +301,7 @@ void main_loop(const std::function<bool()> &runLoop,
       if (res == VK_SUCCESS) {
         auto backbuffer = backbuffers[acquired.imageIndex];
         if (!backbuffer) {
-          backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
+          backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
               device, acquired.image, swapchain.createInfo.imageExtent,
               swapchain.createInfo.imageFormat, imvulkan.renderPass);
           backbuffers[acquired.imageIndex] = backbuffer;

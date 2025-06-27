@@ -1,8 +1,9 @@
 #include "xr_vulkan_session.h"
 #include <thread>
+#include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr.h>
-#include <vuloxr/xr/session.h>
 #include <vuloxr/xr/graphics/vulkan.h>
+#include <vuloxr/xr/session.h>
 
 // List of supported color swapchain formats.
 constexpr VkFormat SupportedColorSwapchainFormats[] = {

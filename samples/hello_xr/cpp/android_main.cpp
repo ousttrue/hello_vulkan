@@ -2,6 +2,7 @@
 
 #include "xr_vulkan_session.h"
 #include <cstddef>
+#include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr/graphics/vulkan.h>
 #include <vuloxr/xr/platform/android.h>
 #include <vuloxr/xr/session.h>

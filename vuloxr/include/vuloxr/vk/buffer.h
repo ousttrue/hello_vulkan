@@ -150,7 +150,25 @@ struct DepthImage : NonCopyable {
     // VKO_CHECK(vkBindImageMemory(this->device, this->image, *this->memory,
     // 0));
   }
-  ~DepthImage() { vkDestroyImage(this->device, this->image, nullptr); }
+  ~DepthImage() {
+    if (this->image != VK_NULL_HANDLE) {
+      vkDestroyImage(this->device, this->image, nullptr);
+    }
+  }
+
+  DepthImage(DepthImage &&rhs) : memory(rhs.device) {
+    this->device = rhs.device;
+    this->image = rhs.image;
+    rhs.image = VK_NULL_HANDLE;
+    this->memory = std::move(rhs.memory);
+  }
+  DepthImage &operator=(DepthImage &&rhs) {
+    this->device = rhs.device;
+    this->image = rhs.image;
+    rhs.image = VK_NULL_HANDLE;
+    this->memory = std::move(rhs.memory);
+    return *this;
+  }
 };
 
 struct Texture : NonCopyable {

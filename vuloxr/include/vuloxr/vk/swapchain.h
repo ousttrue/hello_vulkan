@@ -1,5 +1,5 @@
 #pragma once
-#include "../vk.h"
+#include "buffer.h"
 #include <magic_enum/magic_enum.hpp>
 #include <optional>
 #include <span>
@@ -486,6 +486,8 @@ struct SwapchainFramebuffer {
                            .layerCount = 1},
   };
 
+  DepthImage depth;
+
   VkImageView depthView = VK_NULL_HANDLE;
   VkImageViewCreateInfo depthViewCreateInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -508,9 +510,9 @@ struct SwapchainFramebuffer {
   VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
   SwapchainFramebuffer(VkDevice _device, VkImage image, VkExtent2D extent,
-                       VkFormat format, VkRenderPass renderPass, VkImage depth,
-                       VkFormat depthFormat)
-      : device(_device) {
+                       VkFormat format, VkRenderPass renderPass,
+                       DepthImage &&_depth, VkFormat depthFormat)
+      : device(_device), depth(std::move(_depth)) {
 
     // imageView
     this->imageViewCreateInfo.image = image;
@@ -519,7 +521,7 @@ struct SwapchainFramebuffer {
         this->device, &this->imageViewCreateInfo, nullptr, &this->imageView));
 
     // depthView
-    this->depthViewCreateInfo.image = depth;
+    this->depthViewCreateInfo.image = this->depth.image;
     this->depthViewCreateInfo.format = depthFormat;
     vuloxr::vk::CheckVkResult(vkCreateImageView(
         this->device, &this->depthViewCreateInfo, nullptr, &this->depthView));
@@ -546,7 +548,6 @@ struct SwapchainFramebuffer {
     }
   }
 };
-
 
 } // namespace vk
 } // namespace vuloxr
