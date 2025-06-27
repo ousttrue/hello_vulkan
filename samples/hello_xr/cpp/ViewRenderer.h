@@ -1,5 +1,6 @@
 #pragma once
 #include <map>
+#include <span>
 #include <openxr/openxr.h>
 #include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/pipeline.h>
@@ -21,10 +22,13 @@ struct ViewRenderer {
   VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
   ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex,
-               vuloxr::vk::Pipeline _pipeline);
-
+               VkFormat colorFormat, VkFormat depthFormat,
+               std::span<const VkVertexInputBindingDescription>
+                   vertexInputBindingDescriptions = {},
+               std::span<const VkVertexInputAttributeDescription>
+                   vertexInputAttributeDescriptions = {}
+  );
   ~ViewRenderer();
-
   void render(const vuloxr::vk::PhysicalDevice &physicalDevice, VkImage image,
               VkExtent2D extent, VkFormat colorFormat, VkFormat depthFormat,
               VkSampleCountFlagBits sampleCountFlagBits,

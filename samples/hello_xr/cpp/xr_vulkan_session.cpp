@@ -6,20 +6,8 @@
 #include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
-#include <vuloxr/vk/shaderc.h>
 #include <vuloxr/xr/session.h>
 #include <vuloxr/xr/swapchain.h>
-
-char VertexShaderGlsl[] = {
-#embed "shader.vert"
-    , 0};
-
-char FragmentShaderGlsl[] = {
-#embed "shader.frag"
-    , 0};
-
-static_assert(sizeof(VertexShaderGlsl), "VertexShaderGlsl");
-static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
 
 struct Vec3 {
   float x, y, z;
@@ -184,7 +172,6 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
   // Create resources for each view.
   using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
   std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
-  std::vector<std::shared_ptr<ViewRenderer>> renderers;
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -201,52 +188,10 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         session, i, stereoscope.viewConfigurations[i], viewFormat,
         XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
     swapchains.push_back(swapchain);
-
-    // pieline
-    auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
-        device, sizeof(float) * 16);
-    auto renderPass =
-        vuloxr::vk::createColorDepthRenderPass(device, viewFormat, depthFormat);
-
-    auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
-    assert(vertexSPIRV.size());
-    auto vs = vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV,
-                                                           "main");
-
-    auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
-    assert(fragmentSPIRV.size());
-    auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
-        device, fragmentSPIRV, "main");
-
-    std::vector<VkPipelineShaderStageCreateInfo> stages = {
-        vs.pipelineShaderStageCreateInfo,
-        fs.pipelineShaderStageCreateInfo,
-    };
-
-    VkExtent2D extent = {
-        swapchain->swapchainCreateInfo.width,
-        swapchain->swapchainCreateInfo.height,
-    };
-    VkRect2D scissor = {{0, 0}, extent};
-    // Will invert y after projection
-    VkViewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = static_cast<float>(extent.width),
-        .height = static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-
-    vuloxr::vk::PipelineBuilder builder;
-    auto pipeline = builder.create(device, renderPass, pipelineLayout, stages,
-                                   vertices.bindings, vertices.attributes,
-                                   {viewport}, {scissor}, {});
-
-    auto ptr = std::make_shared<ViewRenderer>(device, queueFamilyIndex,
-                                              std::move(pipeline));
-    renderers.push_back(ptr);
   }
+
+  ViewRenderer renderer(device, queueFamilyIndex, viewFormat, depthFormat,
+                        vertices.bindings, vertices.attributes);
 
   // mainloop
   while (runLoop(state.m_sessionRunning)) {
@@ -302,7 +247,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.width,
               swapchain->swapchainCreateInfo.height,
           };
-          renderers[i]->render(
+          renderer.render(
               physicalDevice, image.image, extent,
               (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
               (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,

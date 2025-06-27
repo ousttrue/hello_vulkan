@@ -86,8 +86,9 @@ inline VkDeviceMemory createBindMemory(VkDevice device, uint32_t reqSize,
 }
 
 struct Memory : NonCopyable {
-  VkDevice device;
-  VkDeviceMemory memory;
+  VkDevice device = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  Memory() = default;
   Memory(VkDevice _device, VkDeviceMemory _memory = VK_NULL_HANDLE)
       : device(_device), memory(_memory) {}
   ~Memory() {

@@ -1,12 +1,52 @@
 #include "ViewRenderer.h"
 #include "xr_linear.h"
 #include <vuloxr/vk/command.h>
+#include <vuloxr/vk/shaderc.h>
 
-ViewRenderer::ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex,
+char VertexShaderGlsl[] = {
+#embed "shader.vert"
+    , 0};
 
-                           vuloxr::vk::Pipeline _pipeline)
-    : device(_device), execFence(_device, true),
-      pipeline(std::move(_pipeline)) {
+char FragmentShaderGlsl[] = {
+#embed "shader.frag"
+    , 0};
+
+static_assert(sizeof(VertexShaderGlsl), "VertexShaderGlsl");
+static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
+
+ViewRenderer::ViewRenderer(
+    VkDevice _device, uint32_t queueFamilyIndex, VkFormat colorFormat,
+    VkFormat depthFormat,
+    std::span<const VkVertexInputBindingDescription> bindings,
+    std::span<const VkVertexInputAttributeDescription> attributes)
+    : device(_device), execFence(_device, true) {
+
+  // pieline
+  auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
+      device, sizeof(float) * 16);
+  auto renderPass =
+      vuloxr::vk::createColorDepthRenderPass(device, colorFormat, depthFormat);
+
+  auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
+  assert(vertexSPIRV.size());
+  auto vs =
+      vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
+
+  auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
+  assert(fragmentSPIRV.size());
+  auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+      device, fragmentSPIRV, "main");
+
+  std::vector<VkPipelineShaderStageCreateInfo> stages = {
+      vs.pipelineShaderStageCreateInfo,
+      fs.pipelineShaderStageCreateInfo,
+  };
+
+  vuloxr::vk::PipelineBuilder builder;
+  this->pipeline = builder.create(
+      device, renderPass, pipelineLayout, stages, bindings, attributes, {}, {},
+      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
+
   vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
   VkCommandPoolCreateInfo cmdPoolInfo{
@@ -16,12 +56,6 @@ ViewRenderer::ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex,
   };
   vuloxr::vk::CheckVkResult(vkCreateCommandPool(this->device, &cmdPoolInfo,
                                                 nullptr, &this->commandPool));
-  // if (vko::SetDebugUtilsObjectNameEXT(
-  //         device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)this->commandPool,
-  //         "hello_xr command pool") != VK_SUCCESS) {
-  //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  // }
-
   VkCommandBufferAllocateInfo cmd{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
       .commandPool = this->commandPool,
@@ -30,13 +64,6 @@ ViewRenderer::ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex,
   };
   vuloxr::vk::CheckVkResult(
       vkAllocateCommandBuffers(this->device, &cmd, &this->commandBuffer));
-  // if (vko::SetDebugUtilsObjectNameEXT(device,
-  // VK_OBJECT_TYPE_COMMAND_BUFFER,
-  //                                     (uint64_t)this->commandBuffer,
-  //                                     "hello_xr command buffer") !=
-  //     VK_SUCCESS) {
-  //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  // }
 }
 
 ViewRenderer::~ViewRenderer() {

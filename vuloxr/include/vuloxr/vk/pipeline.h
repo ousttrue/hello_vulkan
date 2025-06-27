@@ -82,11 +82,13 @@ inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
 }
 
 struct Pipeline : NonCopyable {
-  VkDevice device;
+  VkDevice device = VK_NULL_HANDLE;
   VkRenderPass renderPass = VK_NULL_HANDLE;
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
   VkPipeline graphicsPipeline = VK_NULL_HANDLE;
   operator VkPipeline() const { return this->graphicsPipeline; }
+
+  Pipeline() {}
   Pipeline(VkDevice _device, VkRenderPass _renderPass,
            VkPipelineLayout _pipelineLayout, VkPipeline _graphicsPipeline)
       : device(_device), renderPass(_renderPass),

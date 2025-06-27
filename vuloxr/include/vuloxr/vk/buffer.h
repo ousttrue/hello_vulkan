@@ -7,9 +7,10 @@ namespace vuloxr {
 namespace vk {
 
 struct Buffer : NonCopyable {
-  VkDevice device;
-  VkBuffer buffer;
+  VkDevice device = VK_NULL_HANDLE;
+  VkBuffer buffer = VK_NULL_HANDLE;
   operator VkBuffer() const { return this->buffer; }
+  Buffer() = default;
   Buffer(VkDevice _device, uint32_t bufferSize, VkBufferUsageFlags usage)
       : device(_device) {
     VkBufferCreateInfo info = {
@@ -19,7 +20,23 @@ struct Buffer : NonCopyable {
     };
     CheckVkResult(vkCreateBuffer(this->device, &info, nullptr, &this->buffer));
   }
-  ~Buffer() { vkDestroyBuffer(this->device, this->buffer, nullptr); }
+  ~Buffer() {
+    if (this->buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(this->device, this->buffer, nullptr);
+    }
+  }
+
+  Buffer(Buffer &&rhs) {
+    this->device = rhs.device;
+    this->buffer = rhs.buffer;
+    rhs.buffer = VK_NULL_HANDLE;
+  }
+  Buffer &operator=(Buffer &&rhs) {
+    this->device = rhs.device;
+    this->buffer = rhs.buffer;
+    rhs.buffer = VK_NULL_HANDLE;
+    return *this;
+  }
 };
 
 template <typename T> struct UniformBuffer : NonCopyable {
@@ -34,12 +51,22 @@ template <typename T> struct UniformBuffer : NonCopyable {
 };
 
 struct VertexBuffer : NonCopyable {
-  VkDevice device;
+  VkDevice device = VK_NULL_HANDLE;
   Buffer buffer;
   Memory memory;
   uint32_t drawCount = 0;
   std::vector<VkVertexInputBindingDescription> bindings;
   std::vector<VkVertexInputAttributeDescription> attributes;
+
+  VertexBuffer &operator=(VertexBuffer &&rhs) {
+    this->device = rhs.device;
+    this->buffer = std::move(rhs.buffer);
+    this->memory = std::move(rhs.memory);
+    this->drawCount = rhs.drawCount;
+    std::swap(this->bindings, rhs.bindings);
+    std::swap(this->attributes, rhs.attributes);
+    return *this;
+  }
 
   static VertexBuffer
   create(VkDevice device, uint32_t bufferSize, uint32_t drawCount,
@@ -70,6 +97,15 @@ struct IndexBuffer : NonCopyable {
   Memory memory;
   uint32_t drawCount;
   VkIndexType indexType = VK_INDEX_TYPE_UINT16;
+
+  IndexBuffer &operator=(IndexBuffer &&rhs) {
+    this->device = rhs.device;
+    this->buffer = std::move(rhs.buffer);
+    this->memory = std::move(rhs.memory);
+    this->drawCount = rhs.drawCount;
+    this->indexType = rhs.indexType;
+    return *this;
+  }
 
   static IndexBuffer create(VkDevice device, uint32_t bufferSize,
                             uint32_t drawCount, VkIndexType indexType) {
