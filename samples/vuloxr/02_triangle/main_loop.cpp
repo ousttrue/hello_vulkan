@@ -30,11 +30,11 @@ void main_loop(const std::function<bool()> &runLoop,
 
   auto pipelineLayout = vuloxr::vk::createEmptyPipelineLayout(device);
 
-  auto renderPass = vuloxr::vk::createColorRenderPass(
+  auto [renderPass, depthStencil] = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
 
   auto pipeline = vuloxr::vk::PipelineBuilder().create(
-      device, renderPass, pipelineLayout,
+      device, renderPass, depthStencil, pipelineLayout,
       {
           vs.pipelineShaderStageCreateInfo,
           fs.pipelineShaderStageCreateInfo,

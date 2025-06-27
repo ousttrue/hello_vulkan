@@ -18,7 +18,8 @@ inline VkPipelineLayout createEmptyPipelineLayout(VkDevice device) {
   return pipelineLayout;
 }
 
-inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
+inline std::tuple<VkRenderPass, VkPipelineDepthStencilStateCreateInfo>
+createColorRenderPass(VkDevice device, VkFormat format) {
   VkAttachmentDescription colorAttachments[] = {
       {
           .format = format,
@@ -76,9 +77,125 @@ inline VkRenderPass createColorRenderPass(VkDevice device, VkFormat format) {
   VkRenderPass renderPass;
   if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
       VK_SUCCESS) {
-    return VK_NULL_HANDLE;
+    return {VK_NULL_HANDLE, {}};
   }
-  return renderPass;
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE,
+      .depthWriteEnable = VK_FALSE,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+  };
+
+  return {renderPass, depthStencilStateCreateInfo};
+}
+
+inline std::tuple<VkRenderPass, VkPipelineDepthStencilStateCreateInfo>
+createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
+                           VkFormat depthFormat) {
+
+  VkAttachmentDescription attachments[] = {
+      {
+          .format = colorFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      },
+      {
+          .format = depthFormat,
+          .samples = VK_SAMPLE_COUNT_1_BIT,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+      },
+  };
+
+  VkAttachmentReference colorRef = {0,
+                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference depthRef = {
+      1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpasses[] = {
+      {
+          .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+          .colorAttachmentCount = 1,
+          .pColorAttachments = &colorRef,
+          .pDepthStencilAttachment = &depthRef,
+      },
+  };
+
+  VkSubpassDependency dependencies[] = {
+      {.srcSubpass = VK_SUBPASS_EXTERNAL,
+       .dstSubpass = 0,
+       .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+       .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+       .srcAccessMask = 0,
+       .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+  };
+
+  VkRenderPassCreateInfo renderPassInfo{
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = nullptr,
+      .flags = 0,
+      //
+      .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
+      .pAttachments = attachments,
+      //
+      .subpassCount = static_cast<uint32_t>(std::size(subpasses)),
+      .pSubpasses = subpasses,
+      //
+      .dependencyCount = 0, // static_cast<uint32_t>(std::size(dependencies)),
+      .pDependencies = nullptr, // dependencies,
+  };
+
+  VkRenderPass renderPass;
+  if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
+      VK_SUCCESS) {
+    return {VK_NULL_HANDLE, {}};
+  }
+
+  //   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
+  //                                  (uint64_t)ptr->pass,
+  //                                  "hello_xr render pass") != VK_SUCCESS) {
+  //     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
+  //   }
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+      .front =
+          {
+              // .failOp = VK_STENCIL_OP_KEEP,
+              // .passOp = VK_STENCIL_OP_KEEP,
+              // .depthFailOp = VK_STENCIL_OP_KEEP,
+              // .compareOp = VK_COMPARE_OP_ALWAYS,
+          },
+      .back =
+          {
+              // .failOp = VK_STENCIL_OP_KEEP,
+              // .passOp = VK_STENCIL_OP_KEEP,
+              // .depthFailOp = VK_STENCIL_OP_KEEP,
+              // .compareOp = VK_COMPARE_OP_ALWAYS,
+          },
+      .minDepthBounds = 0.0f,
+      .maxDepthBounds = 1.0f,
+  };
+
+  return {renderPass, depthStencilStateCreateInfo};
 }
 
 struct Pipeline : NonCopyable {
@@ -174,40 +291,10 @@ struct PipelineBuilder {
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
   }};
 
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfoEnabled{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-      .front =
-          {
-              .failOp = VK_STENCIL_OP_KEEP,
-              .passOp = VK_STENCIL_OP_KEEP,
-              .depthFailOp = VK_STENCIL_OP_KEEP,
-              .compareOp = VK_COMPARE_OP_ALWAYS,
-          },
-      .back =
-          {
-              .failOp = VK_STENCIL_OP_KEEP,
-              .passOp = VK_STENCIL_OP_KEEP,
-              .depthFailOp = VK_STENCIL_OP_KEEP,
-              .compareOp = VK_COMPARE_OP_ALWAYS,
-          },
-      .minDepthBounds = 0.0f,
-      .maxDepthBounds = 1.0f,
-  };
-  VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfoDisabled = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_FALSE,
-      .depthWriteEnable = VK_FALSE,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-  };
-
   Pipeline create(
-      VkDevice device, VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
+      VkDevice device, VkRenderPass renderPass,
+      const VkPipelineDepthStencilStateCreateInfo &depthStencilStateCreateInfo,
+      VkPipelineLayout pipelineLayout,
       const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
       std::span<const VkVertexInputBindingDescription>
           vertexInputBindingDescriptions = {},
@@ -288,7 +375,7 @@ struct PipelineBuilder {
             viewportState.viewportCount > 0 ? &viewportState : nullptr,
         .pRasterizationState = &this->rasterizer,
         .pMultisampleState = &this->multisampling,
-        .pDepthStencilState = &this->depthStencilStateCreateInfoDisabled,
+        .pDepthStencilState = &depthStencilStateCreateInfo,
         .pColorBlendState = &colorBlending,
         .pDynamicState = dynamicStates.size() ? &dynamicState : nullptr,
         .layout = pipelineLayout,
@@ -439,89 +526,6 @@ struct DescriptorSets : NonCopyable {
                            descriptorWrites, 0, nullptr);
   }
 };
-
-inline VkRenderPass createColorDepthRenderPass(VkDevice device,
-                                               VkFormat colorFormat,
-                                               VkFormat depthFormat) {
-
-  VkAttachmentDescription attachments[] = {
-      {
-          .format = colorFormat,
-          .samples = VK_SAMPLE_COUNT_1_BIT,
-          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-          .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      },
-      {
-          .format = depthFormat,
-          .samples = VK_SAMPLE_COUNT_1_BIT,
-          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-          .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-          .initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-          .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-      },
-  };
-
-  VkAttachmentReference colorRef = {0,
-                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
-  VkAttachmentReference depthRef = {
-      1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-  VkSubpassDescription subpasses[] = {
-      {
-          .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-          .colorAttachmentCount = 1,
-          .pColorAttachments = &colorRef,
-          .pDepthStencilAttachment = &depthRef,
-      },
-  };
-
-  VkSubpassDependency dependencies[] = {
-      {
-          .srcSubpass = VK_SUBPASS_EXTERNAL,
-          .dstSubpass = 0,
-          .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          .srcAccessMask = 0,
-          .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          //     .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-          //                      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-      },
-  };
-
-  VkRenderPassCreateInfo renderPassInfo{
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-      .pNext = nullptr,
-      .flags = 0,
-      //
-      .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
-      .pAttachments = attachments,
-      //
-      .subpassCount = static_cast<uint32_t>(std::size(subpasses)),
-      .pSubpasses = subpasses,
-      //
-      .dependencyCount = 0, // static_cast<uint32_t>(std::size(dependencies)),
-      .pDependencies = nullptr, // dependencies,
-  };
-
-  VkRenderPass renderPass;
-  if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
-      VK_SUCCESS) {
-    return VK_NULL_HANDLE;
-  }
-
-  //   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
-  //                                  (uint64_t)ptr->pass,
-  //                                  "hello_xr render pass") != VK_SUCCESS) {
-  //     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  //   }
-
-  return renderPass;
-}
 
 inline VkPipelineLayout
 createPipelineLayoutWithConstantSize(VkDevice device, uint32_t constantSize) {

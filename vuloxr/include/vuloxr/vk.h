@@ -706,9 +706,10 @@ struct CommandBufferPool : NonCopyable {
 };
 
 struct Fence : NonCopyable {
-  VkDevice device;
+  VkDevice device = VK_NULL_HANDLE;
   VkFence fence = VK_NULL_HANDLE;
   operator VkFence() const { return this->fence; }
+  Fence() {}
   Fence(VkDevice _device, bool signaled) : device(_device) {
     VkFenceCreateInfo fenceInfo{
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
@@ -724,6 +725,14 @@ struct Fence : NonCopyable {
       vkDestroyFence(this->device, this->fence, nullptr);
     }
   }
+
+  Fence &operator=(Fence &&rhs) {
+    this->device = rhs.device;
+    this->fence = rhs.fence;
+    rhs.fence = VK_NULL_HANDLE;
+    return *this;
+  }
+
   void reset() { vkResetFences(this->device, 1, &this->fence); }
 
   void wait() {

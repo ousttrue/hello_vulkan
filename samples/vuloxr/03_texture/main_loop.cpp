@@ -184,7 +184,7 @@ void main_loop(const std::function<bool()> &runLoop,
           },
       });
 
-  auto renderPass = vuloxr::vk::createColorRenderPass(
+  auto [renderPass, depthStencil] = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -207,7 +207,7 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   auto pipeline = builder.create(
-      device, renderPass, pipelineLayout,
+      device, renderPass, depthStencil, pipelineLayout,
       {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
       vertexBuffer.bindings, vertexBuffer.attributes, {}, {},
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});

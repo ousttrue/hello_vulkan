@@ -125,17 +125,6 @@ struct IndexBuffer : NonCopyable {
     this->drawCount = values.size();
   }
 
-  // static IndexBuffer create(VkDevice device, uint32_t bufferSize,
-  //                           uint32_t drawCount, VkIndexType indexType) {
-  //   return {
-  //       .device = device,
-  //       .buffer = Buffer(device, bufferSize,
-  //       VK_BUFFER_USAGE_INDEX_BUFFER_BIT), .memory = Memory(device),
-  //       .drawCount = drawCount,
-  //       .indexType = indexType,
-  //   };
-  // }
-
   void draw(VkCommandBuffer cmd, VkPipeline pipeline, VkBuffer vertices) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     VkDeviceSize offset = 0;

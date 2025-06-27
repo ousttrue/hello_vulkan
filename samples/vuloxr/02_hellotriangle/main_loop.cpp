@@ -66,7 +66,7 @@ void main_loop(const std::function<bool()> &runLoop,
       }};
   mesh.allocate(physicalDevice, device, std::span<const Vertex>(data));
 
-  auto renderPass = vuloxr::vk::createColorRenderPass(
+  auto [renderPass, depthStencil] = vuloxr::vk::createColorRenderPass(
       device, swapchain.createInfo.imageFormat);
 
   auto pipelineLayout = vuloxr::vk::createEmptyPipelineLayout(device);
@@ -79,7 +79,7 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::PipelineBuilder builder;
   builder.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   auto pipeline =
-      builder.create(device, renderPass, pipelineLayout,
+      builder.create(device, renderPass, depthStencil, pipelineLayout,
                      {
                          vs.pipelineShaderStageCreateInfo,
                          fs.pipelineShaderStageCreateInfo,
