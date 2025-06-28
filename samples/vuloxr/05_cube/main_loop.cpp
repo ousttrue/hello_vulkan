@@ -7,6 +7,7 @@
 #include <iostream>
 #include <string.h>
 #include <vuloxr/vk.h>
+#include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 
 #define GLM_FORCE_RADIANS
@@ -111,8 +112,6 @@ struct sample_info {
   VkPipelineCache pipelineCache;
   VkRenderPass render_pass;
   VkPipeline pipeline;
-
-  VkPipelineShaderStageCreateInfo shaderStages[2];
 
   VkDescriptorPool desc_pool;
   std::vector<VkDescriptorSet> desc_set;
@@ -519,39 +518,6 @@ static void init_descriptor_set(struct sample_info &info, bool use_texture) {
   vkUpdateDescriptorSets(info.device, use_texture ? 2 : 1, writes, 0, NULL);
 }
 
-static void init_shaders(struct sample_info &info,
-                         const VkShaderModuleCreateInfo *vertShaderCI,
-                         const VkShaderModuleCreateInfo *fragShaderCI) {
-  VkResult res;
-
-  if (vertShaderCI) {
-    info.shaderStages[0].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    info.shaderStages[0].pNext = NULL;
-    info.shaderStages[0].pSpecializationInfo = NULL;
-    info.shaderStages[0].flags = 0;
-    info.shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    info.shaderStages[0].pName = "main";
-    res = vkCreateShaderModule(info.device, vertShaderCI, NULL,
-                               &info.shaderStages[0].module);
-    assert(res == VK_SUCCESS);
-  }
-
-  if (fragShaderCI) {
-    std::vector<unsigned int> vtx_spv;
-    info.shaderStages[1].sType =
-        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    info.shaderStages[1].pNext = NULL;
-    info.shaderStages[1].pSpecializationInfo = NULL;
-    info.shaderStages[1].flags = 0;
-    info.shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    info.shaderStages[1].pName = "main";
-    res = vkCreateShaderModule(info.device, fragShaderCI, NULL,
-                               &info.shaderStages[1].module);
-    assert(res == VK_SUCCESS);
-  }
-}
-
 static void init_pipeline_cache(struct sample_info &info) {
   VkResult res;
 
@@ -566,8 +532,10 @@ static void init_pipeline_cache(struct sample_info &info) {
   assert(res == VK_SUCCESS);
 }
 
-static void init_pipeline(struct sample_info &info, VkBool32 include_depth,
-                          VkBool32 include_vi = true) {
+static void
+init_pipeline(struct sample_info &info, VkBool32 include_depth,
+              const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
+              VkBool32 include_vi = true) {
   VkResult res;
 
   VkDynamicState dynamicStateEnables[2]; // Viewport + Scissor
@@ -714,8 +682,10 @@ static void init_pipeline(struct sample_info &info, VkBool32 include_depth,
   pipeline.pDynamicState = &dynamicState;
   pipeline.pViewportState = &vp;
   pipeline.pDepthStencilState = &ds;
-  pipeline.pStages = info.shaderStages;
-  pipeline.stageCount = 2;
+
+  pipeline.stageCount = static_cast<uint32_t>(std::size(shaderStages));
+  pipeline.pStages = shaderStages.data();
+
   pipeline.renderPass = info.render_pass;
   pipeline.subpass = 0;
 
@@ -916,26 +886,16 @@ void main_loop(const std::function<bool()> &runLoop,
   view_info.image = info.depth.image;
   res = vkCreateImageView(info.device, &view_info, NULL, &info.depth.view);
   assert(res == VK_SUCCESS);
-  // }
 
   init_uniform_buffer(info);
   init_descriptor_and_pipeline_layouts(info, false);
   init_renderpass(info, depthPresent);
 
-  auto vs = vuloxr::vk::glsl_vs_to_spv(VS);
-  VkShaderModuleCreateInfo vert_info = {
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = static_cast<uint32_t>(vs.size() * 4),
-      .pCode = vs.data(),
-  };
+  auto vs = vuloxr::vk::ShaderModule::createVertexShader(
+      device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
+  auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+      device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
-  auto fs = vuloxr::vk::glsl_fs_to_spv(FS);
-  VkShaderModuleCreateInfo frag_info = {
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = static_cast<uint32_t>(fs.size() * 4),
-      .pCode = fs.data(),
-  };
-  init_shaders(info, &vert_info, &frag_info);
   init_framebuffers(info, depthPresent);
   init_vertex_buffer(info, g_vb_solid_face_colors_Data,
                      sizeof(g_vb_solid_face_colors_Data),
@@ -943,7 +903,11 @@ void main_loop(const std::function<bool()> &runLoop,
   init_descriptor_pool(info, false);
   init_descriptor_set(info, false);
   init_pipeline_cache(info);
-  init_pipeline(info, depthPresent);
+  init_pipeline(info, depthPresent,
+                {
+                    vs.pipelineShaderStageCreateInfo,
+                    fs.pipelineShaderStageCreateInfo,
+                });
 
   /* VULKAN_KEY_START */
 
@@ -1110,9 +1074,6 @@ void main_loop(const std::function<bool()> &runLoop,
     vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);
   }
   free(info.framebuffers);
-
-  vkDestroyShaderModule(info.device, info.shaderStages[0].module, NULL);
-  vkDestroyShaderModule(info.device, info.shaderStages[1].module, NULL);
 
   vkDestroyRenderPass(info.device, info.render_pass, NULL);
 
