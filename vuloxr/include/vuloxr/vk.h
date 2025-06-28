@@ -15,6 +15,13 @@ namespace vuloxr {
 
 namespace vk {
 
+inline std::tuple<int, int, int> extract_version(uint32_t version) {
+  auto major = version >> 22;
+  auto minor = (version >> 12) & 0x3ff;
+  auto patch = version & 0xfff;
+  return {major, minor, patch};
+}
+
 [[noreturn]] inline void ThrowVkResult(VkResult res,
                                        const char *originator = nullptr,
                                        const char *sourceLocation = nullptr) {

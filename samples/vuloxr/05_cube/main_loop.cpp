@@ -4,16 +4,23 @@
 #include "../main_loop.h"
 #include "cube_data.h"
 #include <assert.h>
-#include <chrono>
 #include <iostream>
 #include <string.h>
-#include <thread>
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/shaderc.h>
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+const char VS[] = {
+#embed "15-draw_cube.vert"
+    , 0, 0, 0, 0,
+};
+const char FS[] = {
+#embed "15-draw_cube.frag"
+    , 0, 0, 0, 0,
+};
 
 /* Number of descriptor sets needs to be the same at alloc,       */
 /* pipeline layout creation, and descriptor set layout creation   */
@@ -32,32 +39,6 @@
 /* Amount of time, in nanoseconds, to wait for a command buffer to complete */
 #define FENCE_TIMEOUT 100000000
 
-#define GET_INSTANCE_PROC_ADDR(inst, entrypoint)                               \
-  {                                                                            \
-    info.fp##entrypoint =                                                      \
-        (PFN_vk##entrypoint)vkGetInstanceProcAddr(inst, "vk" #entrypoint);     \
-    if (info.fp##entrypoint == NULL) {                                         \
-      std::cout << "vkGetDeviceProcAddr failed to find vk" #entrypoint;        \
-      exit(-1);                                                                \
-    }                                                                          \
-  }
-
-#define GET_DEVICE_PROC_ADDR(dev, entrypoint)                                  \
-  {                                                                            \
-    info.fp##entrypoint =                                                      \
-        (PFN_vk##entrypoint)vkGetDeviceProcAddr(dev, "vk" #entrypoint);        \
-    if (info.fp##entrypoint == NULL) {                                         \
-      std::cout << "vkGetDeviceProcAddr failed to find vk" #entrypoint;        \
-      exit(-1);                                                                \
-    }                                                                          \
-  }
-
-#if defined(NDEBUG) && defined(__GNUC__)
-#define U_ASSERT_ONLY __attribute__((unused))
-#else
-#define U_ASSERT_ONLY
-#endif
-
 /*
  * Keep each of our swap chain buffers' image, command buffer and view in one
  * spot
@@ -72,17 +53,7 @@ typedef struct _swap_chain_buffers {
  * by utility functions.
  */
 struct sample_info {
-  bool prepared;
-  bool use_staging_buffer;
-  bool save_images;
-
-  std::vector<const char *> instance_layer_names;
-  std::vector<const char *> instance_extension_names;
-  std::vector<VkExtensionProperties> instance_extension_properties;
   VkInstance inst;
-
-  std::vector<const char *> device_extension_names;
-  std::vector<VkExtensionProperties> device_extension_properties;
   std::vector<VkPhysicalDevice> gpus;
   VkDevice device;
   VkQueue graphics_queue;
@@ -158,168 +129,10 @@ struct sample_info {
   VkRect2D scissor;
 };
 
-bool memory_type_from_properties(struct sample_info &info, uint32_t typeBits,
-                                 VkFlags requirements_mask,
-                                 uint32_t *typeIndex);
-
-void extract_version(uint32_t version, uint32_t &major, uint32_t &minor,
-                     uint32_t &patch);
-bool GLSLtoSPV(const VkShaderStageFlagBits shader_type, const char *pshader,
-               std::vector<unsigned int> &spirv);
-void wait_seconds(int seconds);
-void print_UUID(uint8_t *pipelineCacheUUID);
-std::string get_file_directory();
-
-typedef unsigned long long timestamp_t;
-timestamp_t get_milliseconds();
-
-#ifdef __ANDROID__
-// Android specific definitions & helpers.
-#define LOGI(...)                                                              \
-  ((void)__android_log_print(ANDROID_LOG_INFO, "VK-SAMPLE", __VA_ARGS__))
-#define LOGE(...)                                                              \
-  ((void)__android_log_print(ANDROID_LOG_ERROR, "VK-SAMPLE", __VA_ARGS__))
-// Replace printf to logcat output.
-#define printf(...)                                                            \
-  __android_log_print(ANDROID_LOG_DEBUG, "VK-SAMPLE", __VA_ARGS__);
-
-bool Android_process_command();
-ANativeWindow *AndroidGetApplicationWindow();
-FILE *AndroidFopen(const char *fname, const char *mode);
-void AndroidGetWindowSize(int32_t *width, int32_t *height);
-bool AndroidLoadFile(const char *filePath, std::string *data);
-
-#ifndef VK_API_VERSION_1_0
-// On Android, NDK would include slightly older version of headers that is
-// missing the definition.
-#define VK_API_VERSION_1_0 VK_API_VERSION
-#endif
-
-#endif
-
-// Make sure functions start with init, execute, or destroy to assist codegen
-
-void init_queue_family_index(struct sample_info &info);
-void init_presentable_image(struct sample_info &info);
-void execute_queue_cmdbuf(struct sample_info &info,
-                          const VkCommandBuffer *cmd_bufs, VkFence &fence);
-void execute_present_image(struct sample_info &info);
-
-void init_uniform_buffer(struct sample_info &info);
-void init_descriptor_and_pipeline_layouts(
-    struct sample_info &info, bool use_texture,
-    VkDescriptorSetLayoutCreateFlags descSetLayoutCreateFlags = 0);
-void init_renderpass(
-    struct sample_info &info, bool include_depth, bool clear = true,
-    VkImageLayout finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED);
-void init_vertex_buffer(struct sample_info &info, const void *vertexData,
-                        uint32_t dataSize, uint32_t dataStride,
-                        bool use_texture);
-void init_framebuffers(struct sample_info &info, bool include_depth);
-void init_descriptor_pool(struct sample_info &info, bool use_texture);
-void init_descriptor_set(struct sample_info &info, bool use_texture);
-void init_shaders(struct sample_info &info,
-                  const VkShaderModuleCreateInfo *vertShaderCI,
-                  const VkShaderModuleCreateInfo *fragShaderCI);
-void init_pipeline_cache(struct sample_info &info);
-void init_pipeline(struct sample_info &info, VkBool32 include_depth,
-                   VkBool32 include_vi = true);
-void init_sampler(struct sample_info &info, VkSampler &sampler);
-void init_viewports(struct sample_info &info);
-void init_fence(struct sample_info &info, VkFence &fence);
-void init_present_info(struct sample_info &info, VkPresentInfoKHR &present);
-void init_clear_color_and_depth(struct sample_info &info,
-                                VkClearValue *clear_values);
-void init_render_pass_begin_info(struct sample_info &info,
-                                 VkRenderPassBeginInfo &rp_begin);
-
-VkResult init_debug_report_callback(struct sample_info &info,
-                                    PFN_vkDebugReportCallbackEXT dbgFunc);
-void destroy_debug_report_callback(struct sample_info &info);
-void destroy_pipeline(struct sample_info &info);
-void destroy_pipeline_cache(struct sample_info &info);
-void destroy_descriptor_pool(struct sample_info &info);
-void destroy_vertex_buffer(struct sample_info &info);
-
-static void destroy_framebuffers(struct sample_info &info) {
-  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
-    vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);
-  }
-  free(info.framebuffers);
-}
-
-static void destroy_shaders(struct sample_info &info) {
-  vkDestroyShaderModule(info.device, info.shaderStages[0].module, NULL);
-  vkDestroyShaderModule(info.device, info.shaderStages[1].module, NULL);
-}
-
-static void destroy_renderpass(struct sample_info &info) {
-  vkDestroyRenderPass(info.device, info.render_pass, NULL);
-}
-
-void destroy_descriptor_and_pipeline_layouts(struct sample_info &info);
-void destroy_uniform_buffer(struct sample_info &info);
-void destroy_depth_buffer(struct sample_info &info);
-
-// For timestamp code (get_milliseconds)
-// #ifdef WIN32
-// #include <Windows.h>
-// #else
-// #include <sys/time.h>
-// #endif
-
-using namespace std;
-
-void extract_version(uint32_t version, uint32_t &major, uint32_t &minor,
-                     uint32_t &patch) {
-  major = version >> 22;
-  minor = (version >> 12) & 0x3ff;
-  patch = version & 0xfff;
-}
-
-string get_file_name(const string &s) {
-  char sep = '/';
-
-#ifdef _WIN32
-  sep = '\\';
-#endif
-
-  // cout << "in get_file_name\n";
-  size_t i = s.rfind(sep, s.length());
-  if (i != string::npos) {
-    return (s.substr(i + 1, s.length() - i));
-  }
-
-  return ("");
-}
-
-// #if !defined(VK_USE_PLATFORM_METAL_EXT)
-// // iOS & macOS: get_base_data_dir() implemented externally to allow access to
-// Objective-C components std::string get_base_data_dir() { #ifdef __ANDROID__
-//     return "";
-// #else
-//     return std::string(VULKAN_SAMPLES_BASE_DIR) + "/API-Samples/data/";
-// #endif
-// }
-// #endif
-
-// std::string get_data_dir(std::string filename) {
-//     std::string basedir = get_base_data_dir();
-//     // get the base filename
-//     std::string fname = get_file_name(filename);
-//
-//     // get the prefix of the base filename, i.e. the part before the dash
-//     stringstream stream(fname);
-//     std::string prefix;
-//     getline(stream, prefix, '-');
-//     std::string ddir = basedir + prefix;
-//     return ddir;
-// }
-
-bool memory_type_from_properties(struct sample_info &info, uint32_t typeBits,
-                                 VkFlags requirements_mask,
-                                 uint32_t *typeIndex) {
+static bool memory_type_from_properties(struct sample_info &info,
+                                        uint32_t typeBits,
+                                        VkFlags requirements_mask,
+                                        uint32_t *typeIndex) {
   // Search memtypes to find first index with those properties
   for (uint32_t i = 0; i < info.memory_properties.memoryTypeCount; i++) {
     if ((typeBits & 1) == 1) {
@@ -336,513 +149,9 @@ bool memory_type_from_properties(struct sample_info &info, uint32_t typeBits,
   return false;
 }
 
-#if (defined(VK_USE_PLATFORM_IOS_MVK) || defined(VK_USE_PLATFORM_MACOS_MVK))
-
-bool GLSLtoSPV(const VkShaderStageFlagBits shader_type, const char *pshader,
-               std::vector<unsigned int> &spirv) {
-  MVKGLSLConversionShaderStage shaderStage;
-  switch (shader_type) {
-  case VK_SHADER_STAGE_VERTEX_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageVertex;
-    break;
-  case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageTessControl;
-    break;
-  case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageTessEval;
-    break;
-  case VK_SHADER_STAGE_GEOMETRY_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageGeometry;
-    break;
-  case VK_SHADER_STAGE_FRAGMENT_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageFragment;
-    break;
-  case VK_SHADER_STAGE_COMPUTE_BIT:
-    shaderStage = kMVKGLSLConversionShaderStageCompute;
-    break;
-  default:
-    shaderStage = kMVKGLSLConversionShaderStageAuto;
-    break;
-  }
-
-  mvk::GLSLToSPIRVConverter glslConverter;
-  glslConverter.setGLSL(pshader);
-  bool wasConverted = glslConverter.convert(shaderStage, false, false);
-  if (wasConverted) {
-    spirv = glslConverter.getSPIRV();
-  }
-  return wasConverted;
-}
-
-#endif // IOS or macOS
-
-void wait_seconds(int seconds) {
-  std::this_thread::sleep_for(std::chrono::seconds(seconds));
-  // #ifdef WIN32
-  //   Sleep(seconds * 1000);
-  // #elif defined(__ANDROID__)
-  //   sleep(seconds);
-  // #else
-  //   sleep(seconds);
-  // #endif
-}
-
-// timestamp_t get_milliseconds() {
-// #ifdef WIN32
-//   LARGE_INTEGER frequency;
-//   BOOL useQPC = QueryPerformanceFrequency(&frequency);
-//   if (useQPC) {
-//     LARGE_INTEGER now;
-//     QueryPerformanceCounter(&now);
-//     return (1000LL * now.QuadPart) / frequency.QuadPart;
-//   } else {
-//     return GetTickCount();
-//   }
-// #else
-//   struct timeval now;
-//   gettimeofday(&now, NULL);
-//   return (now.tv_usec / 1000) + (timestamp_t)now.tv_sec;
-// #endif
-// }
-
-void print_UUID(uint8_t *pipelineCacheUUID) {
-  for (int j = 0; j < VK_UUID_SIZE; ++j) {
-    std::cout << std::setw(2) << (uint32_t)pipelineCacheUUID[j];
-    if (j == 3 || j == 5 || j == 7 || j == 9) {
-      std::cout << '-';
-    }
-  }
-}
-static bool optionMatch(const char *option, char *optionLine) {
-  if (strncmp(option, optionLine, strlen(option)) == 0)
-    return true;
-  else
-    return false;
-}
-
-std::string get_file_directory() {
-#ifndef __ANDROID__
-  return "";
-#else
-  assert(Android_application != nullptr);
-  return Android_application->activity->externalDataPath;
-#endif
-}
-
-#ifdef __ANDROID__
-//
-// Android specific helper functions.
-//
-
-// Helpder class to forward the cout/cerr output to logcat derived from:
-// http://stackoverflow.com/questions/8870174/is-stdcout-usable-in-android-ndk
-class AndroidBuffer : public std::streambuf {
-public:
-  AndroidBuffer(android_LogPriority priority) {
-    priority_ = priority;
-    this->setp(buffer_, buffer_ + kBufferSize - 1);
-  }
-
-private:
-  static const int32_t kBufferSize = 128;
-  int32_t overflow(int32_t c) {
-    if (c == traits_type::eof()) {
-      *this->pptr() = traits_type::to_char_type(c);
-      this->sbumpc();
-    }
-    return this->sync() ? traits_type::eof() : traits_type::not_eof(c);
-  }
-
-  int32_t sync() {
-    int32_t rc = 0;
-    if (this->pbase() != this->pptr()) {
-      char writebuf[kBufferSize + 1];
-      memcpy(writebuf, this->pbase(), this->pptr() - this->pbase());
-      writebuf[this->pptr() - this->pbase()] = '\0';
-
-      rc = __android_log_write(priority_, "std", writebuf) > 0;
-      this->setp(buffer_, buffer_ + kBufferSize - 1);
-    }
-    return rc;
-  }
-
-  android_LogPriority priority_ = ANDROID_LOG_INFO;
-  char buffer_[kBufferSize];
-};
-
-void Android_handle_cmd(android_app *app, int32_t cmd) {
-  switch (cmd) {
-  case APP_CMD_INIT_WINDOW:
-    // The window is being shown, get it ready.
-    sample_main(0, nullptr);
-    LOGI("\n");
-    LOGI("=================================================");
-    LOGI("          The sample ran successfully!!");
-    LOGI("=================================================");
-    LOGI("\n");
-    break;
-  case APP_CMD_TERM_WINDOW:
-    // The window is being hidden or closed, clean it up.
-    break;
-  default:
-    LOGI("event not handled: %d", cmd);
-  }
-}
-
-bool Android_process_command() {
-  assert(Android_application != nullptr);
-  int events;
-  android_poll_source *source;
-  // Poll all pending events.
-  if (ALooper_pollAll(0, NULL, &events, (void **)&source) >= 0) {
-    // Process each polled events
-    if (source != NULL)
-      source->process(Android_application, source);
-  }
-  return Android_application->destroyRequested;
-}
-
-void android_main(struct android_app *app) {
-  // Set static variables.
-  Android_application = app;
-  // Set the callback to process system events
-  app->onAppCmd = Android_handle_cmd;
-
-  // Forward cout/cerr to logcat.
-  std::cout.rdbuf(new AndroidBuffer(ANDROID_LOG_INFO));
-  std::cerr.rdbuf(new AndroidBuffer(ANDROID_LOG_ERROR));
-
-  // Main loop
-  do {
-    Android_process_command();
-  } // Check if system requested to quit the application
-  while (app->destroyRequested == 0);
-
-  return;
-}
-
-ANativeWindow *AndroidGetApplicationWindow() {
-  assert(Android_application != nullptr);
-  return Android_application->window;
-}
-
-bool AndroidFillShaderMap(
-    const char *path,
-    std::unordered_map<std::string, std::string> *map_shaders) {
-  assert(Android_application != nullptr);
-  auto directory =
-      AAssetManager_openDir(Android_application->activity->assetManager, path);
-
-  const char *name = nullptr;
-  while (1) {
-    name = AAssetDir_getNextFileName(directory);
-    if (name == nullptr) {
-      break;
-    }
-
-    std::string file_name = name;
-    if (file_name.find(".frag") != std::string::npos ||
-        file_name.find(".vert") != std::string::npos) {
-      // Add path to the filename.
-      file_name = std::string(path) + "/" + file_name;
-      std::string shader;
-      if (!AndroidLoadFile(file_name.c_str(), &shader)) {
-        continue;
-      }
-      // Remove \n to make the lookup more robust.
-      while (1) {
-        auto ret_pos = shader.find("\n");
-        if (ret_pos == std::string::npos) {
-          break;
-        }
-        shader.erase(ret_pos, 1);
-      }
-
-      auto pos = file_name.find_last_of(".");
-      if (pos == std::string::npos) {
-        // Invalid file nmae.
-        continue;
-      }
-      // Generate filename for SPIRV binary.
-      std::string spirv_name = file_name.replace(pos, 1, "-") + ".spirv";
-      // Store the SPIRV file name with GLSL contents as a key.
-      // The file contents can be long, but as we are using unordered map, it
-      // wouldn't take much storage space. Put the file into the map.
-      (*map_shaders)[shader] = spirv_name;
-    }
-  };
-
-  AAssetDir_close(directory);
-  return true;
-}
-
-bool AndroidLoadFile(const char *filePath, std::string *data) {
-  assert(Android_application != nullptr);
-  AAsset *file = AAssetManager_open(Android_application->activity->assetManager,
-                                    filePath, AASSET_MODE_BUFFER);
-  size_t fileLength = AAsset_getLength(file);
-  LOGI("Loaded file:%s size:%zu", filePath, fileLength);
-  if (fileLength == 0) {
-    return false;
-  }
-  data->resize(fileLength);
-  AAsset_read(file, &(*data)[0], fileLength);
-  return true;
-}
-
-void AndroidGetWindowSize(int32_t *width, int32_t *height) {
-  // On Android, retrieve the window size from the native window.
-  assert(Android_application != nullptr);
-  *width = ANativeWindow_getWidth(Android_application->window);
-  *height = ANativeWindow_getHeight(Android_application->window);
-}
-
-// Android fopen stub described at
-// http://www.50ply.com/blog/2013/01/19/loading-compressed-android-assets-with-file-pointer/#comment-1850768990
-static int android_read(void *cookie, char *buf, int size) {
-  return AAsset_read((AAsset *)cookie, buf, size);
-}
-
-static int android_write(void *cookie, const char *buf, int size) {
-  return EACCES; // can't provide write access to the apk
-}
-
-static fpos_t android_seek(void *cookie, fpos_t offset, int whence) {
-  return AAsset_seek((AAsset *)cookie, offset, whence);
-}
-
-static int android_close(void *cookie) {
-  AAsset_close((AAsset *)cookie);
-  return 0;
-}
-
-FILE *AndroidFopen(const char *fname, const char *mode) {
-  if (mode[0] == 'w') {
-    return NULL;
-  }
-
-  assert(Android_application != nullptr);
-  AAsset *asset =
-      AAssetManager_open(Android_application->activity->assetManager, fname, 0);
-  if (!asset) {
-    return NULL;
-  }
-
-  return funopen(asset, android_read, android_write, android_seek,
-                 android_close);
-}
-#endif
-
-using namespace std;
-
-/*
- * TODO: function description here
- */
-
-void init_queue_family_index(struct sample_info &info) {
-  /* This routine simply finds a graphics queue for a later vkCreateDevice,
-   * without consideration for which queue family can present an image.
-   * Do not use this if your intent is to present later in your sample,
-   * instead use the init_connection, init_window, init_swapchain_extension,
-   * init_device call sequence to get a graphics and present compatible queue
-   * family
-   */
-
-  vkGetPhysicalDeviceQueueFamilyProperties(info.gpus[0],
-                                           &info.queue_family_count, NULL);
-  assert(info.queue_family_count >= 1);
-
-  info.queue_props.resize(info.queue_family_count);
-  vkGetPhysicalDeviceQueueFamilyProperties(
-      info.gpus[0], &info.queue_family_count, info.queue_props.data());
-  assert(info.queue_family_count >= 1);
-
-  bool U_ASSERT_ONLY found = false;
-  for (unsigned int i = 0; i < info.queue_family_count; i++) {
-    if (info.queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-      info.graphics_queue_family_index = i;
-      found = true;
-      break;
-    }
-  }
-  assert(found);
-}
-
-VkResult init_debug_report_callback(struct sample_info &info,
-                                    PFN_vkDebugReportCallbackEXT dbgFunc) {
+static void init_uniform_buffer(struct sample_info &info) {
   VkResult res;
-  VkDebugReportCallbackEXT debug_report_callback;
-
-  info.dbgCreateDebugReportCallback =
-      (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
-          info.inst, "vkCreateDebugReportCallbackEXT");
-  if (!info.dbgCreateDebugReportCallback) {
-    std::cout << "GetInstanceProcAddr: Unable to find "
-                 "vkCreateDebugReportCallbackEXT function."
-              << std::endl;
-    return VK_ERROR_INITIALIZATION_FAILED;
-  }
-  std::cout << "Got dbgCreateDebugReportCallback function\n";
-
-  info.dbgDestroyDebugReportCallback =
-      (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
-          info.inst, "vkDestroyDebugReportCallbackEXT");
-  if (!info.dbgDestroyDebugReportCallback) {
-    std::cout << "GetInstanceProcAddr: Unable to find "
-                 "vkDestroyDebugReportCallbackEXT function."
-              << std::endl;
-    return VK_ERROR_INITIALIZATION_FAILED;
-  }
-  std::cout << "Got dbgDestroyDebugReportCallback function\n";
-
-  VkDebugReportCallbackCreateInfoEXT create_info = {};
-  create_info.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
-  create_info.pNext = NULL;
-  create_info.flags =
-      VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-  create_info.pfnCallback = dbgFunc;
-  create_info.pUserData = NULL;
-
-  res = info.dbgCreateDebugReportCallback(info.inst, &create_info, NULL,
-                                          &debug_report_callback);
-  switch (res) {
-  case VK_SUCCESS:
-    std::cout << "Successfully created debug report callback object\n";
-    info.debug_report_callbacks.push_back(debug_report_callback);
-    break;
-  case VK_ERROR_OUT_OF_HOST_MEMORY:
-    std::cout << "dbgCreateDebugReportCallback: out of host memory pointer\n"
-              << std::endl;
-    return VK_ERROR_INITIALIZATION_FAILED;
-    break;
-  default:
-    std::cout << "dbgCreateDebugReportCallback: unknown failure\n" << std::endl;
-    return VK_ERROR_INITIALIZATION_FAILED;
-    break;
-  }
-  return res;
-}
-
-void destroy_debug_report_callback(struct sample_info &info) {
-  while (info.debug_report_callbacks.size() > 0) {
-    info.dbgDestroyDebugReportCallback(
-        info.inst, info.debug_report_callbacks.back(), NULL);
-    info.debug_report_callbacks.pop_back();
-  }
-}
-
-#if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-
-static void handle_ping(void *data, wl_shell_surface *shell_surface,
-                        uint32_t serial) {
-  wl_shell_surface_pong(shell_surface, serial);
-}
-
-static void handle_configure(void *data, wl_shell_surface *shell_surface,
-                             uint32_t edges, int32_t width, int32_t height) {}
-
-static void handle_popup_done(void *data, wl_shell_surface *shell_surface) {}
-
-static const wl_shell_surface_listener shell_surface_listener = {
-    handle_ping, handle_configure, handle_popup_done};
-
-static void registry_handle_global(void *data, wl_registry *registry,
-                                   uint32_t id, const char *interface,
-                                   uint32_t version) {
-  sample_info *info = (sample_info *)data;
-  // pickup wayland objects when they appear
-  if (strcmp(interface, "wl_compositor") == 0) {
-    info->compositor = (wl_compositor *)wl_registry_bind(
-        registry, id, &wl_compositor_interface, 1);
-  } else if (strcmp(interface, "wl_shell") == 0) {
-    info->shell =
-        (wl_shell *)wl_registry_bind(registry, id, &wl_shell_interface, 1);
-  }
-}
-
-static void registry_handle_global_remove(void *data, wl_registry *registry,
-                                          uint32_t name) {}
-
-static const wl_registry_listener registry_listener = {
-    registry_handle_global, registry_handle_global_remove};
-
-#endif
-
-/* Use this surface format if it's available.  This ensures that generated
- * images are similar on different devices and with different drivers.
- */
-#define PREFERRED_SURFACE_FORMAT VK_FORMAT_B8G8R8A8_UNORM
-
-void init_presentable_image(struct sample_info &info) {
-  /* DEPENDS on init_swap_chain() */
-
-  VkResult U_ASSERT_ONLY res;
-  VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo;
-  imageAcquiredSemaphoreCreateInfo.sType =
-      VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  imageAcquiredSemaphoreCreateInfo.pNext = NULL;
-  imageAcquiredSemaphoreCreateInfo.flags = 0;
-
-  res = vkCreateSemaphore(info.device, &imageAcquiredSemaphoreCreateInfo, NULL,
-                          &info.imageAcquiredSemaphore);
-  assert(!res);
-
-  // Get the index of the next available swapchain image:
-  res = vkAcquireNextImageKHR(info.device, info.swap_chain, UINT64_MAX,
-                              info.imageAcquiredSemaphore, VK_NULL_HANDLE,
-                              &info.current_buffer);
-  // TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
-  // return codes
-  assert(!res);
-}
-
-void execute_queue_cmdbuf(struct sample_info &info,
-                          const VkCommandBuffer *cmd_bufs, VkFence &fence) {
-  VkResult U_ASSERT_ONLY res;
-
-  VkPipelineStageFlags pipe_stage_flags =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  VkSubmitInfo submit_info[1] = {};
-  submit_info[0].pNext = NULL;
-  submit_info[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info[0].waitSemaphoreCount = 1;
-  submit_info[0].pWaitSemaphores = &info.imageAcquiredSemaphore;
-  submit_info[0].pWaitDstStageMask = NULL;
-  submit_info[0].commandBufferCount = 1;
-  submit_info[0].pCommandBuffers = cmd_bufs;
-  submit_info[0].pWaitDstStageMask = &pipe_stage_flags;
-  submit_info[0].signalSemaphoreCount = 0;
-  submit_info[0].pSignalSemaphores = NULL;
-
-  /* Queue the command buffer for execution */
-  res = vkQueueSubmit(info.graphics_queue, 1, submit_info, fence);
-  assert(!res);
-}
-
-void execute_present_image(struct sample_info &info) {
-  /* DEPENDS on init_presentable_image() and init_swap_chain()*/
-  /* Present the image in the window */
-
-  VkResult U_ASSERT_ONLY res;
-  VkPresentInfoKHR present;
-  present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present.pNext = NULL;
-  present.swapchainCount = 1;
-  present.pSwapchains = &info.swap_chain;
-  present.pImageIndices = &info.current_buffer;
-  present.pWaitSemaphores = NULL;
-  present.waitSemaphoreCount = 0;
-  present.pResults = NULL;
-
-  res = vkQueuePresentKHR(info.present_queue, &present);
-  // TODO: Deal with the VK_SUBOPTIMAL_WSI and VK_ERROR_OUT_OF_DATE_WSI
-  // return codes
-  assert(!res);
-}
-
-void init_uniform_buffer(struct sample_info &info) {
-  VkResult U_ASSERT_ONLY res;
-  bool U_ASSERT_ONLY pass;
+  bool pass;
   float fov = glm::radians(45.0f);
   if (info.width > info.height) {
     fov *= static_cast<float>(info.height) / static_cast<float>(info.width);
@@ -912,9 +221,9 @@ void init_uniform_buffer(struct sample_info &info) {
   info.uniform_data.buffer_info.range = sizeof(info.MVP);
 }
 
-void init_descriptor_and_pipeline_layouts(
+static void init_descriptor_and_pipeline_layouts(
     struct sample_info &info, bool use_texture,
-    VkDescriptorSetLayoutCreateFlags descSetLayoutCreateFlags) {
+    VkDescriptorSetLayoutCreateFlags descSetLayoutCreateFlags = 0) {
   VkDescriptorSetLayoutBinding layout_bindings[2];
   layout_bindings[0].binding = 0;
   layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -940,7 +249,7 @@ void init_descriptor_and_pipeline_layouts(
   descriptor_layout.bindingCount = use_texture ? 2 : 1;
   descriptor_layout.pBindings = layout_bindings;
 
-  VkResult U_ASSERT_ONLY res;
+  VkResult res;
 
   info.desc_layout.resize(NUM_DESCRIPTOR_SETS);
   res = vkCreateDescriptorSetLayout(info.device, &descriptor_layout, NULL,
@@ -962,13 +271,15 @@ void init_descriptor_and_pipeline_layouts(
   assert(res == VK_SUCCESS);
 }
 
-void init_renderpass(struct sample_info &info, bool include_depth, bool clear,
-                     VkImageLayout finalLayout, VkImageLayout initialLayout) {
+static void
+init_renderpass(struct sample_info &info, bool include_depth, bool clear = true,
+                VkImageLayout finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED) {
   /* DEPENDS on init_swap_chain() and init_depth_buffer() */
 
   assert(clear || (initialLayout != VK_IMAGE_LAYOUT_UNDEFINED));
 
-  VkResult U_ASSERT_ONLY res;
+  VkResult res;
   /* Need attachments for render target and depth buffer */
   VkAttachmentDescription attachments[2];
   attachments[0].format = info.format;
@@ -1043,42 +354,11 @@ void init_renderpass(struct sample_info &info, bool include_depth, bool clear,
   assert(res == VK_SUCCESS);
 }
 
-void init_framebuffers(struct sample_info &info, bool include_depth) {
-  /* DEPENDS on init_depth_buffer(), init_renderpass() and
-   * init_swapchain_extension() */
-
-  VkResult U_ASSERT_ONLY res;
-  VkImageView attachments[2];
-  attachments[1] = info.depth.view;
-
-  VkFramebufferCreateInfo fb_info = {};
-  fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  fb_info.pNext = NULL;
-  fb_info.renderPass = info.render_pass;
-  fb_info.attachmentCount = include_depth ? 2 : 1;
-  fb_info.pAttachments = attachments;
-  fb_info.width = info.width;
-  fb_info.height = info.height;
-  fb_info.layers = 1;
-
-  uint32_t i;
-
-  info.framebuffers =
-      (VkFramebuffer *)malloc(info.swapchainImageCount * sizeof(VkFramebuffer));
-
-  for (i = 0; i < info.swapchainImageCount; i++) {
-    attachments[0] = info.buffers[i].view;
-    res =
-        vkCreateFramebuffer(info.device, &fb_info, NULL, &info.framebuffers[i]);
-    assert(res == VK_SUCCESS);
-  }
-}
-
-void init_vertex_buffer(struct sample_info &info, const void *vertexData,
-                        uint32_t dataSize, uint32_t dataStride,
-                        bool use_texture) {
-  VkResult U_ASSERT_ONLY res;
-  bool U_ASSERT_ONLY pass;
+static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
+                               uint32_t dataSize, uint32_t dataStride,
+                               bool use_texture) {
+  VkResult res;
+  bool pass;
 
   VkBufferCreateInfo buf_info = {};
   buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1141,11 +421,42 @@ void init_vertex_buffer(struct sample_info &info, const void *vertexData,
   info.vi_attribs[1].offset = 16;
 }
 
-void init_descriptor_pool(struct sample_info &info, bool use_texture) {
+static void init_framebuffers(struct sample_info &info, bool include_depth) {
+  /* DEPENDS on init_depth_buffer(), init_renderpass() and
+   * init_swapchain_extension() */
+
+  VkResult res;
+  VkImageView attachments[2];
+  attachments[1] = info.depth.view;
+
+  VkFramebufferCreateInfo fb_info = {};
+  fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  fb_info.pNext = NULL;
+  fb_info.renderPass = info.render_pass;
+  fb_info.attachmentCount = include_depth ? 2 : 1;
+  fb_info.pAttachments = attachments;
+  fb_info.width = info.width;
+  fb_info.height = info.height;
+  fb_info.layers = 1;
+
+  uint32_t i;
+
+  info.framebuffers =
+      (VkFramebuffer *)malloc(info.swapchainImageCount * sizeof(VkFramebuffer));
+
+  for (i = 0; i < info.swapchainImageCount; i++) {
+    attachments[0] = info.buffers[i].view;
+    res =
+        vkCreateFramebuffer(info.device, &fb_info, NULL, &info.framebuffers[i]);
+    assert(res == VK_SUCCESS);
+  }
+}
+
+static void init_descriptor_pool(struct sample_info &info, bool use_texture) {
   /* DEPENDS on init_uniform_buffer() and
    * init_descriptor_and_pipeline_layouts() */
 
-  VkResult U_ASSERT_ONLY res;
+  VkResult res;
   VkDescriptorPoolSize type_count[2];
   type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   type_count[0].descriptorCount = 1;
@@ -1166,10 +477,10 @@ void init_descriptor_pool(struct sample_info &info, bool use_texture) {
   assert(res == VK_SUCCESS);
 }
 
-void init_descriptor_set(struct sample_info &info, bool use_texture) {
+static void init_descriptor_set(struct sample_info &info, bool use_texture) {
   /* DEPENDS on init_descriptor_pool() */
 
-  VkResult U_ASSERT_ONLY res;
+  VkResult res;
 
   VkDescriptorSetAllocateInfo alloc_info[1];
   alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1208,10 +519,10 @@ void init_descriptor_set(struct sample_info &info, bool use_texture) {
   vkUpdateDescriptorSets(info.device, use_texture ? 2 : 1, writes, 0, NULL);
 }
 
-void init_shaders(struct sample_info &info,
-                  const VkShaderModuleCreateInfo *vertShaderCI,
-                  const VkShaderModuleCreateInfo *fragShaderCI) {
-  VkResult U_ASSERT_ONLY res;
+static void init_shaders(struct sample_info &info,
+                         const VkShaderModuleCreateInfo *vertShaderCI,
+                         const VkShaderModuleCreateInfo *fragShaderCI) {
+  VkResult res;
 
   if (vertShaderCI) {
     info.shaderStages[0].sType =
@@ -1241,8 +552,8 @@ void init_shaders(struct sample_info &info,
   }
 }
 
-void init_pipeline_cache(struct sample_info &info) {
-  VkResult U_ASSERT_ONLY res;
+static void init_pipeline_cache(struct sample_info &info) {
+  VkResult res;
 
   VkPipelineCacheCreateInfo pipelineCache;
   pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -1255,9 +566,9 @@ void init_pipeline_cache(struct sample_info &info) {
   assert(res == VK_SUCCESS);
 }
 
-void init_pipeline(struct sample_info &info, VkBool32 include_depth,
-                   VkBool32 include_vi) {
-  VkResult U_ASSERT_ONLY res;
+static void init_pipeline(struct sample_info &info, VkBool32 include_depth,
+                          VkBool32 include_vi = true) {
+  VkResult res;
 
   VkDynamicState dynamicStateEnables[2]; // Viewport + Scissor
   VkPipelineDynamicStateCreateInfo dynamicState = {};
@@ -1411,108 +722,6 @@ void init_pipeline(struct sample_info &info, VkBool32 include_depth,
   res = vkCreateGraphicsPipelines(info.device, info.pipelineCache, 1, &pipeline,
                                   NULL, &info.pipeline);
   assert(res == VK_SUCCESS);
-}
-
-void init_sampler(struct sample_info &info, VkSampler &sampler) {
-  VkResult U_ASSERT_ONLY res;
-
-  VkSamplerCreateInfo samplerCreateInfo = {};
-  samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-  samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
-  samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
-  samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-  samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-  samplerCreateInfo.mipLodBias = 0.0;
-  samplerCreateInfo.anisotropyEnable = VK_FALSE;
-  samplerCreateInfo.maxAnisotropy = 1;
-  samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-  samplerCreateInfo.minLod = 0.0;
-  samplerCreateInfo.maxLod = 0.0;
-  samplerCreateInfo.compareEnable = VK_FALSE;
-  samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-
-  /* create sampler */
-  res = vkCreateSampler(info.device, &samplerCreateInfo, NULL, &sampler);
-  assert(res == VK_SUCCESS);
-}
-
-void init_fence(struct sample_info &info, VkFence &fence) {
-  VkFenceCreateInfo fenceInfo;
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-  fenceInfo.pNext = NULL;
-  fenceInfo.flags = 0;
-  vkCreateFence(info.device, &fenceInfo, NULL, &fence);
-}
-
-void init_present_info(struct sample_info &info, VkPresentInfoKHR &present) {
-  present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present.pNext = NULL;
-  present.swapchainCount = 1;
-  present.pSwapchains = &info.swap_chain;
-  present.pImageIndices = &info.current_buffer;
-  present.pWaitSemaphores = NULL;
-  present.waitSemaphoreCount = 0;
-  present.pResults = NULL;
-}
-
-void init_clear_color_and_depth(struct sample_info &info,
-                                VkClearValue *clear_values) {
-  clear_values[0].color.float32[0] = 0.2f;
-  clear_values[0].color.float32[1] = 0.2f;
-  clear_values[0].color.float32[2] = 0.2f;
-  clear_values[0].color.float32[3] = 0.2f;
-  clear_values[1].depthStencil.depth = 1.0f;
-  clear_values[1].depthStencil.stencil = 0;
-}
-
-void init_render_pass_begin_info(struct sample_info &info,
-                                 VkRenderPassBeginInfo &rp_begin) {
-  rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  rp_begin.pNext = NULL;
-  rp_begin.renderPass = info.render_pass;
-  rp_begin.framebuffer = info.framebuffers[info.current_buffer];
-  rp_begin.renderArea.offset.x = 0;
-  rp_begin.renderArea.offset.y = 0;
-  rp_begin.renderArea.extent.width = info.width;
-  rp_begin.renderArea.extent.height = info.height;
-  rp_begin.clearValueCount = 0;
-  rp_begin.pClearValues = nullptr;
-}
-
-void destroy_pipeline(struct sample_info &info) {
-  vkDestroyPipeline(info.device, info.pipeline, NULL);
-}
-
-void destroy_pipeline_cache(struct sample_info &info) {
-  vkDestroyPipelineCache(info.device, info.pipelineCache, NULL);
-}
-
-void destroy_uniform_buffer(struct sample_info &info) {
-  vkDestroyBuffer(info.device, info.uniform_data.buf, NULL);
-  vkFreeMemory(info.device, info.uniform_data.mem, NULL);
-}
-
-void destroy_descriptor_and_pipeline_layouts(struct sample_info &info) {
-  for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++)
-    vkDestroyDescriptorSetLayout(info.device, info.desc_layout[i], NULL);
-  vkDestroyPipelineLayout(info.device, info.pipeline_layout, NULL);
-}
-
-void destroy_descriptor_pool(struct sample_info &info) {
-  vkDestroyDescriptorPool(info.device, info.desc_pool, NULL);
-}
-
-void destroy_depth_buffer(struct sample_info &info) {
-  vkDestroyImageView(info.device, info.depth.view, NULL);
-  vkDestroyImage(info.device, info.depth.image, NULL);
-  vkFreeMemory(info.device, info.depth.mem, NULL);
-}
-
-void destroy_vertex_buffer(struct sample_info &info) {
-  vkDestroyBuffer(info.device, info.vertex_buffer.buf, NULL);
-  vkFreeMemory(info.device, info.vertex_buffer.mem, NULL);
 }
 
 static VkFormat depthFormat() {
@@ -1713,10 +922,6 @@ void main_loop(const std::function<bool()> &runLoop,
   init_descriptor_and_pipeline_layouts(info, false);
   init_renderpass(info, depthPresent);
 
-  const char VS[] = {
-#embed "15-draw_cube.vert"
-      , 0, 0, 0, 0,
-  };
   auto vs = vuloxr::vk::glsl_vs_to_spv(VS);
   VkShaderModuleCreateInfo vert_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1724,10 +929,6 @@ void main_loop(const std::function<bool()> &runLoop,
       .pCode = vs.data(),
   };
 
-  const char FS[] = {
-#embed "15-draw_cube.frag"
-      , 0, 0, 0, 0,
-  };
   auto fs = vuloxr::vk::glsl_fs_to_spv(FS);
   VkShaderModuleCreateInfo frag_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1895,16 +1096,36 @@ void main_loop(const std::function<bool()> &runLoop,
   }
 
   vkDestroySemaphore(info.device, imageAcquiredSemaphore, NULL);
-  destroy_pipeline(info);
-  destroy_pipeline_cache(info);
-  destroy_descriptor_pool(info);
-  destroy_vertex_buffer(info);
-  destroy_framebuffers(info);
-  destroy_shaders(info);
-  destroy_renderpass(info);
-  destroy_descriptor_and_pipeline_layouts(info);
-  destroy_uniform_buffer(info);
-  destroy_depth_buffer(info);
+
+  vkDestroyPipeline(info.device, info.pipeline, NULL);
+
+  vkDestroyPipelineCache(info.device, info.pipelineCache, NULL);
+
+  vkDestroyDescriptorPool(info.device, info.desc_pool, NULL);
+
+  vkDestroyBuffer(info.device, info.vertex_buffer.buf, NULL);
+  vkFreeMemory(info.device, info.vertex_buffer.mem, NULL);
+
+  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
+    vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);
+  }
+  free(info.framebuffers);
+
+  vkDestroyShaderModule(info.device, info.shaderStages[0].module, NULL);
+  vkDestroyShaderModule(info.device, info.shaderStages[1].module, NULL);
+
+  vkDestroyRenderPass(info.device, info.render_pass, NULL);
+
+  for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++)
+    vkDestroyDescriptorSetLayout(info.device, info.desc_layout[i], NULL);
+  vkDestroyPipelineLayout(info.device, info.pipeline_layout, NULL);
+
+  vkDestroyBuffer(info.device, info.uniform_data.buf, NULL);
+  vkFreeMemory(info.device, info.uniform_data.mem, NULL);
+
+  vkDestroyImageView(info.device, info.depth.view, NULL);
+  vkDestroyImage(info.device, info.depth.image, NULL);
+  vkFreeMemory(info.device, info.depth.mem, NULL);
 
   for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
     vkDestroyImageView(info.device, info.buffers[i].view, NULL);
