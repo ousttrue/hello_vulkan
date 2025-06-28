@@ -44,9 +44,16 @@ template <typename T> struct UniformBuffer : NonCopyable {
   Buffer buffer;
   Memory memory;
   T value;
+  VkDescriptorBufferInfo info{
+      // .buffer = ubo->buffer,
+      .offset = 0,
+      .range = sizeof(T),
+  };
   UniformBuffer(VkDevice device)
       : buffer(device, sizeof(T), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT),
-        memory(device) {}
+        memory(device) {
+    this->info.buffer = this->buffer;
+  }
   void mapWrite() const { this->memory.mapWrite(&this->value, sizeof(T)); }
 };
 

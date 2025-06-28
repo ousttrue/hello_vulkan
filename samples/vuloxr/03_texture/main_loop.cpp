@@ -151,8 +151,8 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::IndexBuffer indexBuffer(
       physicalDevice, device, std::span<const uint16_t>({0, 1, 2, 2, 3, 0}));
 
-  vuloxr::vk::DescriptorSets descriptorSets(
-      device,
+  vuloxr::vk::DescriptorSet descriptorSets(
+      device, swapchain.images.size(),
       {
           {
               .binding = 0,
@@ -169,18 +169,6 @@ void main_loop(const std::function<bool()> &runLoop,
               // descriptor in the fragment shader
               .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
               .pImmutableSamplers = nullptr,
-          },
-      });
-  descriptorSets.allocate(
-      swapchain.images.size(),
-      {
-          VkDescriptorPoolSize{
-              .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-              .descriptorCount = static_cast<uint32_t>(swapchain.images.size()),
-          },
-          VkDescriptorPoolSize{
-              .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-              .descriptorCount = static_cast<uint32_t>(swapchain.images.size()),
           },
       });
 
@@ -231,7 +219,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
-      auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
+      // auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
       auto cmd = pool.commandBuffers[acquired.imageIndex];
 
       auto backbuffer = backbuffers[acquired.imageIndex];
@@ -242,13 +230,18 @@ void main_loop(const std::function<bool()> &runLoop,
         ubo->memory = physicalDevice.allocForMap(device, ubo->buffer);
         uniformBuffers[acquired.imageIndex] = ubo;
 
-        descriptorSets.update(acquired.imageIndex,
-                              VkDescriptorBufferInfo{
-                                  .buffer = ubo->buffer,
-                                  .offset = 0,
-                                  .range = sizeof(UniformBufferObject),
-                              },
-                              texture.descriptorInfo);
+        auto descriptorSet = descriptorSets.update(
+            acquired.imageIndex,
+            std::span<const vuloxr::vk::DescriptorUpdateInfo>({
+                {
+                    .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    .pBufferInfo = &ubo->info,
+                },
+                {
+                    .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &texture.descriptorInfo,
+                },
+            }));
 
         backbuffer =
             std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(

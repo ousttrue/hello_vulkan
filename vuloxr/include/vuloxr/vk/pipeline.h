@@ -451,14 +451,25 @@ struct ShaderModule : NonCopyable {
   }
 };
 
-struct DescriptorSets : NonCopyable {
+struct DescriptorUpdateInfo {
+  VkDescriptorType type;
+  union {
+    const VkDescriptorImageInfo *pImageInfo;
+    const VkDescriptorBufferInfo *pBufferInfo;
+    const VkBufferView *pTexelBufferView;
+  };
+};
+
+struct DescriptorSet : NonCopyable {
   VkDevice device;
   VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-  std::vector<VkDescriptorSet> descriptorSets;
 
-  DescriptorSets(VkDevice _device,
-                 const std::vector<VkDescriptorSetLayoutBinding> &bindings)
+  std::vector<VkDescriptorSet> descriptorSets;
+  std::vector<VkWriteDescriptorSet> writes;
+
+  DescriptorSet(VkDevice _device, uint32_t allocateCount,
+                const std::vector<VkDescriptorSetLayoutBinding> &bindings)
       : device(_device) {
     // assert(bindings.size());
     VkDescriptorSetLayoutCreateInfo layoutInfo{
@@ -468,62 +479,73 @@ struct DescriptorSets : NonCopyable {
     };
     CheckVkResult(vkCreateDescriptorSetLayout(
         this->device, &layoutInfo, nullptr, &this->descriptorSetLayout));
-  }
 
-  ~DescriptorSets() {
-    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
-    vkDestroyDescriptorSetLayout(this->device, this->descriptorSetLayout,
-                                 nullptr);
-  }
-
-  void allocate(uint32_t count,
-                const std::vector<VkDescriptorPoolSize> &poolSizes) {
+    std::vector<VkDescriptorPoolSize> poolSizes;
+    for (auto binding : bindings) {
+      poolSizes.push_back({
+          .type = binding.descriptorType,
+          .descriptorCount = 1,
+      });
+    }
     VkDescriptorPoolCreateInfo poolInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = count,
+        .maxSets = allocateCount,
         .poolSizeCount = static_cast<uint32_t>(std::size(poolSizes)),
         .pPoolSizes = poolSizes.data(),
     };
     CheckVkResult(vkCreateDescriptorPool(this->device, &poolInfo, nullptr,
                                          &this->descriptorPool));
 
-    std::vector<VkDescriptorSetLayout> layouts(count, descriptorSetLayout);
     VkDescriptorSetAllocateInfo descriptorAllocInfo{
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = this->descriptorPool,
-        .descriptorSetCount = count,
-        .pSetLayouts = layouts.data(),
+        .descriptorSetCount = 1,
+        .pSetLayouts = &this->descriptorSetLayout,
     };
-    this->descriptorSets.resize(count);
-    CheckVkResult(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
-                                           this->descriptorSets.data()));
+
+    this->descriptorSets.resize(allocateCount);
+    for (int i = 0; i < allocateCount; ++i) {
+      CheckVkResult(vkAllocateDescriptorSets(this->device, &descriptorAllocInfo,
+                                             &this->descriptorSets[i]));
+    }
+
+    for (uint32_t i = 0; i < bindings.size(); ++i) {
+      this->writes.push_back(VkWriteDescriptorSet{
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstBinding = i,
+          .dstArrayElement = 0,
+          .descriptorCount = 1,
+          .descriptorType = bindings[i].descriptorType,
+      });
+    }
   }
 
-  void update(uint32_t index, VkDescriptorBufferInfo bufferInfo,
-              VkDescriptorImageInfo imageInfo) {
-    VkWriteDescriptorSet descriptorWrites[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = this->descriptorSets[index],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pBufferInfo = &bufferInfo,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = this->descriptorSets[index],
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &imageInfo,
-        },
-    };
-    vkUpdateDescriptorSets(device,
-                           static_cast<uint32_t>(std::size(descriptorWrites)),
-                           descriptorWrites, 0, nullptr);
+  ~DescriptorSet() {
+    vkDestroyDescriptorPool(this->device, this->descriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(this->device, this->descriptorSetLayout,
+                                 nullptr);
+  }
+
+  VkDescriptorSet update(uint32_t index,
+                         std::span<const DescriptorUpdateInfo> infos) {
+    for (uint32_t i = 0; i < infos.size(); ++i) {
+      this->writes[i].dstSet = this->descriptorSets[index];
+      assert(infos[i].type == this->writes[i].descriptorType);
+      switch (infos[i].type) {
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+        this->writes[i].pBufferInfo = infos[i].pBufferInfo;
+        break;
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+        this->writes[i].pImageInfo = infos[i].pImageInfo;
+        break;
+      default:
+        throw std::runtime_error("not impl");
+      }
+    }
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(std::size(writes)),
+                           writes.data(), 0, nullptr);
+    return this->descriptorSets[index];
   }
 };
 
