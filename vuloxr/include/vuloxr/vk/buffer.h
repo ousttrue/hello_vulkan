@@ -142,7 +142,7 @@ struct IndexBuffer : NonCopyable {
 };
 
 struct DepthImage : NonCopyable {
-  VkDevice device;
+  VkDevice device = VK_NULL_HANDLE;
   VkImage image = VK_NULL_HANDLE;
   // Create a D32 depthbuffer
   VkImageCreateInfo imageInfo{
@@ -170,6 +170,7 @@ struct DepthImage : NonCopyable {
   // VkDevice m_vkDevice{VK_NULL_HANDLE};
   // VkImage depthImage{VK_NULL_HANDLE};
 
+  DepthImage() {}
   DepthImage(VkDevice _device, VkExtent2D size, VkFormat depthFormat,
              VkSampleCountFlagBits sampleCount)
       // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
