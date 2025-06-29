@@ -103,44 +103,66 @@ createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
           .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
           .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
           .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-          .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          // .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+          // .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+          //                 VkImageLayout initialLayout =
+          //                 VK_IMAGE_LAYOUT_UNDEFINED for clear VkImageLayout
+          //                 finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
       },
       {
           .format = depthFormat,
           .samples = VK_SAMPLE_COUNT_1_BIT,
-          .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-          .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+          .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
           .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+          .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
           .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
           .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
       },
   };
 
-  VkAttachmentReference colorRef = {0,
-                                    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+  VkAttachmentReference colorRef = {
+      0,
+      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
   VkAttachmentReference depthRef = {
-      1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+      1,
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
+
   VkSubpassDescription subpasses[] = {
       {
+          .flags = 0,
           .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+          .inputAttachmentCount = 0,
+          .pInputAttachments = NULL,
           .colorAttachmentCount = 1,
           .pColorAttachments = &colorRef,
+          .pResolveAttachments = NULL,
           .pDepthStencilAttachment = &depthRef,
+          .preserveAttachmentCount = 0,
+          .pPreserveAttachments = NULL,
       },
   };
 
   VkSubpassDependency dependencies[] = {
-      {.srcSubpass = VK_SUBPASS_EXTERNAL,
-       .dstSubpass = 0,
-       .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-       .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                       VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-       .srcAccessMask = 0,
-       .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
+      {
+          .srcSubpass = VK_SUBPASS_EXTERNAL,
+          .dstSubpass = 0,
+          .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+          // | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+          ,
+          .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+          // | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+          ,
+          .srcAccessMask = 0,
+          .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+          // | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+          ,
+          .dependencyFlags = 0,
+      },
   };
 
   VkRenderPassCreateInfo renderPassInfo{
@@ -154,8 +176,8 @@ createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
       .subpassCount = static_cast<uint32_t>(std::size(subpasses)),
       .pSubpasses = subpasses,
       //
-      .dependencyCount = 0, // static_cast<uint32_t>(std::size(dependencies)),
-      .pDependencies = nullptr, // dependencies,
+      .dependencyCount = static_cast<uint32_t>(std::size(dependencies)),
+      .pDependencies = dependencies,
   };
 
   VkRenderPass renderPass;
@@ -194,6 +216,27 @@ createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
       .minDepthBounds = 0.0f,
       .maxDepthBounds = 1.0f,
   };
+
+  // VkPipelineDepthStencilStateCreateInfo ds;
+  // ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  // ds.pNext = NULL;
+  // ds.flags = 0;
+  // ds.depthTestEnable = include_depth;
+  // ds.depthWriteEnable = include_depth;
+  // ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  // ds.depthBoundsTestEnable = VK_FALSE;
+  // ds.stencilTestEnable = VK_FALSE;
+  // ds.back.failOp = VK_STENCIL_OP_KEEP;
+  // ds.back.passOp = VK_STENCIL_OP_KEEP;
+  // ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
+  // ds.back.compareMask = 0;
+  // ds.back.reference = 0;
+  // ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
+  // ds.back.writeMask = 0;
+  // ds.minDepthBounds = 0;
+  // ds.maxDepthBounds = 0;
+  // ds.stencilTestEnable = VK_FALSE;
+  // ds.front = ds.back;
 
   return {renderPass, depthStencilStateCreateInfo};
 }

@@ -101,7 +101,6 @@ struct sample_info {
   // VkCommandBuffer cmd; // Buffer for initialization commands
   VkPipelineLayout pipeline_layout;
   VkPipelineCache pipelineCache;
-  VkRenderPass render_pass;
   VkPipeline pipeline;
 
   PFN_vkCreateDebugReportCallbackEXT dbgCreateDebugReportCallback;
@@ -208,89 +207,6 @@ static void init_uniform_buffer(struct sample_info &info) {
   info.uniform_data.buffer_info.range = sizeof(info.MVP);
 }
 
-static void
-init_renderpass(struct sample_info &info, bool include_depth, bool clear = true,
-                VkImageLayout finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-                VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED) {
-  /* DEPENDS on init_swap_chain() and init_depth_buffer() */
-
-  assert(clear || (initialLayout != VK_IMAGE_LAYOUT_UNDEFINED));
-
-  VkResult res;
-  /* Need attachments for render target and depth buffer */
-  VkAttachmentDescription attachments[2];
-  attachments[0].format = info.format;
-  attachments[0].samples = NUM_SAMPLES;
-  attachments[0].loadOp =
-      clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachments[0].initialLayout = initialLayout;
-  attachments[0].finalLayout = finalLayout;
-  attachments[0].flags = 0;
-
-  if (include_depth) {
-    attachments[1].format = info.depth.format;
-    attachments[1].samples = NUM_SAMPLES;
-    attachments[1].loadOp =
-        clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout =
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    attachments[1].flags = 0;
-  }
-
-  VkAttachmentReference color_reference = {};
-  color_reference.attachment = 0;
-  color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-  VkAttachmentReference depth_reference = {};
-  depth_reference.attachment = 1;
-  depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-  VkSubpassDescription subpass = {};
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.flags = 0;
-  subpass.inputAttachmentCount = 0;
-  subpass.pInputAttachments = NULL;
-  subpass.colorAttachmentCount = 1;
-  subpass.pColorAttachments = &color_reference;
-  subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = include_depth ? &depth_reference : NULL;
-  subpass.preserveAttachmentCount = 0;
-  subpass.pPreserveAttachments = NULL;
-
-  // Subpass dependency to wait for wsi image acquired semaphore before starting
-  // layout transition
-  VkSubpassDependency subpass_dependency = {};
-  subpass_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-  subpass_dependency.dstSubpass = 0;
-  subpass_dependency.srcStageMask =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  subpass_dependency.dstStageMask =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  subpass_dependency.srcAccessMask = 0;
-  subpass_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  subpass_dependency.dependencyFlags = 0;
-
-  VkRenderPassCreateInfo rp_info = {};
-  rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  rp_info.pNext = NULL;
-  rp_info.attachmentCount = include_depth ? 2 : 1;
-  rp_info.pAttachments = attachments;
-  rp_info.subpassCount = 1;
-  rp_info.pSubpasses = &subpass;
-  rp_info.dependencyCount = 1;
-  rp_info.pDependencies = &subpass_dependency;
-
-  res = vkCreateRenderPass(info.device, &rp_info, NULL, &info.render_pass);
-  assert(res == VK_SUCCESS);
-}
-
 static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
                                uint32_t dataSize, uint32_t dataStride,
                                bool use_texture) {
@@ -358,10 +274,8 @@ static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
   info.vi_attribs[1].offset = 16;
 }
 
-static void init_framebuffers(struct sample_info &info, bool include_depth) {
-  /* DEPENDS on init_depth_buffer(), init_renderpass() and
-   * init_swapchain_extension() */
-
+static void init_framebuffers(struct sample_info &info,
+                              VkRenderPass render_pass, bool include_depth) {
   VkResult res;
   VkImageView attachments[2];
   attachments[1] = info.depth.view;
@@ -369,7 +283,7 @@ static void init_framebuffers(struct sample_info &info, bool include_depth) {
   VkFramebufferCreateInfo fb_info = {};
   fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   fb_info.pNext = NULL;
-  fb_info.renderPass = info.render_pass;
+  fb_info.renderPass = render_pass;
   fb_info.attachmentCount = include_depth ? 2 : 1;
   fb_info.pAttachments = attachments;
   fb_info.width = info.width;
@@ -404,7 +318,8 @@ static void init_pipeline_cache(struct sample_info &info) {
 }
 
 static void
-init_pipeline(struct sample_info &info, VkBool32 include_depth,
+init_pipeline(struct sample_info &info, VkRenderPass render_pass,
+              const VkPipelineDepthStencilStateCreateInfo &ds,
               const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
               VkBool32 include_vi = true) {
   VkResult res;
@@ -505,26 +420,6 @@ init_pipeline(struct sample_info &info, VkBool32 include_depth,
   vp.pScissors = &scissor;
   vp.pViewports = &viewports;
 #endif
-  VkPipelineDepthStencilStateCreateInfo ds;
-  ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  ds.pNext = NULL;
-  ds.flags = 0;
-  ds.depthTestEnable = include_depth;
-  ds.depthWriteEnable = include_depth;
-  ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  ds.depthBoundsTestEnable = VK_FALSE;
-  ds.stencilTestEnable = VK_FALSE;
-  ds.back.failOp = VK_STENCIL_OP_KEEP;
-  ds.back.passOp = VK_STENCIL_OP_KEEP;
-  ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
-  ds.back.compareMask = 0;
-  ds.back.reference = 0;
-  ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
-  ds.back.writeMask = 0;
-  ds.minDepthBounds = 0;
-  ds.maxDepthBounds = 0;
-  ds.stencilTestEnable = VK_FALSE;
-  ds.front = ds.back;
 
   VkPipelineMultisampleStateCreateInfo ms;
   ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -557,7 +452,7 @@ init_pipeline(struct sample_info &info, VkBool32 include_depth,
   pipeline.stageCount = static_cast<uint32_t>(std::size(shaderStages));
   pipeline.pStages = shaderStages.data();
 
-  pipeline.renderPass = info.render_pass;
+  pipeline.renderPass = render_pass;
   pipeline.subpass = 0;
 
   res = vkCreateGraphicsPipelines(info.device, info.pipelineCache, 1, &pipeline,
@@ -651,8 +546,6 @@ void main_loop(const std::function<bool()> &runLoop,
     assert(res == VK_SUCCESS);
   }
   info.current_buffer = 0;
-
-  const bool depthPresent = true;
 
   const VkFormat depth_format = info.depth.format = depthFormat();
 
@@ -786,14 +679,15 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(
       info.device, &pPipelineLayoutCreateInfo, NULL, &info.pipeline_layout));
 
-  init_renderpass(info, depthPresent);
+  auto [render_pass, depthstencil] = vuloxr::vk::createColorDepthRenderPass(
+      info.device, info.format, info.depth.format);
 
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
       device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
-  init_framebuffers(info, depthPresent);
+  init_framebuffers(info, render_pass, true);
   init_vertex_buffer(info, g_vb_solid_face_colors_Data,
                      sizeof(g_vb_solid_face_colors_Data),
                      sizeof(g_vb_solid_face_colors_Data[0]), false);
@@ -806,7 +700,7 @@ void main_loop(const std::function<bool()> &runLoop,
                        }));
 
   init_pipeline_cache(info);
-  init_pipeline(info, depthPresent,
+  init_pipeline(info, render_pass, depthstencil,
                 {
                     vs.pipelineShaderStageCreateInfo,
                     fs.pipelineShaderStageCreateInfo,
@@ -875,7 +769,7 @@ void main_loop(const std::function<bool()> &runLoop,
     VkRenderPassBeginInfo rp_begin;
     rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rp_begin.pNext = NULL;
-    rp_begin.renderPass = info.render_pass;
+    rp_begin.renderPass = render_pass;
     rp_begin.framebuffer = info.framebuffers[info.current_buffer];
     rp_begin.renderArea.offset.x = 0;
     rp_begin.renderArea.offset.y = 0;
@@ -976,7 +870,7 @@ void main_loop(const std::function<bool()> &runLoop,
   }
   free(info.framebuffers);
 
-  vkDestroyRenderPass(info.device, info.render_pass, NULL);
+  vkDestroyRenderPass(info.device, render_pass, NULL);
 
   vkDestroyPipelineLayout(info.device, info.pipeline_layout, NULL);
 

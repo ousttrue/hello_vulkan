@@ -41,6 +41,7 @@ export default defineConfig({
             text: "pipeline",
             link: "/vulkan/pipeline/",
             items: [
+              { text: "renderpass", link: "/vulkan/pipeline/renderpass" },
               { text: "vertex", link: "/vulkan/pipeline/vertex" },
               { text: "ubo", link: "/vulkan/pipeline/ubo" },
               { text: "image", link: "/vulkan/pipeline/image" },
