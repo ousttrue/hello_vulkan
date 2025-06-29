@@ -4,9 +4,9 @@
 #include "../main_loop.h"
 #include "cube_data.h"
 #include <assert.h>
-#include <iostream>
 #include <string.h>
 #include <vuloxr/vk.h>
+#include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 
@@ -45,6 +45,25 @@ typedef struct _swap_chain_buffers {
   VkImageView view;
 } swap_chain_buffer;
 
+static bool memory_type_from_properties(
+    const VkPhysicalDeviceMemoryProperties &memory_properties,
+    uint32_t typeBits, VkFlags requirements_mask, uint32_t *typeIndex) {
+  // Search memtypes to find first index with those properties
+  for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+    if ((typeBits & 1) == 1) {
+      // Type is available, does it match user properties?
+      if ((memory_properties.memoryTypes[i].propertyFlags &
+           requirements_mask) == requirements_mask) {
+        *typeIndex = i;
+        return true;
+      }
+    }
+    typeBits >>= 1;
+  }
+  // No memory types matched, return failure
+  return false;
+}
+
 /*
  * Structure for tracking information used / created / modified
  * by utility functions.
@@ -69,14 +88,6 @@ struct sample_info {
   VkSwapchainKHR swap_chain;
   std::vector<swap_chain_buffer> buffers;
   VkSemaphore imageAcquiredSemaphore;
-
-  struct {
-    VkFormat format;
-
-    VkImage image;
-    VkDeviceMemory mem;
-    VkImageView view;
-  } depth;
 
   struct {
     VkBuffer buf;
@@ -114,26 +125,6 @@ struct sample_info {
   VkViewport viewport;
   VkRect2D scissor;
 };
-
-static bool memory_type_from_properties(struct sample_info &info,
-                                        uint32_t typeBits,
-                                        VkFlags requirements_mask,
-                                        uint32_t *typeIndex) {
-  // Search memtypes to find first index with those properties
-  for (uint32_t i = 0; i < info.memory_properties.memoryTypeCount; i++) {
-    if ((typeBits & 1) == 1) {
-      // Type is available, does it match user properties?
-      if ((info.memory_properties.memoryTypes[i].propertyFlags &
-           requirements_mask) == requirements_mask) {
-        *typeIndex = i;
-        return true;
-      }
-    }
-    typeBits >>= 1;
-  }
-  // No memory types matched, return failure
-  return false;
-}
 
 static void init_uniform_buffer(struct sample_info &info) {
   VkResult res;
@@ -179,7 +170,8 @@ static void init_uniform_buffer(struct sample_info &info) {
   alloc_info.memoryTypeIndex = 0;
 
   alloc_info.allocationSize = mem_reqs.size;
-  pass = memory_type_from_properties(info, mem_reqs.memoryTypeBits,
+  pass = memory_type_from_properties(info.memory_properties,
+                                     mem_reqs.memoryTypeBits,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                      &alloc_info.memoryTypeIndex);
@@ -234,7 +226,8 @@ static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
   alloc_info.memoryTypeIndex = 0;
 
   alloc_info.allocationSize = mem_reqs.size;
-  pass = memory_type_from_properties(info, mem_reqs.memoryTypeBits,
+  pass = memory_type_from_properties(info.memory_properties,
+                                     mem_reqs.memoryTypeBits,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                                      &alloc_info.memoryTypeIndex);
@@ -274,11 +267,11 @@ static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
   info.vi_attribs[1].offset = 16;
 }
 
-static void init_framebuffers(struct sample_info &info,
+static void init_framebuffers(struct sample_info &info, VkImageView depth_view,
                               VkRenderPass render_pass, bool include_depth) {
   VkResult res;
   VkImageView attachments[2];
-  attachments[1] = info.depth.view;
+  attachments[1] = depth_view;
 
   VkFramebufferCreateInfo fb_info = {};
   fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -547,61 +540,19 @@ void main_loop(const std::function<bool()> &runLoop,
   }
   info.current_buffer = 0;
 
-  const VkFormat depth_format = info.depth.format = depthFormat();
-
-  VkFormatProperties props;
-  vkGetPhysicalDeviceFormatProperties(info.gpus[0], depth_format, &props);
-
-  VkImageTiling tiling;
-  if (props.linearTilingFeatures &
-      VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-    tiling = VK_IMAGE_TILING_LINEAR;
-  } else if (props.optimalTilingFeatures &
-             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-    tiling = VK_IMAGE_TILING_OPTIMAL;
-  } else {
-    /* Try other depth formats? */
-    std::cout << "depth_format " << depth_format << " Unsupported.\n";
-    exit(-1);
-  }
-
-  VkImageCreateInfo image_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = depth_format,
-      .extent =
-          {
-              .width = static_cast<uint32_t>(info.width),
-              .height = static_cast<uint32_t>(info.height),
-              .depth = 1,
-          },
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = NUM_SAMPLES,
-      .tiling = tiling,
-      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .queueFamilyIndexCount = 0,
-      .pQueueFamilyIndices = NULL,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-
-  VkMemoryAllocateInfo mem_alloc = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = NULL,
-      .allocationSize = 0,
-      .memoryTypeIndex = 0,
-  };
-
+  vuloxr::vk::DepthImage depth(info.device,
+                               VkExtent2D{
+                                   .width = static_cast<uint32_t>(info.width),
+                                   .height = static_cast<uint32_t>(info.height),
+                               },
+                               depthFormat(), VK_SAMPLE_COUNT_1_BIT);
   VkImageViewCreateInfo view_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
-      .image = VK_NULL_HANDLE,
+      .image = depth.image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = depth_format,
+      .format = depth.imageInfo.format,
       .components =
           {
               .r = VK_COMPONENT_SWIZZLE_R,
@@ -618,39 +569,16 @@ void main_loop(const std::function<bool()> &runLoop,
               .layerCount = 1,
           },
   };
-
-  if (depth_format == VK_FORMAT_D16_UNORM_S8_UINT ||
-      depth_format == VK_FORMAT_D24_UNORM_S8_UINT ||
-      depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+  if (depth.imageInfo.format == VK_FORMAT_D16_UNORM_S8_UINT ||
+      depth.imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT ||
+      depth.imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
     view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
   }
-
-  /* Create image */
-  auto res = vkCreateImage(info.device, &image_info, NULL, &info.depth.image);
-  assert(res == VK_SUCCESS);
-
-  VkMemoryRequirements mem_reqs;
-  vkGetImageMemoryRequirements(info.device, info.depth.image, &mem_reqs);
-
-  mem_alloc.allocationSize = mem_reqs.size;
-  /* Use the memory properties to determine the type of memory required */
-  auto pass = memory_type_from_properties(info, mem_reqs.memoryTypeBits,
-                                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                          &mem_alloc.memoryTypeIndex);
-  assert(pass);
-
-  /* Allocate memory */
-  res = vkAllocateMemory(info.device, &mem_alloc, NULL, &info.depth.mem);
-  assert(res == VK_SUCCESS);
-
-  /* Bind memory */
-  res = vkBindImageMemory(info.device, info.depth.image, info.depth.mem, 0);
-  assert(res == VK_SUCCESS);
-
+  depth.memory = physicalDevice.allocForTransfer(device, depth.image);
   /* Create image view */
-  view_info.image = info.depth.image;
-  res = vkCreateImageView(info.device, &view_info, NULL, &info.depth.view);
-  assert(res == VK_SUCCESS);
+  VkImageView depth_view;
+  vuloxr::vk::CheckVkResult(
+      vkCreateImageView(info.device, &view_info, NULL, &depth_view));
 
   init_uniform_buffer(info);
 
@@ -680,14 +608,14 @@ void main_loop(const std::function<bool()> &runLoop,
       info.device, &pPipelineLayoutCreateInfo, NULL, &info.pipeline_layout));
 
   auto [render_pass, depthstencil] = vuloxr::vk::createColorDepthRenderPass(
-      info.device, info.format, info.depth.format);
+      info.device, info.format, depth.imageInfo.format);
 
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
       device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
-  init_framebuffers(info, render_pass, true);
+  init_framebuffers(info, depth_view, render_pass, true);
   init_vertex_buffer(info, g_vb_solid_face_colors_Data,
                      sizeof(g_vb_solid_face_colors_Data),
                      sizeof(g_vb_solid_face_colors_Data[0]), false);
@@ -723,9 +651,9 @@ void main_loop(const std::function<bool()> &runLoop,
   imageAcquiredSemaphoreCreateInfo.pNext = NULL;
   imageAcquiredSemaphoreCreateInfo.flags = 0;
 
-  res = vkCreateSemaphore(info.device, &imageAcquiredSemaphoreCreateInfo, NULL,
-                          &imageAcquiredSemaphore);
-  assert(res == VK_SUCCESS);
+  vuloxr::vk::CheckVkResult(vkCreateSemaphore(info.device,
+                                              &imageAcquiredSemaphoreCreateInfo,
+                                              NULL, &imageAcquiredSemaphore));
 
   VkCommandPool cmd_pool;
   VkCommandPoolCreateInfo cmd_pool_info = {
@@ -734,8 +662,8 @@ void main_loop(const std::function<bool()> &runLoop,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = info.graphics_queue_family_index,
   };
-  res = vkCreateCommandPool(info.device, &cmd_pool_info, NULL, &cmd_pool);
-  assert(res == VK_SUCCESS);
+  vuloxr::vk::CheckVkResult(
+      vkCreateCommandPool(info.device, &cmd_pool_info, NULL, &cmd_pool));
 
   while (runLoop()) {
     VkCommandBuffer cmd;
@@ -746,16 +674,15 @@ void main_loop(const std::function<bool()> &runLoop,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    res = vkAllocateCommandBuffers(info.device, &cmdInfo, &cmd);
-    assert(res == VK_SUCCESS);
+    vuloxr::vk::CheckVkResult(
+        vkAllocateCommandBuffers(info.device, &cmdInfo, &cmd));
 
     // Get the index of the next available swapchain image:
-    res = vkAcquireNextImageKHR(info.device, info.swap_chain, UINT64_MAX,
-                                imageAcquiredSemaphore, VK_NULL_HANDLE,
-                                &info.current_buffer);
+    vuloxr::vk::CheckVkResult(vkAcquireNextImageKHR(
+        info.device, info.swap_chain, UINT64_MAX, imageAcquiredSemaphore,
+        VK_NULL_HANDLE, &info.current_buffer));
     // TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
     // return codes
-    assert(res == VK_SUCCESS);
 
     VkCommandBufferBeginInfo cmd_buf_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -763,8 +690,7 @@ void main_loop(const std::function<bool()> &runLoop,
         .flags = 0,
         .pInheritanceInfo = NULL,
     };
-    res = vkBeginCommandBuffer(cmd, &cmd_buf_info);
-    assert(res == VK_SUCCESS);
+    vuloxr::vk::CheckVkResult(vkBeginCommandBuffer(cmd, &cmd_buf_info));
 
     VkRenderPassBeginInfo rp_begin;
     rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -804,7 +730,7 @@ void main_loop(const std::function<bool()> &runLoop,
 
     vkCmdDraw(cmd, 12 * 3, 1, 0, 0);
     vkCmdEndRenderPass(cmd);
-    res = vkEndCommandBuffer(cmd);
+    vuloxr::vk::CheckVkResult(vkEndCommandBuffer(cmd));
     const VkCommandBuffer cmd_bufs[] = {cmd};
     VkFenceCreateInfo fenceInfo;
     VkFence drawFence;
@@ -827,8 +753,8 @@ void main_loop(const std::function<bool()> &runLoop,
     submit_info[0].pSignalSemaphores = NULL;
 
     /* Queue the command buffer for execution */
-    res = vkQueueSubmit(info.graphics_queue, 1, submit_info, drawFence);
-    assert(res == VK_SUCCESS);
+    vuloxr::vk::CheckVkResult(
+        vkQueueSubmit(info.graphics_queue, 1, submit_info, drawFence));
 
     /* Now present the image in the window */
 
@@ -843,6 +769,7 @@ void main_loop(const std::function<bool()> &runLoop,
     present.pResults = NULL;
 
     /* Make sure command buffer is finished before presenting */
+    VkResult res;
     do {
       res = vkWaitForFences(info.device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
     } while (res == VK_TIMEOUT);
@@ -877,13 +804,10 @@ void main_loop(const std::function<bool()> &runLoop,
   vkDestroyBuffer(info.device, info.uniform_data.buf, NULL);
   vkFreeMemory(info.device, info.uniform_data.mem, NULL);
 
-  vkDestroyImageView(info.device, info.depth.view, NULL);
-  vkDestroyImage(info.device, info.depth.image, NULL);
-  vkFreeMemory(info.device, info.depth.mem, NULL);
-
   for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
     vkDestroyImageView(info.device, info.buffers[i].view, NULL);
   }
+  vkDestroyImageView(device, depth_view, NULL);
 
   vkDestroyCommandPool(info.device, cmd_pool, NULL);
 }
