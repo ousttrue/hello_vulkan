@@ -23,10 +23,6 @@ const char FS[] = {
     , 0, 0, 0, 0,
 };
 
-/* Number of descriptor sets needs to be the same at alloc,       */
-/* pipeline layout creation, and descriptor set layout creation   */
-#define NUM_DESCRIPTOR_SETS 1
-
 /* Number of samples needs to be the same at image creation,      */
 /* renderpass creation and pipeline creation.                     */
 #define NUM_SAMPLES VK_SAMPLE_COUNT_1_BIT
@@ -89,10 +85,6 @@ struct sample_info {
   } uniform_data;
 
   struct {
-    VkDescriptorImageInfo image_info;
-  } texture_data;
-
-  struct {
     VkBuffer buf;
     VkDeviceMemory mem;
     VkDescriptorBufferInfo buffer_info;
@@ -108,13 +100,9 @@ struct sample_info {
 
   // VkCommandBuffer cmd; // Buffer for initialization commands
   VkPipelineLayout pipeline_layout;
-  std::vector<VkDescriptorSetLayout> desc_layout;
   VkPipelineCache pipelineCache;
   VkRenderPass render_pass;
   VkPipeline pipeline;
-
-  VkDescriptorPool desc_pool;
-  std::vector<VkDescriptorSet> desc_set;
 
   PFN_vkCreateDebugReportCallbackEXT dbgCreateDebugReportCallback;
   PFN_vkDestroyDebugReportCallbackEXT dbgDestroyDebugReportCallback;
@@ -218,56 +206,6 @@ static void init_uniform_buffer(struct sample_info &info) {
   info.uniform_data.buffer_info.buffer = info.uniform_data.buf;
   info.uniform_data.buffer_info.offset = 0;
   info.uniform_data.buffer_info.range = sizeof(info.MVP);
-}
-
-static void init_descriptor_and_pipeline_layouts(
-    struct sample_info &info, bool use_texture,
-    VkDescriptorSetLayoutCreateFlags descSetLayoutCreateFlags = 0) {
-  VkDescriptorSetLayoutBinding layout_bindings[2];
-  layout_bindings[0].binding = 0;
-  layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  layout_bindings[0].descriptorCount = 1;
-  layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  layout_bindings[0].pImmutableSamplers = NULL;
-
-  if (use_texture) {
-    layout_bindings[1].binding = 1;
-    layout_bindings[1].descriptorType =
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_bindings[1].descriptorCount = 1;
-    layout_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    layout_bindings[1].pImmutableSamplers = NULL;
-  }
-
-  /* Next take layout bindings and use them to create a descriptor set layout
-   */
-  VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
-  descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  descriptor_layout.pNext = NULL;
-  descriptor_layout.flags = descSetLayoutCreateFlags;
-  descriptor_layout.bindingCount = use_texture ? 2 : 1;
-  descriptor_layout.pBindings = layout_bindings;
-
-  VkResult res;
-
-  info.desc_layout.resize(NUM_DESCRIPTOR_SETS);
-  res = vkCreateDescriptorSetLayout(info.device, &descriptor_layout, NULL,
-                                    info.desc_layout.data());
-  assert(res == VK_SUCCESS);
-
-  /* Now use the descriptor layout to create a pipeline layout */
-  VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = {};
-  pPipelineLayoutCreateInfo.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pPipelineLayoutCreateInfo.pNext = NULL;
-  pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-  pPipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-  pPipelineLayoutCreateInfo.setLayoutCount = NUM_DESCRIPTOR_SETS;
-  pPipelineLayoutCreateInfo.pSetLayouts = info.desc_layout.data();
-
-  res = vkCreatePipelineLayout(info.device, &pPipelineLayoutCreateInfo, NULL,
-                               &info.pipeline_layout);
-  assert(res == VK_SUCCESS);
 }
 
 static void
@@ -449,73 +387,6 @@ static void init_framebuffers(struct sample_info &info, bool include_depth) {
         vkCreateFramebuffer(info.device, &fb_info, NULL, &info.framebuffers[i]);
     assert(res == VK_SUCCESS);
   }
-}
-
-static void init_descriptor_pool(struct sample_info &info, bool use_texture) {
-  /* DEPENDS on init_uniform_buffer() and
-   * init_descriptor_and_pipeline_layouts() */
-
-  VkResult res;
-  VkDescriptorPoolSize type_count[2];
-  type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  type_count[0].descriptorCount = 1;
-  if (use_texture) {
-    type_count[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    type_count[1].descriptorCount = 1;
-  }
-
-  VkDescriptorPoolCreateInfo descriptor_pool = {};
-  descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-  descriptor_pool.pNext = NULL;
-  descriptor_pool.maxSets = 1;
-  descriptor_pool.poolSizeCount = use_texture ? 2 : 1;
-  descriptor_pool.pPoolSizes = type_count;
-
-  res = vkCreateDescriptorPool(info.device, &descriptor_pool, NULL,
-                               &info.desc_pool);
-  assert(res == VK_SUCCESS);
-}
-
-static void init_descriptor_set(struct sample_info &info, bool use_texture) {
-  /* DEPENDS on init_descriptor_pool() */
-
-  VkResult res;
-
-  VkDescriptorSetAllocateInfo alloc_info[1];
-  alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-  alloc_info[0].pNext = NULL;
-  alloc_info[0].descriptorPool = info.desc_pool;
-  alloc_info[0].descriptorSetCount = NUM_DESCRIPTOR_SETS;
-  alloc_info[0].pSetLayouts = info.desc_layout.data();
-
-  info.desc_set.resize(NUM_DESCRIPTOR_SETS);
-  res = vkAllocateDescriptorSets(info.device, alloc_info, info.desc_set.data());
-  assert(res == VK_SUCCESS);
-
-  VkWriteDescriptorSet writes[2];
-
-  writes[0] = {};
-  writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  writes[0].pNext = NULL;
-  writes[0].dstSet = info.desc_set[0];
-  writes[0].descriptorCount = 1;
-  writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  writes[0].pBufferInfo = &info.uniform_data.buffer_info;
-  writes[0].dstArrayElement = 0;
-  writes[0].dstBinding = 0;
-
-  if (use_texture) {
-    writes[1] = {};
-    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = info.desc_set[0];
-    writes[1].dstBinding = 1;
-    writes[1].descriptorCount = 1;
-    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    writes[1].pImageInfo = &info.texture_data.image_info;
-    writes[1].dstArrayElement = 0;
-  }
-
-  vkUpdateDescriptorSets(info.device, use_texture ? 2 : 1, writes, 0, NULL);
 }
 
 static void init_pipeline_cache(struct sample_info &info) {
@@ -724,6 +595,7 @@ void main_loop(const std::function<bool()> &runLoop,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *window) {
+
   struct sample_info info = {
       .inst = instance,
       .gpus = {physicalDevice},
@@ -888,7 +760,32 @@ void main_loop(const std::function<bool()> &runLoop,
   assert(res == VK_SUCCESS);
 
   init_uniform_buffer(info);
-  init_descriptor_and_pipeline_layouts(info, false);
+
+  vuloxr::vk::DescriptorSet descriptor(
+      info.device, 1,
+      {
+          {
+              .binding = 0,
+              .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+              .descriptorCount = 1,
+              .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+              .pImmutableSamplers = NULL,
+          },
+      });
+
+  /* Now use the descriptor layout to create a pipeline layout */
+  VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pNext = NULL,
+      .setLayoutCount = 1,
+      .pSetLayouts = &descriptor.descriptorSetLayout,
+      .pushConstantRangeCount = 0,
+      .pPushConstantRanges = NULL,
+  };
+
+  vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(
+      info.device, &pPipelineLayoutCreateInfo, NULL, &info.pipeline_layout));
+
   init_renderpass(info, depthPresent);
 
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
@@ -900,8 +797,14 @@ void main_loop(const std::function<bool()> &runLoop,
   init_vertex_buffer(info, g_vb_solid_face_colors_Data,
                      sizeof(g_vb_solid_face_colors_Data),
                      sizeof(g_vb_solid_face_colors_Data[0]), false);
-  init_descriptor_pool(info, false);
-  init_descriptor_set(info, false);
+
+  descriptor.update(0, std::span<const vuloxr::vk::DescriptorUpdateInfo>({
+                           vuloxr::vk::DescriptorUpdateInfo{
+                               .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                               .pBufferInfo = &info.uniform_data.buffer_info,
+                           },
+                       }));
+
   init_pipeline_cache(info);
   init_pipeline(info, depthPresent,
                 {
@@ -985,8 +888,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, info.pipeline);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            info.pipeline_layout, 0, NUM_DESCRIPTOR_SETS,
-                            info.desc_set.data(), 0, NULL);
+                            info.pipeline_layout, 0, 1,
+                            &descriptor.descriptorSets[0], 0, NULL);
 
     const VkDeviceSize offsets[1] = {0};
     vkCmdBindVertexBuffers(cmd, 0, 1, &info.vertex_buffer.buf, offsets);
@@ -1065,8 +968,6 @@ void main_loop(const std::function<bool()> &runLoop,
 
   vkDestroyPipelineCache(info.device, info.pipelineCache, NULL);
 
-  vkDestroyDescriptorPool(info.device, info.desc_pool, NULL);
-
   vkDestroyBuffer(info.device, info.vertex_buffer.buf, NULL);
   vkFreeMemory(info.device, info.vertex_buffer.mem, NULL);
 
@@ -1077,8 +978,6 @@ void main_loop(const std::function<bool()> &runLoop,
 
   vkDestroyRenderPass(info.device, info.render_pass, NULL);
 
-  for (int i = 0; i < NUM_DESCRIPTOR_SETS; i++)
-    vkDestroyDescriptorSetLayout(info.device, info.desc_layout[i], NULL);
   vkDestroyPipelineLayout(info.device, info.pipeline_layout, NULL);
 
   vkDestroyBuffer(info.device, info.uniform_data.buf, NULL);
