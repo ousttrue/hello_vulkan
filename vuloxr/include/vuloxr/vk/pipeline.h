@@ -186,14 +186,10 @@ createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
     return {VK_NULL_HANDLE, {}};
   }
 
-  //   if (SetDebugUtilsObjectNameEXT(device, VK_OBJECT_TYPE_RENDER_PASS,
-  //                                  (uint64_t)ptr->pass,
-  //                                  "hello_xr render pass") != VK_SUCCESS) {
-  //     throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-  //   }
-
   VkPipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
       .depthTestEnable = VK_TRUE,
       .depthWriteEnable = VK_TRUE,
       .depthCompareOp = VK_COMPARE_OP_LESS,
@@ -216,27 +212,6 @@ createColorDepthRenderPass(VkDevice device, VkFormat colorFormat,
       .minDepthBounds = 0.0f,
       .maxDepthBounds = 1.0f,
   };
-
-  // VkPipelineDepthStencilStateCreateInfo ds;
-  // ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  // ds.pNext = NULL;
-  // ds.flags = 0;
-  // ds.depthTestEnable = include_depth;
-  // ds.depthWriteEnable = include_depth;
-  // ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-  // ds.depthBoundsTestEnable = VK_FALSE;
-  // ds.stencilTestEnable = VK_FALSE;
-  // ds.back.failOp = VK_STENCIL_OP_KEEP;
-  // ds.back.passOp = VK_STENCIL_OP_KEEP;
-  // ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
-  // ds.back.compareMask = 0;
-  // ds.back.reference = 0;
-  // ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
-  // ds.back.writeMask = 0;
-  // ds.minDepthBounds = 0;
-  // ds.maxDepthBounds = 0;
-  // ds.stencilTestEnable = VK_FALSE;
-  // ds.front = ds.back;
 
   return {renderPass, depthStencilStateCreateInfo};
 }
@@ -284,6 +259,8 @@ struct Pipeline : NonCopyable {
 struct PipelineBuilder {
   VkPipelineVertexInputStateCreateInfo vertexInputInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
       // Bindings (spacing between data and if per-instance or per-vertex
       .vertexBindingDescriptionCount = 0,
       // Attribute descriptions (what is passed to vertex shader)
@@ -292,6 +269,7 @@ struct PipelineBuilder {
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .pNext = NULL,
       .flags = 0,
       .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
       .primitiveRestartEnable = VK_FALSE,
@@ -299,6 +277,8 @@ struct PipelineBuilder {
 
   VkPipelineRasterizationStateCreateInfo rasterizer{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
       .depthClampEnable = VK_FALSE,
       .rasterizerDiscardEnable = VK_FALSE,
       .polygonMode = VK_POLYGON_MODE_FILL,
@@ -314,12 +294,15 @@ struct PipelineBuilder {
 
   VkPipelineMultisampleStateCreateInfo multisampling{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
       .sampleShadingEnable = VK_FALSE,
-      .minSampleShading = 1.0f,          // optional
-      .pSampleMask = nullptr,            // optional
-      .alphaToCoverageEnable = VK_FALSE, // optional
-      .alphaToOneEnable = VK_FALSE,      // optional
+      .minSampleShading = 1.0f,
+      // .minSampleShading = 0.0;
+      .pSampleMask = nullptr,
+      .alphaToCoverageEnable = VK_FALSE,
+      .alphaToOneEnable = VK_FALSE,
   };
 
   std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments = {{
@@ -333,6 +316,15 @@ struct PipelineBuilder {
       .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
   }};
+  //   VkPipelineColorBlendAttachmentState att_state[1];
+  //   att_state[0].colorWriteMask = 0xf;
+  //   att_state[0].blendEnable = VK_FALSE;
+  //   att_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
+  //   att_state[0].colorBlendOp = VK_BLEND_OP_ADD;
+  //   att_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  //   att_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  //   att_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  //   att_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
 
   Pipeline create(
       VkDevice device, VkRenderPass renderPass,
@@ -364,26 +356,22 @@ struct PipelineBuilder {
 
     VkPipelineColorBlendStateCreateInfo colorBlending{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
         .logicOpEnable = VK_FALSE,
         .logicOp = VK_LOGIC_OP_COPY,
+        // .logicOp = VK_LOGIC_OP_NO_OP;
         .attachmentCount =
             static_cast<uint32_t>(std::size(this->colorBlendAttachments)),
         .pAttachments = this->colorBlendAttachments.data(),
         .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f},
+        // .blendConstants = {1.0f, 1.0f, 1.0f, 1.0f},
     };
-    // VkPipelineColorBlendStateCreateInfo cb{
-    //     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
-    // cb.attachmentCount = 1;
-    // cb.pAttachments = &attachState;
-    // cb.logicOpEnable = VK_FALSE;
-    // cb.logicOp = VK_LOGIC_OP_NO_OP;
-    // cb.blendConstants[0] = 1.0f;
-    // cb.blendConstants[1] = 1.0f;
-    // cb.blendConstants[2] = 1.0f;
-    // cb.blendConstants[3] = 1.0f;
 
     VkPipelineViewportStateCreateInfo viewportState{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
     };
     if (viewports.empty()) {
       // https://github.com/KhronosGroup/Vulkan-Guide/blob/main/lang/jp/chapters/dynamic_state.adoc
@@ -403,12 +391,15 @@ struct PipelineBuilder {
 
     VkPipelineDynamicStateCreateInfo dynamicState{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .pNext = NULL,
         .dynamicStateCount = static_cast<uint32_t>(std::size(dynamicStates)),
         .pDynamicStates = dynamicStates.data(),
     };
 
     VkGraphicsPipelineCreateInfo pipelineInfo{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
         .stageCount = static_cast<uint32_t>(std::size(shaderStages)),
         .pStages = shaderStages.data(),
         .pVertexInputState = &this->vertexInputInfo,
@@ -425,8 +416,8 @@ struct PipelineBuilder {
         .renderPass = renderPass,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = 0,
     };
-
     VkPipeline pipeline;
     CheckVkResult(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
                                             &pipelineInfo, nullptr, &pipeline));

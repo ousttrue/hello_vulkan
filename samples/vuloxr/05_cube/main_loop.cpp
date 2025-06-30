@@ -105,11 +105,6 @@ struct sample_info {
   glm::mat4 Clip;
   glm::mat4 MVP;
 
-  // VkCommandBuffer cmd; // Buffer for initialization commands
-  VkPipelineLayout pipeline_layout;
-  VkPipelineCache pipelineCache;
-  VkPipeline pipeline;
-
   PFN_vkCreateDebugReportCallbackEXT dbgCreateDebugReportCallback;
   PFN_vkDestroyDebugReportCallbackEXT dbgDestroyDebugReportCallback;
   PFN_vkDebugReportMessageEXT dbgBreakCallback;
@@ -225,149 +220,6 @@ static void init_framebuffers(struct sample_info &info, VkImageView depth_view,
         vkCreateFramebuffer(info.device, &fb_info, NULL, &info.framebuffers[i]);
     assert(res == VK_SUCCESS);
   }
-}
-
-static void
-init_pipeline(struct sample_info &info,
-              std::span<const VkVertexInputBindingDescription> bindings,
-              std::span<const VkVertexInputAttributeDescription> attributes,
-              VkRenderPass render_pass,
-              const VkPipelineDepthStencilStateCreateInfo &ds,
-              const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
-              VkBool32 include_vi = true) {
-  VkDynamicState dynamicStateEnables[2]; // Viewport + Scissor
-  VkPipelineDynamicStateCreateInfo dynamicState = {};
-  memset(dynamicStateEnables, 0, sizeof dynamicStateEnables);
-  dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamicState.pNext = NULL;
-  dynamicState.pDynamicStates = dynamicStateEnables;
-  dynamicState.dynamicStateCount = 0;
-
-  VkPipelineVertexInputStateCreateInfo vi;
-  memset(&vi, 0, sizeof(vi));
-  vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  if (include_vi) {
-    vi.pNext = NULL;
-    vi.flags = 0;
-    vi.vertexBindingDescriptionCount = bindings.size();
-    vi.pVertexBindingDescriptions = bindings.data();
-    vi.vertexAttributeDescriptionCount = attributes.size();
-    vi.pVertexAttributeDescriptions = attributes.data();
-  }
-  VkPipelineInputAssemblyStateCreateInfo ia;
-  ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  ia.pNext = NULL;
-  ia.flags = 0;
-  ia.primitiveRestartEnable = VK_FALSE;
-  ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-  VkPipelineRasterizationStateCreateInfo rs;
-  rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rs.pNext = NULL;
-  rs.flags = 0;
-  rs.polygonMode = VK_POLYGON_MODE_FILL;
-  rs.cullMode = VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-  rs.depthClampEnable = VK_FALSE;
-  rs.rasterizerDiscardEnable = VK_FALSE;
-  rs.depthBiasEnable = VK_FALSE;
-  rs.depthBiasConstantFactor = 0;
-  rs.depthBiasClamp = 0;
-  rs.depthBiasSlopeFactor = 0;
-  rs.lineWidth = 1.0f;
-
-  VkPipelineColorBlendStateCreateInfo cb;
-  cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  cb.flags = 0;
-  cb.pNext = NULL;
-  VkPipelineColorBlendAttachmentState att_state[1];
-  att_state[0].colorWriteMask = 0xf;
-  att_state[0].blendEnable = VK_FALSE;
-  att_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
-  att_state[0].colorBlendOp = VK_BLEND_OP_ADD;
-  att_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-  att_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-  att_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  att_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  cb.attachmentCount = 1;
-  cb.pAttachments = att_state;
-  cb.logicOpEnable = VK_FALSE;
-  cb.logicOp = VK_LOGIC_OP_NO_OP;
-  cb.blendConstants[0] = 1.0f;
-  cb.blendConstants[1] = 1.0f;
-  cb.blendConstants[2] = 1.0f;
-  cb.blendConstants[3] = 1.0f;
-
-  VkPipelineViewportStateCreateInfo vp = {};
-  vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  vp.pNext = NULL;
-  vp.flags = 0;
-#ifndef __ANDROID__
-  vp.viewportCount = NUM_VIEWPORTS;
-  dynamicStateEnables[dynamicState.dynamicStateCount++] =
-      VK_DYNAMIC_STATE_VIEWPORT;
-  vp.scissorCount = NUM_SCISSORS;
-  dynamicStateEnables[dynamicState.dynamicStateCount++] =
-      VK_DYNAMIC_STATE_SCISSOR;
-  vp.pScissors = NULL;
-  vp.pViewports = NULL;
-#else
-  // Temporary disabling dynamic viewport on Android because some of drivers
-  // doesn't support the feature.
-  VkViewport viewports;
-  viewports.minDepth = 0.0f;
-  viewports.maxDepth = 1.0f;
-  viewports.x = 0;
-  viewports.y = 0;
-  viewports.width = info.width;
-  viewports.height = info.height;
-  VkRect2D scissor;
-  scissor.extent.width = info.width;
-  scissor.extent.height = info.height;
-  scissor.offset.x = 0;
-  scissor.offset.y = 0;
-  vp.viewportCount = NUM_VIEWPORTS;
-  vp.scissorCount = NUM_SCISSORS;
-  vp.pScissors = &scissor;
-  vp.pViewports = &viewports;
-#endif
-
-  VkPipelineMultisampleStateCreateInfo ms;
-  ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  ms.pNext = NULL;
-  ms.flags = 0;
-  ms.pSampleMask = NULL;
-  ms.rasterizationSamples = NUM_SAMPLES;
-  ms.sampleShadingEnable = VK_FALSE;
-  ms.alphaToCoverageEnable = VK_FALSE;
-  ms.alphaToOneEnable = VK_FALSE;
-  ms.minSampleShading = 0.0;
-
-  VkGraphicsPipelineCreateInfo pipeline;
-  pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  pipeline.pNext = NULL;
-  pipeline.layout = info.pipeline_layout;
-  pipeline.basePipelineHandle = VK_NULL_HANDLE;
-  pipeline.basePipelineIndex = 0;
-  pipeline.flags = 0;
-  pipeline.pVertexInputState = &vi;
-  pipeline.pInputAssemblyState = &ia;
-  pipeline.pRasterizationState = &rs;
-  pipeline.pColorBlendState = &cb;
-  pipeline.pTessellationState = NULL;
-  pipeline.pMultisampleState = &ms;
-  pipeline.pDynamicState = &dynamicState;
-  pipeline.pViewportState = &vp;
-  pipeline.pDepthStencilState = &ds;
-
-  pipeline.stageCount = static_cast<uint32_t>(std::size(shaderStages));
-  pipeline.pStages = shaderStages.data();
-
-  pipeline.renderPass = render_pass;
-  pipeline.subpass = 0;
-
-  vuloxr::vk::CheckVkResult(vkCreateGraphicsPipelines(
-      info.device, info.pipelineCache, 1, &pipeline, NULL, &info.pipeline));
 }
 
 static VkFormat depthFormat() {
@@ -520,9 +372,9 @@ void main_loop(const std::function<bool()> &runLoop,
       .pushConstantRangeCount = 0,
       .pPushConstantRanges = NULL,
   };
-
+  VkPipelineLayout pipeline_layout;
   vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(
-      info.device, &pPipelineLayoutCreateInfo, NULL, &info.pipeline_layout));
+      info.device, &pPipelineLayoutCreateInfo, NULL, &pipeline_layout));
 
   auto [render_pass, depthstencil] = vuloxr::vk::createColorDepthRenderPass(
       info.device, info.format, depth.imageInfo.format);
@@ -569,22 +421,23 @@ void main_loop(const std::function<bool()> &runLoop,
                            },
                        }));
 
-  VkPipelineCacheCreateInfo pipelineCache{
+  VkPipelineCacheCreateInfo pipelineCacheInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
       .initialDataSize = 0,
       .pInitialData = NULL,
   };
-  vuloxr::vk::CheckVkResult(vkCreatePipelineCache(info.device, &pipelineCache,
-                                                  NULL, &info.pipelineCache));
+  VkPipelineCache pipelineCache;
+  vuloxr::vk::CheckVkResult(vkCreatePipelineCache(
+      info.device, &pipelineCacheInfo, NULL, &pipelineCache));
 
-  init_pipeline(info, vertex_buffer.bindings, vertex_buffer.attributes,
-                render_pass, depthstencil,
-                {
-                    vs.pipelineShaderStageCreateInfo,
-                    fs.pipelineShaderStageCreateInfo,
-                });
+  vuloxr::vk::PipelineBuilder builder;
+  auto pipeline = builder.create(
+      device, render_pass, depthstencil, pipeline_layout,
+      {vs.pipelineShaderStageCreateInfo, fs.pipelineShaderStageCreateInfo},
+      vertex_buffer.bindings, vertex_buffer.attributes, {}, {},
+      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   /* VULKAN_KEY_START */
 
@@ -636,13 +489,13 @@ void main_loop(const std::function<bool()> &runLoop,
 
     {
       vuloxr::vk::RenderPassRecording recording(
-          cmd, info.pipeline_layout, render_pass,
+          cmd, pipeline_layout, render_pass,
           info.framebuffers[info.current_buffer],
           swapchain.createInfo.imageExtent, clear_values,
           descriptor.descriptorSets[0],
           VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
-      vertex_buffer.draw(cmd, info.pipeline);
+      vertex_buffer.draw(cmd, pipeline);
     }
 
     VkFenceCreateInfo fenceInfo{
@@ -670,18 +523,12 @@ void main_loop(const std::function<bool()> &runLoop,
 
   vkDestroySemaphore(info.device, imageAcquiredSemaphore, NULL);
 
-  vkDestroyPipeline(info.device, info.pipeline, NULL);
-
-  vkDestroyPipelineCache(info.device, info.pipelineCache, NULL);
+  vkDestroyPipelineCache(info.device, pipelineCache, NULL);
 
   for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
     vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);
   }
   free(info.framebuffers);
-
-  vkDestroyRenderPass(info.device, render_pass, NULL);
-
-  vkDestroyPipelineLayout(info.device, info.pipeline_layout, NULL);
 
   vkDestroyBuffer(info.device, info.uniform_data.buf, NULL);
   vkFreeMemory(info.device, info.uniform_data.mem, NULL);
