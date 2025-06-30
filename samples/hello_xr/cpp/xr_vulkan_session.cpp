@@ -21,9 +21,9 @@ char FragmentShaderGlsl[] = {
     , 0};
 static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
 
-struct ViewRenderer {
-  VkDevice device;
-  VkQueue queue;
+struct ViewRenderer : vuloxr::NonCopyable {
+  VkDevice device = VK_NULL_HANDLE;
+  VkQueue queue = VK_NULL_HANDLE;
   VkCommandPool commandPool = VK_NULL_HANDLE;
 
   struct RenderTarget {
@@ -31,9 +31,17 @@ struct ViewRenderer {
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     vuloxr::vk::Fence execFence;
   };
-  std::map<VkImage, RenderTarget> framebufferMap;
+  std::vector<std::shared_ptr<RenderTarget>> framebuffers;
 
-  ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex) : device(_device) {
+  // ViewRenderer() {}
+
+  ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
+               VkDevice _device, uint32_t queueFamilyIndex,
+               std::span<const XrSwapchainImageVulkan2KHR> images,
+               VkExtent2D extent, VkFormat colorFormat, VkFormat depthFormat,
+               VkSampleCountFlagBits sampleCountFlagBits,
+               VkRenderPass renderPass)
+      : device(_device), framebuffers(images.size()) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
@@ -43,34 +51,14 @@ struct ViewRenderer {
     };
     vuloxr::vk::CheckVkResult(vkCreateCommandPool(this->device, &cmdPoolInfo,
                                                   nullptr, &this->commandPool));
-  }
 
-  ~ViewRenderer() {
-    for (auto it = this->framebufferMap.begin();
-         it != this->framebufferMap.end(); ++it) {
-      vkFreeCommandBuffers(this->device, this->commandPool, 1,
-                           &it->second.commandBuffer);
-    }
-    vkDestroyCommandPool(this->device, this->commandPool, nullptr);
-  }
+    for (int index = 0; index < images.size(); ++index) {
+      auto found = std::make_shared<RenderTarget>();
 
-  void render(const vuloxr::vk::PhysicalDevice &physicalDevice,
-              //
-              VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
-              VkPipeline pipeline,
-              //
-              VkImage image, VkExtent2D extent, VkFormat colorFormat,
-              VkFormat depthFormat, VkSampleCountFlagBits sampleCountFlagBits,
-              //
-              const VkClearColorValue &clearColor, VkBuffer vertices,
-              VkBuffer indices, uint32_t drawCount,
-              std::span<const Mat4> cubes) {
-    auto found = this->framebufferMap.find(image);
-    if (found == this->framebufferMap.end()) {
-
-      auto framebuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-          physicalDevice, this->device, image, extent, colorFormat, renderPass,
-          depthFormat, sampleCountFlagBits);
+      found->execFence = vuloxr::vk::Fence(this->device, true);
+      found->framebuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
+          physicalDevice, this->device, images[index].image, extent,
+          colorFormat, renderPass, depthFormat, sampleCountFlagBits);
 
       VkCommandBufferAllocateInfo cmd{
           .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -78,82 +66,66 @@ struct ViewRenderer {
           .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
           .commandBufferCount = 1,
       };
-      VkCommandBuffer commandBuffer;
+      // VkCommandBuffer commandBuffer;
       vuloxr::vk::CheckVkResult(
-          vkAllocateCommandBuffers(this->device, &cmd, &commandBuffer));
+          vkAllocateCommandBuffers(this->device, &cmd, &found->commandBuffer));
 
-      this->framebufferMap[image] = {
-          .framebuffer = framebuffer,
-          .commandBuffer = commandBuffer,
-          .execFence = vuloxr::vk::Fence(this->device, true),
-      };
-      found = this->framebufferMap.find(image);
-      // found = this->framebufferMap.insert(std::make_pair(image, rt)).first;
+      this->framebuffers[index] = found;
 
       {
-        vuloxr::vk::CommandScope(commandBuffer)
+        vuloxr::vk::CommandScope(found->commandBuffer)
             .transitionDepthLayout(
-                found->second.framebuffer->depth.image,
-                VK_IMAGE_LAYOUT_UNDEFINED,
+                found->framebuffer->depth.image, VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
       }
 
       VkSubmitInfo submitInfo{
           .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
           .commandBufferCount = 1,
-          .pCommandBuffers = &commandBuffer,
+          .pCommandBuffers = &found->commandBuffer,
       };
       vuloxr::vk::CheckVkResult(
           vkQueueSubmit(this->queue, 1, &submitInfo, nullptr));
       vkQueueWaitIdle(this->queue);
     }
-
-    // Waiting on a not-in-flight command buffer is a no-op
-    found->second.execFence.wait();
-    found->second.execFence.reset();
-
-    vuloxr::vk::CheckVkResult(
-        vkResetCommandBuffer(found->second.commandBuffer, 0));
-
-    {
-      VkClearValue clearValues[] = {
-          {.color = clearColor},
-          {.depthStencil = {.depth = 1.0f, .stencil = 0}},
-      };
-      vuloxr::vk::RenderPassRecording recording(
-          found->second.commandBuffer, pipelineLayout, renderPass,
-          found->second.framebuffer->framebuffer, extent, clearValues,
-          std::size(clearValues));
-
-      vkCmdBindPipeline(found->second.commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-      // Bind index and vertex buffers
-      vkCmdBindIndexBuffer(found->second.commandBuffer, indices, 0,
-                           VK_INDEX_TYPE_UINT16);
-      VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(found->second.commandBuffer, 0, 1, &vertices,
-                             &offset);
-
-      // Render each cube
-      for (auto &cube : cubes) {
-        vkCmdPushConstants(found->second.commandBuffer, pipelineLayout,
-                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube),
-                           &cube.m);
-
-        // Draw the cube.
-        vkCmdDrawIndexed(found->second.commandBuffer, drawCount, 1, 0, 0, 0);
-      }
-    }
-
-    VkSubmitInfo submitInfo{
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &found->second.commandBuffer,
-    };
-    vuloxr::vk::CheckVkResult(
-        vkQueueSubmit(this->queue, 1, &submitInfo, found->second.execFence));
   }
+
+  ~ViewRenderer() {
+    for (auto it : this->framebuffers) {
+      vkFreeCommandBuffers(this->device, this->commandPool, 1,
+                           &it->commandBuffer);
+    }
+    if (this->commandPool != VK_NULL_HANDLE) {
+      vkDestroyCommandPool(this->device, this->commandPool, nullptr);
+    }
+  }
+
+  ViewRenderer(ViewRenderer &&rhs) {
+    this->device = rhs.device;
+    this->queue = rhs.queue;
+    this->commandPool = rhs.commandPool;
+    rhs.commandPool = VK_NULL_HANDLE;
+    std::swap(this->framebuffers, rhs.framebuffers);
+  }
+
+  ViewRenderer &operator=(ViewRenderer &&rhs) {
+    this->device = rhs.device;
+    this->queue = rhs.queue;
+    this->commandPool = rhs.commandPool;
+    rhs.commandPool = VK_NULL_HANDLE;
+    std::swap(this->framebuffers, rhs.framebuffers);
+    return *this;
+  }
+
+  void render(
+      //
+      VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
+      VkPipeline pipeline,
+      //
+      uint32_t index, VkExtent2D extent,
+      //
+      const VkClearColorValue &clearColor, VkBuffer vertices, VkBuffer indices,
+      uint32_t drawCount, std::span<const Mat4> cubes) {}
 };
 
 void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
@@ -203,17 +175,6 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
 
-  // Create resources for each view.
-  using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
-  std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
-  for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
-    // XrSwapchain
-    auto swapchain = std::make_shared<VulkanSwapchain>(
-        session, i, stereoscope.viewConfigurations[i], viewFormat,
-        XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
-    swapchains.push_back(swapchain);
-  }
-
   // pieline
   auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
       device, sizeof(float) * 16);
@@ -241,14 +202,35 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
                      vertices.bindings, vertices.attributes, {}, {},
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  ViewRenderer renderer(device, queueFamilyIndex);
+  // Create resources for each view.
+  using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
+  std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
+  std::vector<ViewRenderer> renderers;
+
+  for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
+    // XrSwapchain
+    auto swapchain = std::make_shared<VulkanSwapchain>(
+        session, i, stereoscope.viewConfigurations[i], viewFormat,
+        XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+    swapchains.push_back(swapchain);
+
+    VkExtent2D extent = {
+        swapchain->swapchainCreateInfo.width,
+        swapchain->swapchainCreateInfo.height,
+    };
+
+    renderers.push_back(ViewRenderer(
+        physicalDevice, device, queueFamilyIndex, swapchain->swapchainImages,
+        extent, viewFormat, depthFormat,
+        (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
+        renderPass));
+  }
+
+  CubeScene scene(session);
 
   // mainloop
   vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
   vuloxr::xr::InputState input(instance, session);
-
-  CubeScene scene(session);
-
   while (runLoop(state.m_sessionRunning)) {
     state.PollEvents();
     if (state.m_exitRenderLoop) {
@@ -292,7 +274,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         for (uint32_t i = 0; i < stereoscope.views.size(); ++i) {
           // XrCompositionLayerProjectionView(left / right)
           auto swapchain = swapchains[i];
-          auto [_, image, projectionLayer] =
+          auto [index, image, projectionLayer] =
               swapchain->AcquireSwapchain(stereoscope.views[i]);
           composition.pushView(projectionLayer);
 
@@ -300,16 +282,58 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.width,
               swapchain->swapchainCreateInfo.height,
           };
-          renderer.render(
-              physicalDevice,
-              //
-              renderPass, pipelineLayout, pipeline,
-              //
-              image.image, extent,
-              (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
-              (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
-              clearColor, vertices.buffer, indices.buffer, indices.drawCount,
-              scene.endFrame(projectionLayer.pose, projectionLayer.fov));
+
+          auto cubes =
+              scene.endFrame(projectionLayer.pose, projectionLayer.fov);
+
+          auto found = renderers[i].framebuffers[index];
+
+          // Waiting on a not-in-flight command buffer is a no-op
+          found->execFence.wait();
+          found->execFence.reset();
+
+          vuloxr::vk::CheckVkResult(
+              vkResetCommandBuffer(found->commandBuffer, 0));
+
+          {
+            VkClearValue clearValues[] = {
+                {.color = clearColor},
+                {.depthStencil = {.depth = 1.0f, .stencil = 0}},
+            };
+            vuloxr::vk::RenderPassRecording recording(
+                found->commandBuffer, pipelineLayout, renderPass,
+                found->framebuffer->framebuffer, extent, clearValues,
+                std::size(clearValues));
+
+            vkCmdBindPipeline(found->commandBuffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+            // Bind index and vertex buffers
+            vkCmdBindIndexBuffer(found->commandBuffer, indices.buffer, 0,
+                                 VK_INDEX_TYPE_UINT16);
+            VkDeviceSize offset = 0;
+            vkCmdBindVertexBuffers(found->commandBuffer, 0, 1,
+                                   &vertices.buffer.buffer, &offset);
+
+            // Render each cube
+            for (auto &cube : cubes) {
+              vkCmdPushConstants(found->commandBuffer, pipelineLayout,
+                                 VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube),
+                                 &cube.m);
+
+              // Draw the cube.
+              vkCmdDrawIndexed(found->commandBuffer, indices.drawCount, 1, 0, 0,
+                               0);
+            }
+          }
+
+          VkSubmitInfo submitInfo{
+              .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+              .commandBufferCount = 1,
+              .pCommandBuffers = &found->commandBuffer,
+          };
+          vuloxr::vk::CheckVkResult(
+              vkQueueSubmit(renderers[i].queue, 1, &submitInfo, found->execFence));
 
           swapchain->EndSwapchain();
         }
