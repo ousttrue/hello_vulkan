@@ -44,9 +44,9 @@ void main_loop(const std::function<bool()> &runLoop,
   //
   // swapchain
   //
-
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>>
-      images(swapchain.images.size());
+  vuloxr::vk::SwapchainNoDepthFramebufferList images(
+      device, renderPass, swapchain.createInfo.imageExtent,
+      swapchain.createInfo.imageFormat, swapchain.images);
 
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
@@ -56,13 +56,7 @@ void main_loop(const std::function<bool()> &runLoop,
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
-    auto image = images[acquired.imageIndex];
-    if (!image) {
-      image = std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
-          device, acquired.image, swapchain.createInfo.imageExtent,
-          swapchain.createInfo.imageFormat, pipeline.renderPass);
-      images[acquired.imageIndex] = image;
-    }
+    auto image = &images[acquired.imageIndex];
 
     auto [index, flight] = flightManager.sync(acquireSemaphore);
     auto cmd = pool.commandBuffers[index];

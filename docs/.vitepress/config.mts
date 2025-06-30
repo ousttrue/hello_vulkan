@@ -41,13 +41,22 @@ export default defineConfig({
             text: "pipeline",
             link: "/vulkan/pipeline/",
             items: [
-              { text: "renderpass", link: "/vulkan/pipeline/renderpass" },
-              { text: "vertex", link: "/vulkan/pipeline/vertex" },
-              { text: "ubo", link: "/vulkan/pipeline/ubo" },
-              { text: "image", link: "/vulkan/pipeline/image" },
-              { text: "descriptor", link: "/vulkan/pipeline/descriptor" },
-              { text: "graphics pipeline", link: "/vulkan/pipeline/pipeline" },
               { text: "record", link: "/vulkan/pipeline/record" },
+              {
+                text: "layout", items: [
+                  { text: "descriptor", link: "/vulkan/pipeline/layout/descriptor" },
+                  { text: "ubo", link: "/vulkan/pipeline/layout/ubo" },
+                ]
+              },
+              {
+                text: "graphics",
+                link: "/vulkan/pipeline/graphics/",
+                items: [
+                  { text: "renderpass", link: "/vulkan/pipeline/graphics/renderpass" },
+                  { text: "image", link: "/vulkan/pipeline/graphics/image" },
+                  { text: "vertex", link: "/vulkan/pipeline/graphics/vertex" },
+                ]
+              },
             ],
           },
           {

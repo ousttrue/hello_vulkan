@@ -200,8 +200,9 @@ void main_loop(const std::function<bool()> &runLoop,
       vertexBuffer.bindings, vertexBuffer.attributes, {}, {},
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>>
-      backbuffers(swapchain.images.size());
+  vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
+      device, renderPass, swapchain.createInfo.imageExtent,
+      swapchain.createInfo.imageFormat, swapchain.images);
   std::vector<std::shared_ptr<vuloxr::vk::UniformBuffer<UniformBufferObject>>>
       uniformBuffers(swapchain.images.size());
 
@@ -222,12 +223,11 @@ void main_loop(const std::function<bool()> &runLoop,
       // auto descriptorSet =
       // descriptorSets.descriptorSets[acquired.imageIndex];
       auto cmd = pool.commandBuffers[acquired.imageIndex];
-
-      auto backbuffer = backbuffers[acquired.imageIndex];
-      if (!backbuffer) {
-        auto ubo =
-            std::make_shared<vuloxr::vk::UniformBuffer<UniformBufferObject>>(
-                device);
+      auto backbuffer = &backbuffers[acquired.imageIndex];
+      auto ubo = uniformBuffers[acquired.imageIndex];
+      if (!ubo) {
+        ubo = std::make_shared<vuloxr::vk::UniformBuffer<UniformBufferObject>>(
+            device);
         ubo->memory = physicalDevice.allocForMap(device, ubo->buffer);
         uniformBuffers[acquired.imageIndex] = ubo;
 
@@ -243,12 +243,6 @@ void main_loop(const std::function<bool()> &runLoop,
                     .pImageInfo = &texture.descriptorInfo,
                 },
             }));
-
-        backbuffer =
-            std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
-                device, acquired.image, swapchain.createInfo.imageExtent,
-                swapchain.createInfo.imageFormat, pipeline.renderPass);
-        backbuffers[acquired.imageIndex] = backbuffer;
 
         {
           VkClearValue clear[]{
@@ -269,7 +263,6 @@ void main_loop(const std::function<bool()> &runLoop,
         float time = std::chrono::duration<float, std::chrono::seconds::period>(
                          currentTime - startTime)
                          .count();
-        auto ubo = uniformBuffers[acquired.imageIndex];
         ubo->value.setTime(time, swapchain.createInfo.imageExtent.width,
                            swapchain.createInfo.imageExtent.height);
         ubo->mapWrite();
@@ -287,8 +280,7 @@ void main_loop(const std::function<bool()> &runLoop,
       if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR) {
         vkDeviceWaitIdle(device);
         swapchain.create();
-        backbuffers.clear();
-        backbuffers.resize(swapchain.images.size());
+        backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
         continue;
       }
 

@@ -640,60 +640,6 @@ private:
   }
 };
 
-struct SwapchainFramebufferWithoutDepth {
-  VkDevice device;
-
-  VkImageView imageView = VK_NULL_HANDLE;
-  VkImageViewCreateInfo imageViewCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                     .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                     .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                     .a = VK_COMPONENT_SWIZZLE_IDENTITY},
-      //     colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-      //     colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-      //     colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-      //     colorViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-      .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                           .baseMipLevel = 0,
-                           .levelCount = 1,
-                           .baseArrayLayer = 0,
-                           .layerCount = 1},
-  };
-
-  VkFramebuffer framebuffer = VK_NULL_HANDLE;
-
-  SwapchainFramebufferWithoutDepth(VkDevice _device, VkImage image,
-                                   VkExtent2D extent, VkFormat format,
-                                   VkRenderPass renderPass)
-      : device(_device) {
-
-    this->imageViewCreateInfo.image = image;
-    this->imageViewCreateInfo.format = format;
-    vuloxr::vk::CheckVkResult(vkCreateImageView(
-        this->device, &this->imageViewCreateInfo, nullptr, &this->imageView));
-
-    VkImageView attachments[] = {this->imageView};
-    VkFramebufferCreateInfo framebufferInfo{
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = renderPass,
-        .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
-        .pAttachments = attachments,
-        .width = extent.width,
-        .height = extent.height,
-        .layers = 1,
-    };
-    vuloxr::vk::CheckVkResult(vkCreateFramebuffer(device, &framebufferInfo,
-                                                  nullptr, &this->framebuffer));
-  }
-
-  ~SwapchainFramebufferWithoutDepth() {
-    vkDestroyFramebuffer(this->device, this->framebuffer, nullptr);
-    vkDestroyImageView(this->device, this->imageView, nullptr);
-  }
-};
-
 struct SwapchainFramebuffer {
   VkDevice device;
 

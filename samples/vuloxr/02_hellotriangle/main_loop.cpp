@@ -87,8 +87,9 @@ void main_loop(const std::function<bool()> &runLoop,
                      mesh.bindings, mesh.attributes, {}, {},
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>>
-      backbuffers(swapchain.images.size());
+  vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
+      device, renderPass, swapchain.createInfo.imageExtent,
+      swapchain.createInfo.imageFormat, swapchain.images);
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
@@ -99,14 +100,7 @@ void main_loop(const std::function<bool()> &runLoop,
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
     if (res == VK_SUCCESS) {
-      auto backbuffer = backbuffers[acquired.imageIndex];
-      if (!backbuffer) {
-        backbuffer =
-            std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
-                device, acquired.image, swapchain.createInfo.imageExtent,
-                swapchain.createInfo.imageFormat, renderPass);
-        backbuffers[acquired.imageIndex] = backbuffer;
-      }
+      auto backbuffer = &backbuffers[acquired.imageIndex];
 
       // All queue submissions get a fence that CPU will wait
       // on for synchronization purposes.
@@ -142,8 +136,7 @@ void main_loop(const std::function<bool()> &runLoop,
         vuloxr::Logger::Warn("VK_ERROR_OUT_OF_DATE_KHR || VK_SUBOPTIMAL_KHR");
         vkQueueWaitIdle(swapchain.presentQueue);
         swapchain.create();
-        backbuffers.clear();
-        backbuffers.resize(swapchain.images.size());
+        backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
         continue;
       }
       // throw
