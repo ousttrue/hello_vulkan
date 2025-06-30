@@ -15,7 +15,7 @@ struct RenderPassRecording : NonCopyable {
   RenderPassRecording(VkCommandBuffer _commandBuffer,
                       VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
                       VkFramebuffer framebuffer, VkExtent2D extent,
-                      const VkClearValue *clearValues, uint32_t clearValueCount,
+                      std::span<const VkClearValue> clearValues,
                       VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
                       VkCommandBufferUsageFlags flags =
                           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
@@ -31,8 +31,8 @@ struct RenderPassRecording : NonCopyable {
         .renderPass = renderPass,
         .framebuffer = framebuffer,
         .renderArea = {.offset = {0, 0}, .extent = extent},
-        .clearValueCount = clearValueCount,
-        .pClearValues = clearValues,
+        .clearValueCount = static_cast<uint32_t>(std::size(clearValues)),
+        .pClearValues = clearValues.data(),
     };
     vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
                          VK_SUBPASS_CONTENTS_INLINE);

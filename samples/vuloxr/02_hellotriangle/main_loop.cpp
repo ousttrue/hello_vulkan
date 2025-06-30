@@ -114,16 +114,16 @@ void main_loop(const std::function<bool()> &runLoop,
       auto cmd = pool.commandBuffers[index];
 
       {
-        VkClearValue clearValue = {
+        VkClearValue clear[] = {{
             .color =
                 {
                     .float32 = {0.1f, 0.1f, 0.2f, 1.0f},
 
                 },
-        };
+        }};
         vuloxr::vk::RenderPassRecording recording(
             cmd, nullptr, pipeline.renderPass, backbuffer->framebuffer,
-            swapchain.createInfo.imageExtent, &clearValue, 1);
+            swapchain.createInfo.imageExtent, clear);
         mesh.draw(cmd, pipeline);
       }
 

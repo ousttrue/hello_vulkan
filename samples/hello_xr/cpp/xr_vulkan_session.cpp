@@ -1,6 +1,5 @@
 #include "xr_vulkan_session.h"
 #include "CubeScene.h"
-#include <map>
 #include <thread>
 
 #include <vuloxr/vk/buffer.h>
@@ -32,6 +31,7 @@ struct ViewRenderer : vuloxr::NonCopyable {
   };
   std::vector<std::shared_ptr<RenderTarget>> renderTargets;
   vuloxr::vk::SwapchainIsolatedDepthFramebufferList framebuffers;
+  std::vector<Mat4> matrices;
 
   ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
                VkDevice _device, uint32_t queueFamilyIndex,
@@ -92,6 +92,51 @@ struct ViewRenderer : vuloxr::NonCopyable {
     std::swap(this->renderTargets, rhs.renderTargets);
     this->framebuffers = std::move(rhs.framebuffers);
     return *this;
+  }
+
+  void render(uint32_t index, VkRenderPass renderPass,
+              VkPipelineLayout pipelineLayout, VkPipeline pipeline,
+              VkExtent2D extent, std::span<const VkClearValue> clearValues,
+              VkBuffer vertices, VkBuffer indices, uint32_t drawCount) {
+    auto framebuffer = &this->framebuffers[index];
+    auto rt = this->renderTargets[index];
+
+    // Waiting on a not-in-flight command buffer is a no-op
+    rt->execFence.wait();
+    rt->execFence.reset();
+
+    vuloxr::vk::CheckVkResult(vkResetCommandBuffer(rt->commandBuffer, 0));
+
+    {
+      vuloxr::vk::RenderPassRecording recording(
+          rt->commandBuffer, pipelineLayout, renderPass,
+          framebuffer->framebuffer, extent, clearValues);
+
+      vkCmdBindPipeline(rt->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        pipeline);
+
+      // Bind index and vertex buffers
+      vkCmdBindIndexBuffer(rt->commandBuffer, indices, 0, VK_INDEX_TYPE_UINT16);
+      VkDeviceSize offset = 0;
+      vkCmdBindVertexBuffers(rt->commandBuffer, 0, 1, &vertices, &offset);
+
+      // Render each cube
+      for (auto &m : this->matrices) {
+        vkCmdPushConstants(rt->commandBuffer, pipelineLayout,
+                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m), &m.m);
+
+        // Draw the cube.
+        vkCmdDrawIndexed(rt->commandBuffer, drawCount, 1, 0, 0, 0);
+      }
+    }
+
+    VkSubmitInfo submitInfo{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &rt->commandBuffer,
+    };
+    vuloxr::vk::CheckVkResult(
+        vkQueueSubmit(this->queue, 1, &submitInfo, rt->execFence));
   }
 };
 
@@ -222,7 +267,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
     if (frameState.shouldRender == XR_TRUE) {
       if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
                              viewConfigurationType)) {
-        scene.beginFrame();
+        scene.clear();
         for (XrSpace visualizedSpace : scene.spaces) {
           auto [res, location] = vuloxr::xr::locate(
               appSpace, frameState.predictedDisplayTime, visualizedSpace);
@@ -252,58 +297,17 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.height,
           };
 
-          auto cubes =
-              scene.endFrame(projectionLayer.pose, projectionLayer.fov);
+          scene.calcMatrix(projectionLayer.pose, projectionLayer.fov,
+                           renderers[i].matrices);
 
-          auto framebuffer = &renderers[i].framebuffers[index];
-          auto found = renderers[i].renderTargets[index];
-
-          // Waiting on a not-in-flight command buffer is a no-op
-          found->execFence.wait();
-          found->execFence.reset();
-
-          vuloxr::vk::CheckVkResult(
-              vkResetCommandBuffer(found->commandBuffer, 0));
-
-          {
-            VkClearValue clearValues[] = {
-                {.color = clearColor},
-                {.depthStencil = {.depth = 1.0f, .stencil = 0}},
-            };
-            vuloxr::vk::RenderPassRecording recording(
-                found->commandBuffer, pipelineLayout, renderPass,
-                framebuffer->framebuffer, extent, clearValues,
-                std::size(clearValues));
-
-            vkCmdBindPipeline(found->commandBuffer,
-                              VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-
-            // Bind index and vertex buffers
-            vkCmdBindIndexBuffer(found->commandBuffer, indices.buffer, 0,
-                                 VK_INDEX_TYPE_UINT16);
-            VkDeviceSize offset = 0;
-            vkCmdBindVertexBuffers(found->commandBuffer, 0, 1,
-                                   &vertices.buffer.buffer, &offset);
-
-            // Render each cube
-            for (auto &cube : cubes) {
-              vkCmdPushConstants(found->commandBuffer, pipelineLayout,
-                                 VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube),
-                                 &cube.m);
-
-              // Draw the cube.
-              vkCmdDrawIndexed(found->commandBuffer, indices.drawCount, 1, 0, 0,
-                               0);
-            }
-          }
-
-          VkSubmitInfo submitInfo{
-              .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-              .commandBufferCount = 1,
-              .pCommandBuffers = &found->commandBuffer,
+          VkClearValue clearValues[] = {
+              {.color = clearColor},
+              {.depthStencil = {.depth = 1.0f, .stencil = 0}},
           };
-          vuloxr::vk::CheckVkResult(vkQueueSubmit(
-              renderers[i].queue, 1, &submitInfo, found->execFence));
+
+          renderers[i].render(index, renderPass, pipelineLayout, pipeline,
+                              extent, clearValues, vertices.buffer,
+                              indices.buffer, indices.drawCount);
 
           swapchain->EndSwapchain();
         }

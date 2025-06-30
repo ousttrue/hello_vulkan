@@ -69,15 +69,15 @@ void main_loop(const std::function<bool()> &runLoop,
     vkResetCommandBuffer(cmd, 0);
 
     {
-      VkClearValue clearValue = {
+      VkClearValue clear[] = {{
           .color =
               {
                   .float32 = {0.0f, 0.0f, 0.0f, 1.0f},
               },
-      };
+      }};
       vuloxr::vk::RenderPassRecording recording(
           cmd, nullptr, pipeline.renderPass, image->framebuffer,
-          swapchain.createInfo.imageExtent, &clearValue, 1);
+          swapchain.createInfo.imageExtent, clear);
       recording.draw(pipeline.graphicsPipeline, nullptr, 3);
     }
 

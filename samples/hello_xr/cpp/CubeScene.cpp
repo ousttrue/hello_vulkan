@@ -60,10 +60,11 @@ void CubeScene::addSpace(XrSession session, XrReferenceSpaceType spaceType,
   }
 }
 
-void CubeScene::beginFrame() { this->cubes.clear(); }
+void CubeScene::clear() { this->cubes.clear(); }
 
-std::span<const Mat4> CubeScene::endFrame(XrPosef hmdPose, XrFovf fov) {
-  this->matrices.resize(this->cubes.size());
+void CubeScene::calcMatrix(XrPosef hmdPose, XrFovf fov,
+                           std::vector<Mat4> &outMatrices) {
+  outMatrices.resize(this->cubes.size());
   for (int i = 0; i < this->cubes.size(); ++i) {
     auto &cube = this->cubes[i];
 
@@ -84,9 +85,8 @@ std::span<const Mat4> CubeScene::endFrame(XrPosef hmdPose, XrFovf fov) {
     XrMatrix4x4f_CreateTranslationRotationScale(
         &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
 
-    auto &m = this->matrices[i];
+    auto &m = outMatrices[i];
     auto mvp = (XrMatrix4x4f *)&m;
     XrMatrix4x4f_Multiply(mvp, &vp, &model);
   }
-  return this->matrices;
 }

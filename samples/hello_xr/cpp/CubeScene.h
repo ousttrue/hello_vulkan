@@ -64,13 +64,12 @@ constexpr unsigned short c_cubeIndices[] = {
 struct CubeScene : vuloxr::NonCopyable {
   std::vector<XrSpace> spaces;
   std::vector<Cube> cubes;
-  std::vector<Mat4> matrices;
 
   CubeScene(XrSession session);
   ~CubeScene();
   void addSpace(XrSession session, XrReferenceSpaceType spaceType,
                 const XrPosef &pose = {.orientation = {0, 0, 0, 1.0f},
                                        .position = {0, 0, 0}});
-  void beginFrame();
-  std::span<const Mat4> endFrame(XrPosef hmdPose, XrFovf fov);
+  void clear();
+  void calcMatrix(XrPosef hmdPose, XrFovf fov, std::vector<Mat4> &outMatrices);
 };

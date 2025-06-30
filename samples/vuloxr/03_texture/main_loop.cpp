@@ -219,7 +219,8 @@ void main_loop(const std::function<bool()> &runLoop,
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
-      // auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
+      // auto descriptorSet =
+      // descriptorSets.descriptorSets[acquired.imageIndex];
       auto cmd = pool.commandBuffers[acquired.imageIndex];
 
       auto backbuffer = backbuffers[acquired.imageIndex];
@@ -250,11 +251,11 @@ void main_loop(const std::function<bool()> &runLoop,
         backbuffers[acquired.imageIndex] = backbuffer;
 
         {
-          VkClearValue clearValue{
-              .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}};
+          VkClearValue clear[]{
+              {.color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}}}};
           vuloxr::vk::RenderPassRecording recording(
               cmd, pipelineLayout, pipeline.renderPass, backbuffer->framebuffer,
-              swapchain.createInfo.imageExtent, &clearValue, 1, descriptorSet,
+              swapchain.createInfo.imageExtent, clear, descriptorSet,
               VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
           indexBuffer.draw(cmd, pipeline, vertexBuffer.buffer);
