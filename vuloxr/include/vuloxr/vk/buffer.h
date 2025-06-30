@@ -15,12 +15,15 @@ struct Buffer : NonCopyable {
       : device(_device) {
     VkBufferCreateInfo info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
         .size = bufferSize,
         .usage = usage,
         // .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         // .queueFamilyIndexCount = 0,
         // .pQueueFamilyIndices = NULL,
     };
+
     CheckVkResult(vkCreateBuffer(this->device, &info, nullptr, &this->buffer));
   }
   ~Buffer() {
@@ -87,52 +90,6 @@ struct VertexBuffer : NonCopyable {
     this->memory.mapWrite(values.data(), bufferSize);
     this->drawCount = values.size();
   }
-  //
-  //     VkMemoryRequirements mem_reqs;
-  //     vkGetBufferMemoryRequirements(device, buf, &mem_reqs);
-  //
-  //     VkMemoryAllocateInfo alloc_info = {
-  //         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-  //         .pNext = NULL,
-  //         .allocationSize = mem_reqs.size,
-  //         .memoryTypeIndex = 0,
-  //     };
-  //     auto pass =
-  //         memory_type_from_properties(memory_properties,
-  //         mem_reqs.memoryTypeBits,
-  //                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-  //                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-  //                                     &alloc_info.memoryTypeIndex);
-  //     assert(pass && "No mappable, coherent memory");
-  //     vuloxr::vk::CheckVkResult(
-  //         vkAllocateMemory(device, &alloc_info, NULL, &this->mem));
-  //     this->buffer_info.range = mem_reqs.size;
-  //     this->buffer_info.offset = 0;
-  //
-  //     uint8_t *pData;
-  //     vuloxr::vk::CheckVkResult(
-  //         vkMapMemory(device, this->mem, 0, mem_reqs.size, 0, (void
-  //         **)&pData));
-  //     memcpy(pData, vertexData, dataSize);
-  //     vkUnmapMemory(device, this->mem);
-  //
-  //     vuloxr::vk::CheckVkResult(
-  //         vkBindBufferMemory(device, this->buf, this->mem, 0));
-  //
-  //     this->vi_binding[0].binding = 0;
-  //     this->vi_binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  //     this->vi_binding[0].stride = dataStride;
-  //
-  //     this->vi_attribs[0].binding = 0;
-  //     this->vi_attribs[0].location = 0;
-  //     this->vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  //     this->vi_attribs[0].offset = 0;
-  //     this->vi_attribs[1].binding = 0;
-  //     this->vi_attribs[1].location = 1;
-  //     this->vi_attribs[1].format = use_texture ? VK_FORMAT_R32G32_SFLOAT :
-  //     VK_FORMAT_R32G32B32A32_SFLOAT; this->vi_attribs[1].offset = 16;
-  //   }
-  // };
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -194,8 +151,22 @@ struct DepthImage : NonCopyable {
   VkDevice device = VK_NULL_HANDLE;
   VkImage image = VK_NULL_HANDLE;
   // Create a D32 depthbuffer
+  //     VkImageTiling tiling;
+  //     if (props.linearTilingFeatures &
+  //         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+  //       tiling = VK_IMAGE_TILING_LINEAR;
+  //     } else if (props.optimalTilingFeatures &
+  //                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+  //       tiling = VK_IMAGE_TILING_OPTIMAL;
+  //     } else {
+  //       /* Try other depth formats? */
+  //       std::cout << "depth_format " << depth_format << " Unsupported.\n";
+  //       exit(-1);
+  //     }
   VkImageCreateInfo imageInfo{
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
       .imageType = VK_IMAGE_TYPE_2D,
       // .format = depthFormat,
       // .extent =
@@ -210,14 +181,11 @@ struct DepthImage : NonCopyable {
       .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .queueFamilyIndexCount = 0,
+      .pQueueFamilyIndices = NULL,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
   Memory memory;
-  // VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-  // VkDeviceMemory depthMemory{VK_NULL_HANDLE};
-  // VkDevice m_vkDevice{VK_NULL_HANDLE};
-  // VkImage depthImage{VK_NULL_HANDLE};
 
   DepthImage() {}
   DepthImage(VkDevice _device, VkExtent2D size, VkFormat depthFormat,
@@ -233,28 +201,6 @@ struct DepthImage : NonCopyable {
     this->imageInfo.samples = sampleCount;
     CheckVkResult(
         vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
-    // if (SetDebugUtilsObjectNameEXT(
-    //         device, VK_OBJECT_TYPE_IMAGE, (uint64_t)ptr->depthImage,
-    //         "hello_xr fallback depth image") != VK_SUCCESS) {
-    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    // }
-
-    // VkMemoryRequirements memRequirements;
-    // vkGetImageMemoryRequirements(_device, image, &memRequirements);
-    // this->memory = std::make_shared<DeviceMemory>(this->device,
-    // physicalDevice,
-    //                                               memRequirements,
-    //                                               properties);
-
-    // auto memAllocator = MemoryAllocator::Create(physicalDevice, device);
-    // ptr->depthMemory = memAllocator->Allocate( ptr->depthImage,
-    // VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT); if (SetDebugUtilsObjectNameEXT(
-    //         device, VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)ptr->depthMemory,
-    //         "hello_xr fallback depth image memory") != VK_SUCCESS) {
-    //   throw std::runtime_error("SetDebugUtilsObjectNameEXT");
-    // }
-    // VKO_CHECK(vkBindImageMemory(this->device, this->image, *this->memory,
-    // 0));
   }
   ~DepthImage() {
     if (this->image != VK_NULL_HANDLE) {
@@ -276,94 +222,6 @@ struct DepthImage : NonCopyable {
     return *this;
   }
 };
-// struct DepthImage {
-//   VkDevice device;
-//   VkFormat format;
-//   VkImage image = VK_NULL_HANDLE;
-//   VkDeviceMemory mem = VK_NULL_HANDLE;
-//   VkImageView view = VK_NULL_HANDLE;
-//
-//   DepthImage(VkPhysicalDevice physicalDevice,
-//              const VkPhysicalDeviceMemoryProperties &memory_properties,
-//              VkDevice _device, uint32_t width, uint32_t height,
-//              VkFormat depth_format)
-//       : device(_device), format(depth_format) {
-//     VkFormatProperties props;
-//     vkGetPhysicalDeviceFormatProperties(physicalDevice, depth_format,
-//     &props);
-//
-//     VkImageTiling tiling;
-//     if (props.linearTilingFeatures &
-//         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-//       tiling = VK_IMAGE_TILING_LINEAR;
-//     } else if (props.optimalTilingFeatures &
-//                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
-//       tiling = VK_IMAGE_TILING_OPTIMAL;
-//     } else {
-//       /* Try other depth formats? */
-//       std::cout << "depth_format " << depth_format << " Unsupported.\n";
-//       exit(-1);
-//     }
-//
-//     VkImageCreateInfo image_info = {
-//         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-//         .pNext = NULL,
-//         .flags = 0,
-//         .imageType = VK_IMAGE_TYPE_2D,
-//         .format = depth_format,
-//         .extent =
-//             {
-//                 .width = static_cast<uint32_t>(width),
-//                 .height = static_cast<uint32_t>(height),
-//                 .depth = 1,
-//             },
-//         .mipLevels = 1,
-//         .arrayLayers = 1,
-//         .samples = NUM_SAMPLES,
-//         .tiling = tiling,
-//         .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-//         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-//         .queueFamilyIndexCount = 0,
-//         .pQueueFamilyIndices = NULL,
-//         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-//     };
-//     /* Create image */
-//     vuloxr::vk::CheckVkResult(
-//         vkCreateImage(this->device, &image_info, NULL, &this->image));
-//
-//     VkMemoryRequirements mem_reqs;
-//     vkGetImageMemoryRequirements(this->device, this->image, &mem_reqs);
-//
-//     VkMemoryAllocateInfo mem_alloc = {
-//         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-//         .pNext = NULL,
-//         .allocationSize = mem_reqs.size,
-//         .memoryTypeIndex = 0,
-//     };
-//
-//     /* Use the memory properties to determine the type of memory required */
-//     auto pass = memory_type_from_properties(
-//         memory_properties, mem_reqs.memoryTypeBits,
-//         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &mem_alloc.memoryTypeIndex);
-//     assert(pass);
-//
-//     /* Allocate memory */
-//     vuloxr::vk::CheckVkResult(
-//         vkAllocateMemory(this->device, &mem_alloc, NULL, &this->mem));
-//
-//     /* Bind memory */
-//     vuloxr::vk::CheckVkResult(
-//         vkBindImageMemory(this->device, this->image, this->mem, 0));
-//
-//   }
-//   ~DepthImage() {
-//     vkDestroyImageView(this->device, this->view, NULL);
-//     vkFreeMemory(this->device, this->mem, NULL);
-//     vkDestroyImage(this->device, this->image, NULL);
-//   }
-//   DepthImage(const DepthImage &) = delete;
-//   DepthImage &operator=(const DepthImage &) = delete;
-// };
 
 struct Texture : NonCopyable {
   VkDevice device;
@@ -381,6 +239,18 @@ struct Texture : NonCopyable {
   Texture(VkDevice _device, uint32_t width, uint32_t height)
       : device(_device), memory(_device) {
 
+    //     VkImageTiling tiling;
+    //     if (props.linearTilingFeatures &
+    //         VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+    //       tiling = VK_IMAGE_TILING_LINEAR;
+    //     } else if (props.optimalTilingFeatures &
+    //                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+    //       tiling = VK_IMAGE_TILING_OPTIMAL;
+    //     } else {
+    //       /* Try other depth formats? */
+    //       std::cout << "depth_format " << depth_format << " Unsupported.\n";
+    //       exit(-1);
+    //     }
     VkImageCreateInfo imageInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .flags = 0,
@@ -395,6 +265,7 @@ struct Texture : NonCopyable {
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
+
     CheckVkResult(
         vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
   }
