@@ -527,6 +527,31 @@ struct SwapchainIsolatedDepthFramebufferList {
     createFramebuffers(images);
   }
 
+  SwapchainIsolatedDepthFramebufferList(
+      SwapchainIsolatedDepthFramebufferList &&rhs)
+      : physicalDevice(rhs.physicalDevice) {
+    this->device = rhs.device;
+    this->renderPass = rhs.renderPass;
+    this->extent = rhs.extent;
+    this->format = rhs.format;
+    this->depthFormat = rhs.depthFormat;
+    this->sampleCountFlagBits = rhs.sampleCountFlagBits;
+    std::swap(this->framebuffers, rhs.framebuffers);
+  }
+
+  SwapchainIsolatedDepthFramebufferList &
+  operator=(SwapchainIsolatedDepthFramebufferList &&rhs) {
+    this->physicalDevice = rhs.physicalDevice;
+    this->device = rhs.device;
+    this->renderPass = rhs.renderPass;
+    this->extent = rhs.extent;
+    this->format = rhs.format;
+    this->depthFormat = rhs.depthFormat;
+    this->sampleCountFlagBits = rhs.sampleCountFlagBits;
+    std::swap(this->framebuffers, rhs.framebuffers);
+    return *this;
+  }
+
   const Framebuffer &operator[](uint32_t index) const {
     return this->framebuffers[index];
   }

@@ -27,21 +27,21 @@ struct ViewRenderer : vuloxr::NonCopyable {
   VkCommandPool commandPool = VK_NULL_HANDLE;
 
   struct RenderTarget {
-    std::shared_ptr<vuloxr::vk::SwapchainFramebuffer> framebuffer;
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     vuloxr::vk::Fence execFence;
   };
-  std::vector<std::shared_ptr<RenderTarget>> framebuffers;
-
-  // ViewRenderer() {}
+  std::vector<std::shared_ptr<RenderTarget>> renderTargets;
+  vuloxr::vk::SwapchainIsolatedDepthFramebufferList framebuffers;
 
   ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
                VkDevice _device, uint32_t queueFamilyIndex,
-               std::span<const XrSwapchainImageVulkan2KHR> images,
-               VkExtent2D extent, VkFormat colorFormat, VkFormat depthFormat,
+               std::span<VkImage> images, VkExtent2D extent,
+               VkFormat colorFormat, VkFormat depthFormat,
                VkSampleCountFlagBits sampleCountFlagBits,
                VkRenderPass renderPass)
-      : device(_device), framebuffers(images.size()) {
+      : device(_device), renderTargets(images.size()),
+        framebuffers(physicalDevice, _device, renderPass, extent, colorFormat,
+                     depthFormat, sampleCountFlagBits, images) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
@@ -53,12 +53,9 @@ struct ViewRenderer : vuloxr::NonCopyable {
                                                   nullptr, &this->commandPool));
 
     for (int index = 0; index < images.size(); ++index) {
-      auto found = std::make_shared<RenderTarget>();
+      auto rt = std::make_shared<RenderTarget>();
 
-      found->execFence = vuloxr::vk::Fence(this->device, true);
-      found->framebuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-          physicalDevice, this->device, images[index].image, extent,
-          colorFormat, renderPass, depthFormat, sampleCountFlagBits);
+      rt->execFence = vuloxr::vk::Fence(this->device, true);
 
       VkCommandBufferAllocateInfo cmd{
           .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -66,46 +63,25 @@ struct ViewRenderer : vuloxr::NonCopyable {
           .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
           .commandBufferCount = 1,
       };
-      // VkCommandBuffer commandBuffer;
       vuloxr::vk::CheckVkResult(
-          vkAllocateCommandBuffers(this->device, &cmd, &found->commandBuffer));
+          vkAllocateCommandBuffers(this->device, &cmd, &rt->commandBuffer));
 
-      this->framebuffers[index] = found;
-
-      {
-        vuloxr::vk::CommandScope(found->commandBuffer)
-            .transitionDepthLayout(
-                found->framebuffer->depth.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-      }
-
-      VkSubmitInfo submitInfo{
-          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-          .commandBufferCount = 1,
-          .pCommandBuffers = &found->commandBuffer,
-      };
-      vuloxr::vk::CheckVkResult(
-          vkQueueSubmit(this->queue, 1, &submitInfo, nullptr));
-      vkQueueWaitIdle(this->queue);
+      this->renderTargets[index] = rt;
     }
   }
 
   ~ViewRenderer() {
-    for (auto it : this->framebuffers) {
-      vkFreeCommandBuffers(this->device, this->commandPool, 1,
-                           &it->commandBuffer);
-    }
     if (this->commandPool != VK_NULL_HANDLE) {
       vkDestroyCommandPool(this->device, this->commandPool, nullptr);
     }
   }
 
-  ViewRenderer(ViewRenderer &&rhs) {
+  ViewRenderer(ViewRenderer &&rhs) : framebuffers(std::move(rhs.framebuffers)) {
     this->device = rhs.device;
     this->queue = rhs.queue;
     this->commandPool = rhs.commandPool;
     rhs.commandPool = VK_NULL_HANDLE;
-    std::swap(this->framebuffers, rhs.framebuffers);
+    std::swap(this->renderTargets, rhs.renderTargets);
   }
 
   ViewRenderer &operator=(ViewRenderer &&rhs) {
@@ -113,19 +89,10 @@ struct ViewRenderer : vuloxr::NonCopyable {
     this->queue = rhs.queue;
     this->commandPool = rhs.commandPool;
     rhs.commandPool = VK_NULL_HANDLE;
-    std::swap(this->framebuffers, rhs.framebuffers);
+    std::swap(this->renderTargets, rhs.renderTargets);
+    this->framebuffers = std::move(rhs.framebuffers);
     return *this;
   }
-
-  void render(
-      //
-      VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
-      VkPipeline pipeline,
-      //
-      uint32_t index, VkExtent2D extent,
-      //
-      const VkClearColorValue &clearColor, VkBuffer vertices, VkBuffer indices,
-      uint32_t drawCount, std::span<const Mat4> cubes) {}
 };
 
 void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
@@ -219,9 +186,13 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
         swapchain->swapchainCreateInfo.height,
     };
 
+    std::vector<VkImage> images;
+    for (auto image : swapchain->swapchainImages) {
+      images.push_back(image.image);
+    }
     renderers.push_back(ViewRenderer(
-        physicalDevice, device, queueFamilyIndex, swapchain->swapchainImages,
-        extent, viewFormat, depthFormat,
+        physicalDevice, device, queueFamilyIndex, images, extent, viewFormat,
+        depthFormat,
         (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
         renderPass));
   }
@@ -251,8 +222,6 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
     if (frameState.shouldRender == XR_TRUE) {
       if (stereoscope.Locate(session, appSpace, frameState.predictedDisplayTime,
                              viewConfigurationType)) {
-        // XrCompositionLayerProjection
-
         scene.beginFrame();
         for (XrSpace visualizedSpace : scene.spaces) {
           auto [res, location] = vuloxr::xr::locate(
@@ -286,7 +255,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
           auto cubes =
               scene.endFrame(projectionLayer.pose, projectionLayer.fov);
 
-          auto found = renderers[i].framebuffers[index];
+          auto framebuffer = &renderers[i].framebuffers[index];
+          auto found = renderers[i].renderTargets[index];
 
           // Waiting on a not-in-flight command buffer is a no-op
           found->execFence.wait();
@@ -302,7 +272,7 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
             };
             vuloxr::vk::RenderPassRecording recording(
                 found->commandBuffer, pipelineLayout, renderPass,
-                found->framebuffer->framebuffer, extent, clearValues,
+                framebuffer->framebuffer, extent, clearValues,
                 std::size(clearValues));
 
             vkCmdBindPipeline(found->commandBuffer,
@@ -332,8 +302,8 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               .commandBufferCount = 1,
               .pCommandBuffers = &found->commandBuffer,
           };
-          vuloxr::vk::CheckVkResult(
-              vkQueueSubmit(renderers[i].queue, 1, &submitInfo, found->execFence));
+          vuloxr::vk::CheckVkResult(vkQueueSubmit(
+              renderers[i].queue, 1, &submitInfo, found->execFence));
 
           swapchain->EndSwapchain();
         }
