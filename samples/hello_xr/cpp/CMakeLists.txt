@@ -1,12 +1,15 @@
 set(CMAKE_CXX_STANDARD 20)
 
 if(ANDROID)
-  add_library(hello_xr MODULE android_main.cpp xr_vulkan_session.cpp CubeScene.cpp)
+  add_library(hello_xr MODULE android_main.cpp xr_vulkan_session.cpp
+                              CubeScene.cpp)
   target_compile_definitions(hello_xr PUBLIC -DXR_USE_PLATFORM_ANDROID
                                              -DXR_USE_GRAPHICS_API_VULKAN)
   target_link_libraries(
     hello_xr PRIVATE ${ANDROID_LIBRARY} ${ANDROID_LOG_LIBRARY}
-                     android_native_app_glue vulkan)
+                     android_native_app_glue vulkan 
+                     # for DirectXMath
+                     sal)
 else()
   add_executable(hello_xr main.cpp xr_vulkan_session.cpp CubeScene.cpp)
   if(WIN32)
@@ -23,4 +26,6 @@ else()
 
 endif()
 
-target_link_libraries(hello_xr PRIVATE vuloxr OpenXR::openxr_loader shaderc)
+target_link_libraries(hello_xr PRIVATE vuloxr OpenXR::openxr_loader shaderc
+                                       DirectXMath)
+target_compile_options(hello_xr PRIVATE -Wno-defaulted-function-deleted)

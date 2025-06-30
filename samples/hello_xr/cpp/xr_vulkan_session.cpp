@@ -1,5 +1,6 @@
 #include "xr_vulkan_session.h"
 #include "CubeScene.h"
+#include "xr_linear.h"
 #include <thread>
 
 #include <vuloxr/vk/buffer.h>
@@ -31,7 +32,7 @@ struct ViewRenderer : vuloxr::NonCopyable {
   };
   std::vector<std::shared_ptr<RenderTarget>> renderTargets;
   vuloxr::vk::SwapchainIsolatedDepthFramebufferList framebuffers;
-  std::vector<Mat4> matrices;
+  std::vector<DirectX::XMFLOAT4X4> matrices;
 
   ViewRenderer(const vuloxr::vk::PhysicalDevice &physicalDevice,
                VkDevice _device, uint32_t queueFamilyIndex,
@@ -297,7 +298,19 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.height,
           };
 
-          scene.calcMatrix(projectionLayer.pose, projectionLayer.fov,
+          // Compute the view-projection transform. Note all matrixes (including
+          // OpenXR's) are column-major, right-handed.
+          XrMatrix4x4f proj;
+          XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN,
+                                           projectionLayer.fov, 0.05f, 100.0f);
+          XrMatrix4x4f toView;
+          XrMatrix4x4f_CreateFromRigidTransform(&toView, &projectionLayer.pose);
+          XrMatrix4x4f view;
+          XrMatrix4x4f_InvertRigidBody(&view, &toView);
+          XrMatrix4x4f vp;
+          XrMatrix4x4f_Multiply(&vp, &proj, &view);
+
+          scene.calcMatrix(*((DirectX::XMFLOAT4X4 *)&vp),
                            renderers[i].matrices);
 
           VkClearValue clearValues[] = {

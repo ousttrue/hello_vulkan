@@ -1,6 +1,6 @@
 #pragma once
+#include <DirectXMath.h>
 #include <openxr/openxr.h>
-#include <span>
 #include <vector>
 #include <vuloxr.h>
 
@@ -71,5 +71,6 @@ struct CubeScene : vuloxr::NonCopyable {
                 const XrPosef &pose = {.orientation = {0, 0, 0, 1.0f},
                                        .position = {0, 0, 0}});
   void clear();
-  void calcMatrix(XrPosef hmdPose, XrFovf fov, std::vector<Mat4> &outMatrices);
+  void calcMatrix(const DirectX::XMFLOAT4X4 &viewProjection,
+                  std::vector<DirectX::XMFLOAT4X4> &outMatrices);
 };

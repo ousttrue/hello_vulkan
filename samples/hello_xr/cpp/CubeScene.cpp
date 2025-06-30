@@ -1,6 +1,5 @@
 #include "CubeScene.h"
 #include "xr_linear.h"
-// #include <vuloxr/xr/session.h>
 
 inline XrPosef RotateCCWAboutYAxis(float radians, XrVector3f translation) {
   XrPosef t{
@@ -62,31 +61,35 @@ void CubeScene::addSpace(XrSession session, XrReferenceSpaceType spaceType,
 
 void CubeScene::clear() { this->cubes.clear(); }
 
-void CubeScene::calcMatrix(XrPosef hmdPose, XrFovf fov,
-                           std::vector<Mat4> &outMatrices) {
+void CubeScene::calcMatrix(const DirectX::XMFLOAT4X4 &viewProjection,
+                           std::vector<DirectX::XMFLOAT4X4> &outMatrices) {
   outMatrices.resize(this->cubes.size());
+
+  auto vp =
+      DirectX::XMLoadFloat4x4((const DirectX::XMFLOAT4X4 *)&viewProjection);
+
   for (int i = 0; i < this->cubes.size(); ++i) {
     auto &cube = this->cubes[i];
 
-    // Compute the view-projection transform. Note all matrixes
-    // (including OpenXR's) are column-major, right-handed.
-    XrMatrix4x4f proj;
-    XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN, fov, 0.05f,
-                                     100.0f);
-    XrMatrix4x4f toView;
-    XrMatrix4x4f_CreateFromRigidTransform(&toView, &hmdPose);
-    XrMatrix4x4f view;
-    XrMatrix4x4f_InvertRigidBody(&view, &toView);
-    XrMatrix4x4f vp;
-    XrMatrix4x4f_Multiply(&vp, &proj, &view);
-
     // Compute the model-view-projection transform and push it.
-    XrMatrix4x4f model;
-    XrMatrix4x4f_CreateTranslationRotationScale(
-        &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
+    // XrMatrix4x4f model;
+    auto model = DirectX::XMMatrixTransformation(
+        // S
+        DirectX::XMVectorZero(), DirectX::XMQuaternionIdentity(),
+        DirectX::XMLoadFloat3((const DirectX::XMFLOAT3 *)&cube.scale),
+        // R
+        DirectX::XMVectorZero(),
+        DirectX::XMLoadFloat4(
+            (const DirectX::XMFLOAT4 *)&cube.pose.orientation),
+        // T
+        DirectX::XMLoadFloat3((const DirectX::XMFLOAT3 *)&cube.pose.position));
+    // XrMatrix4x4f_CreateTranslationRotationScale(
+    //     &model, &cube.pose.position, &cube.pose.orientation, &cube.scale);
 
-    auto &m = outMatrices[i];
-    auto mvp = (XrMatrix4x4f *)&m;
-    XrMatrix4x4f_Multiply(mvp, &vp, &model);
+    // auto mvp = (XrMatrix4x4f *)&m;
+    // XrMatrix4x4f_Multiply(mvp, &vp, &model);
+    auto mvp = DirectX::XMMatrixMultiply(model, vp);
+
+    DirectX::XMStoreFloat4x4(&outMatrices[i], mvp);
   }
 }

@@ -127,6 +127,15 @@ FetchContent_Declare(
   GIT_TAG v2025.2)
 FetchContent_MakeAvailable(shaderc)
 
+FetchContent_Declare(
+  DirectXMath
+  URL https://github.com/microsoft/DirectXMath/archive/refs/tags/apr2025.zip)
+FetchContent_MakeAvailable(DirectXMath)
+
+# https://raw.githubusercontent.com/dotnet/runtime/main/src/coreclr/pal/inc/rt/sal.h
+add_library(sal INTERFACE)
+target_include_directories(sal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/sal/inc)
+
 #
 # subdirs
 #
