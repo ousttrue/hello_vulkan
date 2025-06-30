@@ -659,6 +659,8 @@ struct Device : NonCopyable {
     VkPipelineStageFlags waitDstStageMask =
         VK_PIPELINE_STAGE_TRANSFER_BIT |
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    // VkPipelineStageFlags pipe_stage_flags =
+    // VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     if (acquireSemaphore != VK_NULL_HANDLE) {
       submitInfo.waitSemaphoreCount = 1;
       submitInfo.pWaitSemaphores = &acquireSemaphore;

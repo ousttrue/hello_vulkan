@@ -219,8 +219,9 @@ void main_loop(const std::function<bool()> &runLoop,
   bool show_another_window = false;
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-  std::vector<std::shared_ptr<vuloxr::vk::SwapchainFramebufferWithoutDepth>> backbuffers(
-      swapchain.images.size());
+  vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
+      device, imvulkan.renderPass, swapchain.createInfo.imageExtent,
+      swapchain.createInfo.imageFormat, swapchain.images);
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
@@ -299,13 +300,7 @@ void main_loop(const std::function<bool()> &runLoop,
       auto acquireSemaphore = flightManager.getOrCreateSemaphore();
       auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
       if (res == VK_SUCCESS) {
-        auto backbuffer = backbuffers[acquired.imageIndex];
-        if (!backbuffer) {
-          backbuffer = std::make_shared<vuloxr::vk::SwapchainFramebufferWithoutDepth>(
-              device, acquired.image, swapchain.createInfo.imageExtent,
-              swapchain.createInfo.imageFormat, imvulkan.renderPass);
-          backbuffers[acquired.imageIndex] = backbuffer;
-        }
+        auto backbuffer = &backbuffers[acquired.imageIndex];
 
         // All queue submissions get a fence that CPU will wait
         // on for synchronization purposes.

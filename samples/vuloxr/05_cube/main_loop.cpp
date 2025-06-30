@@ -7,6 +7,7 @@
 #include <string.h>
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/buffer.h>
+#include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 
@@ -68,6 +69,13 @@ static bool memory_type_from_properties(
  * Structure for tracking information used / created / modified
  * by utility functions.
  */
+
+struct UniformData {
+  VkBuffer buf;
+  VkDeviceMemory mem;
+  VkDescriptorBufferInfo buffer_info;
+};
+
 struct sample_info {
   VkInstance inst;
   std::vector<VkPhysicalDevice> gpus;
@@ -89,19 +97,7 @@ struct sample_info {
   std::vector<swap_chain_buffer> buffers;
   VkSemaphore imageAcquiredSemaphore;
 
-  struct {
-    VkBuffer buf;
-    VkDeviceMemory mem;
-    VkDescriptorBufferInfo buffer_info;
-  } uniform_data;
-
-  struct {
-    VkBuffer buf;
-    VkDeviceMemory mem;
-    VkDescriptorBufferInfo buffer_info;
-  } vertex_buffer;
-  VkVertexInputBindingDescription vi_binding;
-  VkVertexInputAttributeDescription vi_attribs[2];
+  UniformData uniform_data;
 
   glm::mat4 Projection;
   glm::mat4 View;
@@ -124,6 +120,9 @@ struct sample_info {
 
   VkViewport viewport;
   VkRect2D scissor;
+
+  // sample_info(const sample_info &) = delete;
+  sample_info &operator=(const sample_info &) = delete;
 };
 
 static void init_uniform_buffer(struct sample_info &info) {
@@ -199,74 +198,6 @@ static void init_uniform_buffer(struct sample_info &info) {
   info.uniform_data.buffer_info.range = sizeof(info.MVP);
 }
 
-static void init_vertex_buffer(struct sample_info &info, const void *vertexData,
-                               uint32_t dataSize, uint32_t dataStride,
-                               bool use_texture) {
-  VkResult res;
-  bool pass;
-
-  VkBufferCreateInfo buf_info = {};
-  buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  buf_info.pNext = NULL;
-  buf_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-  buf_info.size = dataSize;
-  buf_info.queueFamilyIndexCount = 0;
-  buf_info.pQueueFamilyIndices = NULL;
-  buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  buf_info.flags = 0;
-  res = vkCreateBuffer(info.device, &buf_info, NULL, &info.vertex_buffer.buf);
-  assert(res == VK_SUCCESS);
-
-  VkMemoryRequirements mem_reqs;
-  vkGetBufferMemoryRequirements(info.device, info.vertex_buffer.buf, &mem_reqs);
-
-  VkMemoryAllocateInfo alloc_info = {};
-  alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  alloc_info.pNext = NULL;
-  alloc_info.memoryTypeIndex = 0;
-
-  alloc_info.allocationSize = mem_reqs.size;
-  pass = memory_type_from_properties(info.memory_properties,
-                                     mem_reqs.memoryTypeBits,
-                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                     &alloc_info.memoryTypeIndex);
-  assert(pass && "No mappable, coherent memory");
-
-  res = vkAllocateMemory(info.device, &alloc_info, NULL,
-                         &(info.vertex_buffer.mem));
-  assert(res == VK_SUCCESS);
-  info.vertex_buffer.buffer_info.range = mem_reqs.size;
-  info.vertex_buffer.buffer_info.offset = 0;
-
-  uint8_t *pData;
-  res = vkMapMemory(info.device, info.vertex_buffer.mem, 0, mem_reqs.size, 0,
-                    (void **)&pData);
-  assert(res == VK_SUCCESS);
-
-  memcpy(pData, vertexData, dataSize);
-
-  vkUnmapMemory(info.device, info.vertex_buffer.mem);
-
-  res = vkBindBufferMemory(info.device, info.vertex_buffer.buf,
-                           info.vertex_buffer.mem, 0);
-  assert(res == VK_SUCCESS);
-
-  info.vi_binding.binding = 0;
-  info.vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  info.vi_binding.stride = dataStride;
-
-  info.vi_attribs[0].binding = 0;
-  info.vi_attribs[0].location = 0;
-  info.vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  info.vi_attribs[0].offset = 0;
-  info.vi_attribs[1].binding = 0;
-  info.vi_attribs[1].location = 1;
-  info.vi_attribs[1].format =
-      use_texture ? VK_FORMAT_R32G32_SFLOAT : VK_FORMAT_R32G32B32A32_SFLOAT;
-  info.vi_attribs[1].offset = 16;
-}
-
 static void init_framebuffers(struct sample_info &info, VkImageView depth_view,
                               VkRenderPass render_pass, bool include_depth) {
   VkResult res;
@@ -296,27 +227,14 @@ static void init_framebuffers(struct sample_info &info, VkImageView depth_view,
   }
 }
 
-static void init_pipeline_cache(struct sample_info &info) {
-  VkResult res;
-
-  VkPipelineCacheCreateInfo pipelineCache;
-  pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-  pipelineCache.pNext = NULL;
-  pipelineCache.initialDataSize = 0;
-  pipelineCache.pInitialData = NULL;
-  pipelineCache.flags = 0;
-  res = vkCreatePipelineCache(info.device, &pipelineCache, NULL,
-                              &info.pipelineCache);
-  assert(res == VK_SUCCESS);
-}
-
 static void
-init_pipeline(struct sample_info &info, VkRenderPass render_pass,
+init_pipeline(struct sample_info &info,
+              std::span<const VkVertexInputBindingDescription> bindings,
+              std::span<const VkVertexInputAttributeDescription> attributes,
+              VkRenderPass render_pass,
               const VkPipelineDepthStencilStateCreateInfo &ds,
               const std::vector<VkPipelineShaderStageCreateInfo> &shaderStages,
               VkBool32 include_vi = true) {
-  VkResult res;
-
   VkDynamicState dynamicStateEnables[2]; // Viewport + Scissor
   VkPipelineDynamicStateCreateInfo dynamicState = {};
   memset(dynamicStateEnables, 0, sizeof dynamicStateEnables);
@@ -331,10 +249,10 @@ init_pipeline(struct sample_info &info, VkRenderPass render_pass,
   if (include_vi) {
     vi.pNext = NULL;
     vi.flags = 0;
-    vi.vertexBindingDescriptionCount = 1;
-    vi.pVertexBindingDescriptions = &info.vi_binding;
-    vi.vertexAttributeDescriptionCount = 2;
-    vi.pVertexAttributeDescriptions = info.vi_attribs;
+    vi.vertexBindingDescriptionCount = bindings.size();
+    vi.pVertexBindingDescriptions = bindings.data();
+    vi.vertexAttributeDescriptionCount = attributes.size();
+    vi.pVertexAttributeDescriptions = attributes.data();
   }
   VkPipelineInputAssemblyStateCreateInfo ia;
   ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -448,9 +366,8 @@ init_pipeline(struct sample_info &info, VkRenderPass render_pass,
   pipeline.renderPass = render_pass;
   pipeline.subpass = 0;
 
-  res = vkCreateGraphicsPipelines(info.device, info.pipelineCache, 1, &pipeline,
-                                  NULL, &info.pipeline);
-  assert(res == VK_SUCCESS);
+  vuloxr::vk::CheckVkResult(vkCreateGraphicsPipelines(
+      info.device, info.pipelineCache, 1, &pipeline, NULL, &info.pipeline));
 }
 
 static VkFormat depthFormat() {
@@ -484,7 +401,7 @@ void main_loop(const std::function<bool()> &runLoop,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *window) {
 
-  struct sample_info info = {
+  sample_info info = {
       .inst = instance,
       .gpus = {physicalDevice},
       .device = device,
@@ -616,9 +533,34 @@ void main_loop(const std::function<bool()> &runLoop,
       device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
 
   init_framebuffers(info, depth_view, render_pass, true);
-  init_vertex_buffer(info, g_vb_solid_face_colors_Data,
-                     sizeof(g_vb_solid_face_colors_Data),
-                     sizeof(g_vb_solid_face_colors_Data[0]), false);
+
+  vuloxr::vk::VertexBuffer vertex_buffer{
+      .bindings =
+          {
+              {
+                  .binding = 0,
+                  .stride = sizeof(Vertex),
+                  .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+              },
+          },
+      .attributes = {
+          // describes position
+          {
+              .location = 0,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+              .offset = 0,
+          },
+          // describes color
+          {
+              .location = 1,
+              .binding = 0,
+              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+              .offset = 16,
+          },
+      }};
+  vertex_buffer.allocate(physicalDevice, device,
+                         std::span<const Vertex>(g_vb_solid_face_colors_Data));
 
   descriptor.update(0, std::span<const vuloxr::vk::DescriptorUpdateInfo>({
                            vuloxr::vk::DescriptorUpdateInfo{
@@ -627,8 +569,18 @@ void main_loop(const std::function<bool()> &runLoop,
                            },
                        }));
 
-  init_pipeline_cache(info);
-  init_pipeline(info, render_pass, depthstencil,
+  VkPipelineCacheCreateInfo pipelineCache{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .initialDataSize = 0,
+      .pInitialData = NULL,
+  };
+  vuloxr::vk::CheckVkResult(vkCreatePipelineCache(info.device, &pipelineCache,
+                                                  NULL, &info.pipelineCache));
+
+  init_pipeline(info, vertex_buffer.bindings, vertex_buffer.attributes,
+                render_pass, depthstencil,
                 {
                     vs.pipelineShaderStageCreateInfo,
                     fs.pipelineShaderStageCreateInfo,
@@ -666,6 +618,11 @@ void main_loop(const std::function<bool()> &runLoop,
       vkCreateCommandPool(info.device, &cmd_pool_info, NULL, &cmd_pool));
 
   while (runLoop()) {
+    // Get the index of the next available swapchain image:
+    vuloxr::vk::CheckVkResult(vkAcquireNextImageKHR(
+        info.device, info.swap_chain, UINT64_MAX, imageAcquiredSemaphore,
+        VK_NULL_HANDLE, &info.current_buffer));
+
     VkCommandBuffer cmd;
     VkCommandBufferAllocateInfo cmdInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -677,110 +634,38 @@ void main_loop(const std::function<bool()> &runLoop,
     vuloxr::vk::CheckVkResult(
         vkAllocateCommandBuffers(info.device, &cmdInfo, &cmd));
 
-    // Get the index of the next available swapchain image:
-    vuloxr::vk::CheckVkResult(vkAcquireNextImageKHR(
-        info.device, info.swap_chain, UINT64_MAX, imageAcquiredSemaphore,
-        VK_NULL_HANDLE, &info.current_buffer));
-    // TODO: Deal with the VK_SUBOPTIMAL_KHR and VK_ERROR_OUT_OF_DATE_KHR
-    // return codes
+    {
+      vuloxr::vk::RenderPassRecording recording(
+          cmd, info.pipeline_layout, render_pass,
+          info.framebuffers[info.current_buffer],
+          swapchain.createInfo.imageExtent, clear_values,
+          descriptor.descriptorSets[0],
+          VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
-    VkCommandBufferBeginInfo cmd_buf_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      vertex_buffer.draw(cmd, info.pipeline);
+    }
+
+    VkFenceCreateInfo fenceInfo{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .pNext = NULL,
         .flags = 0,
-        .pInheritanceInfo = NULL,
     };
-    vuloxr::vk::CheckVkResult(vkBeginCommandBuffer(cmd, &cmd_buf_info));
-
-    VkRenderPassBeginInfo rp_begin;
-    rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rp_begin.pNext = NULL;
-    rp_begin.renderPass = render_pass;
-    rp_begin.framebuffer = info.framebuffers[info.current_buffer];
-    rp_begin.renderArea.offset.x = 0;
-    rp_begin.renderArea.offset.y = 0;
-    rp_begin.renderArea.extent.width = info.width;
-    rp_begin.renderArea.extent.height = info.height;
-    rp_begin.clearValueCount = 2;
-    rp_begin.pClearValues = clear_values;
-
-    vkCmdBeginRenderPass(cmd, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, info.pipeline);
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            info.pipeline_layout, 0, 1,
-                            &descriptor.descriptorSets[0], 0, NULL);
-
-    const VkDeviceSize offsets[1] = {0};
-    vkCmdBindVertexBuffers(cmd, 0, 1, &info.vertex_buffer.buf, offsets);
-
-    info.viewport.height = (float)info.height;
-    info.viewport.width = (float)info.width;
-    info.viewport.minDepth = (float)0.0f;
-    info.viewport.maxDepth = (float)1.0f;
-    info.viewport.x = 0;
-    info.viewport.y = 0;
-    vkCmdSetViewport(cmd, 0, NUM_VIEWPORTS, &info.viewport);
-
-    info.scissor.extent.width = info.width;
-    info.scissor.extent.height = info.height;
-    info.scissor.offset.x = 0;
-    info.scissor.offset.y = 0;
-    vkCmdSetScissor(cmd, 0, NUM_SCISSORS, &info.scissor);
-
-    vkCmdDraw(cmd, 12 * 3, 1, 0, 0);
-    vkCmdEndRenderPass(cmd);
-    vuloxr::vk::CheckVkResult(vkEndCommandBuffer(cmd));
-    const VkCommandBuffer cmd_bufs[] = {cmd};
-    VkFenceCreateInfo fenceInfo;
     VkFence drawFence;
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.pNext = NULL;
-    fenceInfo.flags = 0;
     vkCreateFence(info.device, &fenceInfo, NULL, &drawFence);
 
-    VkPipelineStageFlags pipe_stage_flags =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    VkSubmitInfo submit_info[1] = {};
-    submit_info[0].pNext = NULL;
-    submit_info[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info[0].waitSemaphoreCount = 1;
-    submit_info[0].pWaitSemaphores = &imageAcquiredSemaphore;
-    submit_info[0].pWaitDstStageMask = &pipe_stage_flags;
-    submit_info[0].commandBufferCount = 1;
-    submit_info[0].pCommandBuffers = cmd_bufs;
-    submit_info[0].signalSemaphoreCount = 0;
-    submit_info[0].pSignalSemaphores = NULL;
-
-    /* Queue the command buffer for execution */
-    vuloxr::vk::CheckVkResult(
-        vkQueueSubmit(info.graphics_queue, 1, submit_info, drawFence));
-
-    /* Now present the image in the window */
-
-    VkPresentInfoKHR present;
-    present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present.pNext = NULL;
-    present.swapchainCount = 1;
-    present.pSwapchains = &info.swap_chain;
-    present.pImageIndices = &info.current_buffer;
-    present.pWaitSemaphores = NULL;
-    present.waitSemaphoreCount = 0;
-    present.pResults = NULL;
+    device.submit(cmd, imageAcquiredSemaphore, {}, drawFence);
 
     /* Make sure command buffer is finished before presenting */
     VkResult res;
     do {
       res = vkWaitForFences(info.device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
     } while (res == VK_TIMEOUT);
+    assert(res == VK_SUCCESS);
 
-    assert(res == VK_SUCCESS);
-    res = vkQueuePresentKHR(info.present_queue, &present);
-    assert(res == VK_SUCCESS);
+    vuloxr::vk::CheckVkResult(swapchain.present(info.current_buffer));
 
     vkDestroyFence(info.device, drawFence, NULL);
-
-    vkFreeCommandBuffers(info.device, cmd_pool, 1, cmd_bufs);
+    vkFreeCommandBuffers(info.device, cmd_pool, 1, &cmd);
   }
 
   vkDestroySemaphore(info.device, imageAcquiredSemaphore, NULL);
@@ -788,9 +673,6 @@ void main_loop(const std::function<bool()> &runLoop,
   vkDestroyPipeline(info.device, info.pipeline, NULL);
 
   vkDestroyPipelineCache(info.device, info.pipelineCache, NULL);
-
-  vkDestroyBuffer(info.device, info.vertex_buffer.buf, NULL);
-  vkFreeMemory(info.device, info.vertex_buffer.mem, NULL);
 
   for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
     vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);

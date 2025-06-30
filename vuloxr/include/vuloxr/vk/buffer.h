@@ -17,6 +17,9 @@ struct Buffer : NonCopyable {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = bufferSize,
         .usage = usage,
+        // .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        // .queueFamilyIndexCount = 0,
+        // .pQueueFamilyIndices = NULL,
     };
     CheckVkResult(vkCreateBuffer(this->device, &info, nullptr, &this->buffer));
   }
@@ -84,6 +87,52 @@ struct VertexBuffer : NonCopyable {
     this->memory.mapWrite(values.data(), bufferSize);
     this->drawCount = values.size();
   }
+  //
+  //     VkMemoryRequirements mem_reqs;
+  //     vkGetBufferMemoryRequirements(device, buf, &mem_reqs);
+  //
+  //     VkMemoryAllocateInfo alloc_info = {
+  //         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+  //         .pNext = NULL,
+  //         .allocationSize = mem_reqs.size,
+  //         .memoryTypeIndex = 0,
+  //     };
+  //     auto pass =
+  //         memory_type_from_properties(memory_properties,
+  //         mem_reqs.memoryTypeBits,
+  //                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+  //                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+  //                                     &alloc_info.memoryTypeIndex);
+  //     assert(pass && "No mappable, coherent memory");
+  //     vuloxr::vk::CheckVkResult(
+  //         vkAllocateMemory(device, &alloc_info, NULL, &this->mem));
+  //     this->buffer_info.range = mem_reqs.size;
+  //     this->buffer_info.offset = 0;
+  //
+  //     uint8_t *pData;
+  //     vuloxr::vk::CheckVkResult(
+  //         vkMapMemory(device, this->mem, 0, mem_reqs.size, 0, (void
+  //         **)&pData));
+  //     memcpy(pData, vertexData, dataSize);
+  //     vkUnmapMemory(device, this->mem);
+  //
+  //     vuloxr::vk::CheckVkResult(
+  //         vkBindBufferMemory(device, this->buf, this->mem, 0));
+  //
+  //     this->vi_binding[0].binding = 0;
+  //     this->vi_binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  //     this->vi_binding[0].stride = dataStride;
+  //
+  //     this->vi_attribs[0].binding = 0;
+  //     this->vi_attribs[0].location = 0;
+  //     this->vi_attribs[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  //     this->vi_attribs[0].offset = 0;
+  //     this->vi_attribs[1].binding = 0;
+  //     this->vi_attribs[1].location = 1;
+  //     this->vi_attribs[1].format = use_texture ? VK_FORMAT_R32G32_SFLOAT :
+  //     VK_FORMAT_R32G32B32A32_SFLOAT; this->vi_attribs[1].offset = 16;
+  //   }
+  // };
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline) {
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -334,7 +383,7 @@ struct Texture : NonCopyable {
 
     VkImageCreateInfo imageInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .flags = VK_SHARING_MODE_EXCLUSIVE,
+        .flags = 0,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = VK_FORMAT_R8G8B8A8_SRGB,
         .extent = {.width = width, .height = height, .depth = 1},
