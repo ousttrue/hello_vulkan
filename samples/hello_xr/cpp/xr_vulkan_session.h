@@ -3,12 +3,13 @@
 #include <openxr/openxr.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_core.h>
+#include <vuloxr/vk.h>
 
 void xr_vulkan_session(
     const std::function<bool(bool)> &runLoop, XrInstance instance,
     XrSystemId systemId, XrSession session, XrSpace appSpace,
     //
-    VkFormat viewFormat, VkPhysicalDevice physicalDevice,
+    VkFormat viewFormat, const vuloxr::vk::PhysicalDevice &physicalDevice,
     uint32_t queueFamilyIndex, VkDevice device,
     //
     VkClearColorValue clearColor,
