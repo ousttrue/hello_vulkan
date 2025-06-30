@@ -24,7 +24,6 @@ static_assert(sizeof(FragmentShaderGlsl), "FragmentShaderGlsl");
 struct ViewRenderer {
   VkDevice device;
   VkQueue queue;
-  vuloxr::vk::Pipeline pipeline;
   VkCommandPool commandPool = VK_NULL_HANDLE;
 
   struct RenderTarget {
@@ -34,40 +33,7 @@ struct ViewRenderer {
   };
   std::map<VkImage, RenderTarget> framebufferMap;
 
-  ViewRenderer(
-      VkDevice _device, uint32_t queueFamilyIndex, VkFormat colorFormat,
-      VkFormat depthFormat,
-      std::span<const VkVertexInputBindingDescription> bindings = {},
-      std::span<const VkVertexInputAttributeDescription> attributes = {})
-      : device(_device) {
-
-    // pieline
-    auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
-        device, sizeof(float) * 16);
-    auto [renderPass, depthStencil] = vuloxr::vk::createColorDepthRenderPass(
-        device, colorFormat, depthFormat);
-
-    auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
-    assert(vertexSPIRV.size());
-    auto vs = vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV,
-                                                           "main");
-
-    auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
-    assert(fragmentSPIRV.size());
-    auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
-        device, fragmentSPIRV, "main");
-
-    std::vector<VkPipelineShaderStageCreateInfo> stages = {
-        vs.pipelineShaderStageCreateInfo,
-        fs.pipelineShaderStageCreateInfo,
-    };
-
-    vuloxr::vk::PipelineBuilder builder;
-    this->pipeline =
-        builder.create(device, renderPass, depthStencil, pipelineLayout, stages,
-                       bindings, attributes, {}, {},
-                       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
-
+  ViewRenderer(VkDevice _device, uint32_t queueFamilyIndex) : device(_device) {
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
@@ -88,9 +54,14 @@ struct ViewRenderer {
     vkDestroyCommandPool(this->device, this->commandPool, nullptr);
   }
 
-  void render(const vuloxr::vk::PhysicalDevice &physicalDevice, VkImage image,
-              VkExtent2D extent, VkFormat colorFormat, VkFormat depthFormat,
-              VkSampleCountFlagBits sampleCountFlagBits,
+  void render(const vuloxr::vk::PhysicalDevice &physicalDevice,
+              //
+              VkRenderPass renderPass, VkPipelineLayout pipelineLayout,
+              VkPipeline pipeline,
+              //
+              VkImage image, VkExtent2D extent, VkFormat colorFormat,
+              VkFormat depthFormat, VkSampleCountFlagBits sampleCountFlagBits,
+              //
               const VkClearColorValue &clearColor, VkBuffer vertices,
               VkBuffer indices, uint32_t drawCount,
               std::span<const Mat4> cubes) {
@@ -98,10 +69,8 @@ struct ViewRenderer {
     if (found == this->framebufferMap.end()) {
 
       auto framebuffer = std::make_shared<vuloxr::vk::SwapchainFramebuffer>(
-          physicalDevice, this->device, image, extent, colorFormat,
-          this->pipeline.renderPass, depthFormat, sampleCountFlagBits);
-
-      // ));
+          physicalDevice, this->device, image, extent, colorFormat, renderPass,
+          depthFormat, sampleCountFlagBits);
 
       VkCommandBufferAllocateInfo cmd{
           .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -152,12 +121,12 @@ struct ViewRenderer {
           {.depthStencil = {.depth = 1.0f, .stencil = 0}},
       };
       vuloxr::vk::RenderPassRecording recording(
-          found->second.commandBuffer, this->pipeline.pipelineLayout,
-          this->pipeline.renderPass, found->second.framebuffer->framebuffer,
-          extent, clearValues, std::size(clearValues));
+          found->second.commandBuffer, pipelineLayout, renderPass,
+          found->second.framebuffer->framebuffer, extent, clearValues,
+          std::size(clearValues));
 
       vkCmdBindPipeline(found->second.commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS, this->pipeline);
+                        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
       // Bind index and vertex buffers
       vkCmdBindIndexBuffer(found->second.commandBuffer, indices, 0,
@@ -168,9 +137,9 @@ struct ViewRenderer {
 
       // Render each cube
       for (auto &cube : cubes) {
-        vkCmdPushConstants(
-            found->second.commandBuffer, this->pipeline.pipelineLayout,
-            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube), &cube.m);
+        vkCmdPushConstants(found->second.commandBuffer, pipelineLayout,
+                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(cube),
+                           &cube.m);
 
         // Draw the cube.
         vkCmdDrawIndexed(found->second.commandBuffer, drawCount, 1, 0, 0, 0);
@@ -245,8 +214,34 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
     swapchains.push_back(swapchain);
   }
 
-  ViewRenderer renderer(device, queueFamilyIndex, viewFormat, depthFormat,
-                        vertices.bindings, vertices.attributes);
+  // pieline
+  auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
+      device, sizeof(float) * 16);
+  auto [renderPass, depthStencil] =
+      vuloxr::vk::createColorDepthRenderPass(device, viewFormat, depthFormat);
+
+  auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
+  assert(vertexSPIRV.size());
+  auto vs =
+      vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
+
+  auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
+  assert(fragmentSPIRV.size());
+  auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
+      device, fragmentSPIRV, "main");
+
+  std::vector<VkPipelineShaderStageCreateInfo> stages = {
+      vs.pipelineShaderStageCreateInfo,
+      fs.pipelineShaderStageCreateInfo,
+  };
+
+  vuloxr::vk::PipelineBuilder builder;
+  auto pipeline =
+      builder.create(device, renderPass, depthStencil, pipelineLayout, stages,
+                     vertices.bindings, vertices.attributes, {}, {},
+                     {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
+
+  ViewRenderer renderer(device, queueFamilyIndex);
 
   // mainloop
   vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
@@ -306,7 +301,11 @@ void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
               swapchain->swapchainCreateInfo.height,
           };
           renderer.render(
-              physicalDevice, image.image, extent,
+              physicalDevice,
+              //
+              renderPass, pipelineLayout, pipeline,
+              //
+              image.image, extent,
               (VkFormat)swapchain->swapchainCreateInfo.format, depthFormat,
               (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
               clearColor, vertices.buffer, indices.buffer, indices.drawCount,
