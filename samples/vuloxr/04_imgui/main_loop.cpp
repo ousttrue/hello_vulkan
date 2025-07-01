@@ -220,8 +220,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, imvulkan.renderPass, swapchain.createInfo.imageExtent,
-      swapchain.createInfo.imageFormat, swapchain.images);
+      device, imvulkan.renderPass, swapchain.createInfo.imageFormat);
+  backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());

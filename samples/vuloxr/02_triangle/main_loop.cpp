@@ -45,8 +45,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   // swapchain
   //
   vuloxr::vk::SwapchainNoDepthFramebufferList images(
-      device, renderPass, swapchain.createInfo.imageExtent,
-      swapchain.createInfo.imageFormat, swapchain.images);
+      device, renderPass, swapchain.createInfo.imageFormat);
+  images.reset(swapchain.createInfo.imageExtent, swapchain.images);
 
   vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
