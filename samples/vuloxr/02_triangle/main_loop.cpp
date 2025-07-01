@@ -14,7 +14,7 @@ const char FS[] = {
 #embed "shader.frag"
 };
 
-void main_loop(const std::function<bool()> &runLoop,
+void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
@@ -52,7 +52,7 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
 
-  while (runLoop()) {
+  while (auto state = windowLoopOnce()) {
     auto acquireSemaphore = flightManager.getOrCreateSemaphore();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 

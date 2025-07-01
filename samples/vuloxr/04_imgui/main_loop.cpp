@@ -182,7 +182,7 @@ public:
   }
 };
 
-void main_loop(const std::function<bool()> &runLoop,
+void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
@@ -227,7 +227,7 @@ void main_loop(const std::function<bool()> &runLoop,
                                      swapchain.images.size());
 
   // Main loop
-  while (runLoop()) {
+  while (auto state = windowLoopOnce()) {
     // if (glfw.isIconified()) {
     //   ImGui_ImplGlfw_Sleep(10);
     //   continue;
@@ -287,6 +287,14 @@ void main_loop(const std::function<bool()> &runLoop,
       ImGui::Text("Hello from another window!");
       if (ImGui::Button("Close Me"))
         show_another_window = false;
+      ImGui::End();
+    }
+
+    //
+    {
+      ImGui::Begin("WindowState");
+      ImGui::InputFloat("x", &state->mouse.x);
+      ImGui::InputFloat("y", &state->mouse.y);
       ImGui::End();
     }
 

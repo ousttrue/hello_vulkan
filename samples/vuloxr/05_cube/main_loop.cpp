@@ -47,7 +47,7 @@ const char FS[] = {
     , 0, 0, 0, 0,
 };
 
-void main_loop(const std::function<bool()> &runLoop,
+void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
@@ -171,7 +171,7 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::CheckVkResult(
       vkCreateCommandPool(device, &cmd_pool_info, NULL, &cmd_pool));
 
-  while (runLoop()) {
+  while (auto state = windowLoopOnce()) {
     uint32_t imageIndex;
     vuloxr::vk::CheckVkResult(vkAcquireNextImageKHR(
         device, swapchain, UINT64_MAX, imageAcquiredSemaphore, VK_NULL_HANDLE,

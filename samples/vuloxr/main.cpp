@@ -1,5 +1,5 @@
 #include "main_loop.h"
-#include <vuloxr/glfw.h>
+#include <vuloxr/gui/glfw.h>
 
 auto NAME = "vuloxr";
 
@@ -16,14 +16,14 @@ int main(int argc, char **argv) {
   vuloxr::Logger::Info("## DEBUG ##");
 #endif
 
-  vuloxr::glfw::Glfw glfw;
-  auto window = glfw.createWindow(640, 480, NAME);
+  vuloxr::gui::Glfw glfw;
+  auto window = glfw.createWindow(1024, 768, NAME);
 
   try {
     auto [instance, physicalDevice, device, swapchain] =
         glfw.createVulkan(useDebug);
-    main_loop([&glfw]() { return glfw.newFrame(); }, instance, swapchain,
-              physicalDevice, device, window);
+    main_loop(glfw.makeWindowLoopOnce(), instance, swapchain, physicalDevice,
+              device, window);
   } catch (const std::exception &ex) {
     vuloxr::Logger::Error("%s", ex.what());
   } catch (...) {

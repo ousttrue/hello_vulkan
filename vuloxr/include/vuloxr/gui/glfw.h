@@ -1,5 +1,6 @@
 #pragma once
-#include "vk.h"
+#include "../gui.h"
+#include "../vk.h"
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -9,7 +10,7 @@
 #include "vuloxr.h"
 
 namespace vuloxr {
-namespace glfw {
+namespace gui {
 
 class Glfw {
   GLFWwindow *window = nullptr;
@@ -50,12 +51,34 @@ public:
 
   //     return glfwGetWin32Window(_window);
 
-  bool newFrame() const {
+  std::optional<WindowState> newFrame() const {
     if (glfwWindowShouldClose(this->window)) {
-      return false;
+      return std::nullopt;
     }
     glfwPollEvents();
-    return true;
+    WindowState state;
+
+    int w, h;
+    glfwGetFramebufferSize(this->window, &w, &h);
+    state.width = w;
+    state.height = h;
+
+    double x, y;
+    glfwGetCursorPos(this->window, &x, &y);
+    state.mouse.x = x;
+    state.mouse.y = y;
+    state.mouse.leftDown =
+        glfwGetMouseButton(this->window, GLFW_MOUSE_BUTTON_LEFT);
+    state.mouse.middleDown =
+        glfwGetMouseButton(this->window, GLFW_MOUSE_BUTTON_MIDDLE);
+    state.mouse.rightDown =
+        glfwGetMouseButton(this->window, GLFW_MOUSE_BUTTON_RIGHT);
+
+    return state;
+  }
+
+  WindowLoopOnce makeWindowLoopOnce() const {
+    return std::bind(&Glfw::newFrame, this);
   }
 
   std::tuple<int, int> framebufferSize() const {
@@ -121,5 +144,5 @@ public:
   }
 };
 
-} // namespace glfw
+} // namespace gui
 } // namespace vuloxr
