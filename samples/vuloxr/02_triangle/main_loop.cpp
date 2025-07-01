@@ -48,18 +48,19 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       device, renderPass, swapchain.createInfo.imageFormat);
   images.reset(swapchain.createInfo.imageExtent, swapchain.images);
 
-  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
 
   while (auto state = windowLoopOnce()) {
-    auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+    auto acquireSemaphore = semaphorePool.getOrCreate();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
     auto image = &images[acquired.imageIndex];
 
-    auto [index, flight] = flightManager.sync(acquireSemaphore);
-    auto cmd = pool.commandBuffers[index];
+    semaphorePool.resetFenceAndMakePairSemaphore(image->submitFence,
+                                                 acquireSemaphore);
+    auto cmd = pool.commandBuffers[acquired.imageIndex];
     vkResetCommandBuffer(cmd, 0);
 
     {
@@ -76,9 +77,9 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
     }
 
     vuloxr::vk::CheckVkResult(device.submit(
-        cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
+        cmd, acquireSemaphore, image->submitSemaphore, image->submitFence));
     vuloxr::vk::CheckVkResult(
-        swapchain.present(acquired.imageIndex, flight.submitSemaphore));
+        swapchain.present(acquired.imageIndex, image->submitSemaphore));
   }
 
   vkDeviceWaitIdle(device);

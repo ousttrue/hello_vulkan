@@ -222,7 +222,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
       device, imvulkan.renderPass, swapchain.createInfo.imageFormat);
   backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
-  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
 
@@ -305,21 +305,19 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
     if (!is_minimized) {
 
-      auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+      auto acquireSemaphore = semaphorePool.getOrCreate();
       auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
       if (res == VK_SUCCESS) {
         auto backbuffer = &backbuffers[acquired.imageIndex];
-
-        // All queue submissions get a fence that CPU will wait
-        // on for synchronization purposes.
-        auto [index, flight] = flightManager.sync(acquireSemaphore);
-        auto cmd = pool.commandBuffers[index];
+        semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+                                                     acquireSemaphore);
+        auto cmd = pool.commandBuffers[acquired.imageIndex];
         vkResetCommandBuffer(cmd, 0);
 
         imvulkan.render(cmd, backbuffer->framebuffer,
                         swapchain.createInfo.imageExtent, clear_color,
-                        flight.acquireSemaphore, flight.submitSemaphore,
-                        flight.submitFence, draw_data);
+                        acquireSemaphore, backbuffer->submitSemaphore,
+                        backbuffer->submitFence, draw_data);
 
         const VkPipelineStageFlags waitStage =
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -332,15 +330,15 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
             .commandBufferCount = 1,
             .pCommandBuffers = &cmd,
             .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &flight.submitSemaphore,
+            .pSignalSemaphores = &backbuffer->submitSemaphore,
         };
         vuloxr::vk::CheckVkResult(
-            vkQueueSubmit(device.queue, 1, &info, flight.submitFence));
+            vkQueueSubmit(device.queue, 1, &info, backbuffer->submitFence));
 
         VkPresentInfoKHR present = {
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &flight.submitSemaphore,
+            .pWaitSemaphores = &backbuffer->submitSemaphore,
             .swapchainCount = 1,
             .pSwapchains = &swapchain.swapchain,
             .pImageIndices = &acquired.imageIndex,
@@ -351,7 +349,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       } else if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR) {
         vuloxr::Logger::Error("[RESULT_ERROR_OUTDATED_SWAPCHAIN]");
         vkQueueWaitIdle(swapchain.presentQueue);
-        flightManager.reuseSemaphore(acquireSemaphore);
+        semaphorePool.reuse(acquireSemaphore);
         // TODO:
         // swapchain = {};
         // return true;
@@ -360,7 +358,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         // error ?
         vuloxr::Logger::Error("Unrecoverable swapchain error.\n");
         vkQueueWaitIdle(swapchain.presentQueue);
-        flightManager.reuseSemaphore(acquireSemaphore);
+        semaphorePool.reuse(acquireSemaphore);
         break;
       }
     }

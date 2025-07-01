@@ -206,17 +206,15 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   std::vector<std::shared_ptr<vuloxr::vk::UniformBuffer<UniformBufferObject>>>
       uniformBuffers(swapchain.images.size());
 
-  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
 
   while (auto state = windowLoopOnce()) {
     // * 1. Aquires an image from the swap chain
-    auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+    auto acquireSemaphore = semaphorePool.getOrCreate();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
     if (res == VK_SUCCESS) {
-
-      auto [index, flight] = flightManager.sync(acquireSemaphore);
 
       // * 2. Executes the  buffer with that image (as an attachment in
       // the framebuffer)
@@ -224,6 +222,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       // descriptorSets.descriptorSets[acquired.imageIndex];
       auto cmd = pool.commandBuffers[acquired.imageIndex];
       auto backbuffer = &backbuffers[acquired.imageIndex];
+      semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+                                                   acquireSemaphore);
       auto ubo = uniformBuffers[acquired.imageIndex];
       if (!ubo) {
         ubo = std::make_shared<vuloxr::vk::UniformBuffer<UniformBufferObject>>(
@@ -268,11 +268,12 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         ubo->mapWrite();
       }
 
-      vuloxr::vk::CheckVkResult(device.submit(
-          cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
+      vuloxr::vk::CheckVkResult(device.submit(cmd, acquireSemaphore,
+                                              backbuffer->submitSemaphore,
+                                              backbuffer->submitFence));
 
       // * 3. Returns the image to the swap chain for presentation.
-      res = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
+      res = swapchain.present(acquired.imageIndex, backbuffer->submitSemaphore);
     }
 
     // check if the swap chain is no longer adaquate for presentation

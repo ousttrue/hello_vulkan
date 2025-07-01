@@ -781,5 +781,61 @@ struct Fence : NonCopyable {
   }
 };
 
+struct AcquireSemaphorePool : NonCopyable {
+  VkDevice device;
+
+  std::list<VkSemaphore> semaphores;
+  std::list<VkSemaphore> reusable;
+  std::unordered_map<VkFence, VkSemaphore> fenceSemaphoreMap;
+
+  AcquireSemaphorePool(VkDevice _device) : device(_device) {}
+
+  ~AcquireSemaphorePool() {
+    for (auto semaphore : this->semaphores) {
+      vkDestroySemaphore(this->device, semaphore, nullptr);
+    }
+  }
+
+  VkSemaphore getOrCreate() {
+    if (!this->reusable.empty()) {
+      auto semaphore = this->reusable.front();
+      this->reusable.pop_front();
+      return semaphore;
+    }
+
+    Logger::Verbose("* create acquireSemaphore *");
+    VkSemaphore semaphore;
+    VkSemaphoreCreateInfo semaphoreInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    CheckVkResult(
+        vkCreateSemaphore(this->device, &semaphoreInfo, nullptr, &semaphore));
+    this->semaphores.push_back(semaphore);
+    return semaphore;
+  }
+
+  void reuse(VkSemaphore acquireSemaphore) {
+    this->reusable.push_back(acquireSemaphore);
+  }
+
+  // wait, reset old fence
+  // reuse combined old acquireSemaphore
+  // new pair fence and acquireSemaphore
+  void resetFenceAndMakePairSemaphore(VkFence submitFence,
+                                      VkSemaphore acquireSemaphore) {
+    // block. ensure oldSemaphore be signaled.
+    vkWaitForFences(this->device, 1, &submitFence, true, UINT64_MAX);
+    vkResetFences(this->device, 1, &submitFence);
+
+    auto it = this->fenceSemaphoreMap.find(submitFence);
+    if (it != this->fenceSemaphoreMap.end()) {
+      reuse(it->second);
+      this->fenceSemaphoreMap.erase(it);
+    }
+
+    this->fenceSemaphoreMap.insert({submitFence, acquireSemaphore});
+  }
+};
+
 } // namespace vk
 } // namespace vuloxr

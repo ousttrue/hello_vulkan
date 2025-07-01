@@ -90,22 +90,23 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
       device, renderPass, swapchain.createInfo.imageFormat);
   backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
-  vuloxr::vk::FlightManager flightManager(device, swapchain.images.size());
+  vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
 
   vuloxr::FrameCounter counter;
   while (auto state = windowLoopOnce()) {
-    auto acquireSemaphore = flightManager.getOrCreateSemaphore();
+    auto acquireSemaphore = semaphorePool.getOrCreate();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
     if (res == VK_SUCCESS) {
       auto backbuffer = &backbuffers[acquired.imageIndex];
+      semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+                                                   acquireSemaphore);
 
       // All queue submissions get a fence that CPU will wait
       // on for synchronization purposes.
-      auto [index, flight] = flightManager.sync(acquireSemaphore);
-      auto cmd = pool.commandBuffers[index];
+      auto cmd = pool.commandBuffers[acquired.imageIndex];
 
       {
         VkClearValue clear[] = {{
@@ -121,12 +122,13 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         mesh.draw(cmd, pipeline);
       }
 
-      vuloxr::vk::CheckVkResult(device.submit(
-          cmd, acquireSemaphore, flight.submitSemaphore, flight.submitFence));
+      vuloxr::vk::CheckVkResult(device.submit(cmd, acquireSemaphore,
+                                              backbuffer->submitSemaphore,
+                                              backbuffer->submitFence));
 
-      res = swapchain.present(acquired.imageIndex, flight.submitSemaphore);
+      res = swapchain.present(acquired.imageIndex, backbuffer->submitSemaphore);
     } else {
-      flightManager.reuseSemaphore(acquireSemaphore);
+      semaphorePool.reuse(acquireSemaphore);
     }
 
     if (res == VK_SUCCESS) {
