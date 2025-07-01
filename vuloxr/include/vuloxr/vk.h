@@ -98,20 +98,18 @@ struct Memory : NonCopyable {
   Memory() = default;
   Memory(VkDevice _device, VkDeviceMemory _memory = VK_NULL_HANDLE)
       : device(_device), memory(_memory) {}
-  ~Memory() {
-    if (this->memory != VK_NULL_HANDLE) {
-      vkFreeMemory(this->device, this->memory, nullptr);
-    }
-  }
+  ~Memory() { release(); }
   Memory(Memory &&rhs) {
-    this->device = rhs.device;
+    release();
     this->memory = rhs.memory;
     rhs.memory = VK_NULL_HANDLE;
+    this->device = rhs.device;
   }
   Memory &operator=(Memory &&rhs) {
-    this->device = rhs.device;
+    release();
     this->memory = rhs.memory;
     rhs.memory = VK_NULL_HANDLE;
+    this->device = rhs.device;
     return *this;
   }
   void mapWrite(const void *src, uint32_t srcSize) const {
@@ -119,6 +117,14 @@ struct Memory : NonCopyable {
     CheckVkResult(vkMapMemory(device, memory, 0, srcSize, 0, &dst));
     memcpy(dst, src, srcSize);
     vkUnmapMemory(device, memory);
+  }
+
+private:
+  void release() {
+    if (this->memory != VK_NULL_HANDLE) {
+      vkFreeMemory(this->device, this->memory, nullptr);
+      this->memory = VK_NULL_HANDLE;
+    }
   }
 };
 

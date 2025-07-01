@@ -500,9 +500,236 @@ private:
   }
 };
 
-struct SwapchainSharedDepthFramebufferList {};
+// for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
+//   VkImageViewCreateInfo color_image_view = {
+//       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+//       .pNext = NULL,
+//       .flags = 0,
+//       .image = swapchain.images[i],
+//       .viewType = VK_IMAGE_VIEW_TYPE_2D,
+//       .format = info.format,
+//       .components =
+//           {
+//               .r = VK_COMPONENT_SWIZZLE_R,
+//               .g = VK_COMPONENT_SWIZZLE_G,
+//               .b = VK_COMPONENT_SWIZZLE_B,
+//               .a = VK_COMPONENT_SWIZZLE_A,
+//           },
+//       .subresourceRange =
+//           {
+//               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+//               .baseMipLevel = 0,
+//               .levelCount = 1,
+//               .baseArrayLayer = 0,
+//               .layerCount = 1,
+//           },
+//   };
+//
+//   VkImageView view;
+//   auto res = vkCreateImageView(info.device, &color_image_view, NULL,
+//   &view);
+//
+//   info.buffers.push_back({
+//       .image = color_image_view.image,
+//       .view = view,
+//   });
+//   assert(res == VK_SUCCESS);
+// }
+// info.current_buffer = 0;
+//
+// vuloxr::vk::DepthImage depth(info.device,
+//                              VkExtent2D{
+//                                  .width =
+//                                  static_cast<uint32_t>(info.width), .height
+//                                  = static_cast<uint32_t>(info.height),
+//                              },
+//                              depthFormat(), VK_SAMPLE_COUNT_1_BIT);
+// VkImageViewCreateInfo view_info = {
+//     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+//     .pNext = NULL,
+//     .flags = 0,
+//     .image = depth.image,
+//     .viewType = VK_IMAGE_VIEW_TYPE_2D,
+//     .format = depth.imageInfo.format,
+//     .components =
+//         {
+//             .r = VK_COMPONENT_SWIZZLE_R,
+//             .g = VK_COMPONENT_SWIZZLE_G,
+//             .b = VK_COMPONENT_SWIZZLE_B,
+//             .a = VK_COMPONENT_SWIZZLE_A,
+//         },
+//     .subresourceRange =
+//         {
+//             .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+//             .baseMipLevel = 0,
+//             .levelCount = 1,
+//             .baseArrayLayer = 0,
+//             .layerCount = 1,
+//         },
+// };
+// if (depth.imageInfo.format == VK_FORMAT_D16_UNORM_S8_UINT ||
+//     depth.imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT ||
+//     depth.imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+//   view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+// }
+// depth.memory = physicalDevice.allocForTransfer(device, depth.image);
+// /* Create image view */
+// VkImageView depth_view;
+// vuloxr::vk::CheckVkResult(
+//     vkCreateImageView(info.device, &view_info, NULL, &depth_view));
 
-struct SwapchainIsolatedDepthFramebufferList {
+// static void init_framebuffers(struct sample_info &info, VkImageView
+// depth_view,
+//                               VkRenderPass render_pass, bool include_depth) {
+//   VkResult res;
+//   VkImageView attachments[2];
+//   attachments[1] = depth_view;
+//
+//   VkFramebufferCreateInfo fb_info = {};
+//   fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+//   fb_info.pNext = NULL;
+//   fb_info.renderPass = render_pass;
+//   fb_info.attachmentCount = include_depth ? 2 : 1;
+//   fb_info.pAttachments = attachments;
+//   fb_info.width = info.width;
+//   fb_info.height = info.height;
+//   fb_info.layers = 1;
+//
+//   uint32_t i;
+//
+//   info.framebuffers =
+//       (VkFramebuffer *)malloc(info.swapchainImageCount *
+//       sizeof(VkFramebuffer));
+//
+//   for (i = 0; i < info.swapchainImageCount; i++) {
+//     attachments[0] = info.buffers[i].view;
+//     res =
+//         vkCreateFramebuffer(info.device, &fb_info, NULL,
+//         &info.framebuffers[i]);
+//     assert(res == VK_SUCCESS);
+//   }
+// }
+
+struct SwapchainSharedDepthFramebufferList : NonCopyable {
+  PhysicalDevice physicalDevice;
+  VkDevice device;
+  VkRenderPass renderPass;
+  VkExtent2D extent;
+  VkFormat format;
+  VkFormat depthFormat;
+  VkSampleCountFlagBits sampleCountFlagBits;
+
+  DepthImage depth;
+  VkImageView depthView = VK_NULL_HANDLE;
+
+  struct Framebuffer {
+    VkImageView imageView = VK_NULL_HANDLE;
+    VkFramebuffer framebuffer = VK_NULL_HANDLE;
+  };
+  std::vector<Framebuffer> framebuffers;
+
+  SwapchainSharedDepthFramebufferList(
+      VkPhysicalDevice _physicalDevice, VkDevice _device,
+      VkRenderPass _renderPass, VkExtent2D _extent, VkFormat _format,
+      VkFormat _depthFormat, VkSampleCountFlagBits _sampleCountFlagBits,
+      std::span<const VkImage> images)
+      : physicalDevice(_physicalDevice), device(_device),
+        renderPass(_renderPass), extent(_extent), format(_format),
+        depthFormat(_depthFormat), sampleCountFlagBits(_sampleCountFlagBits) {
+    createFramebuffers(images);
+  }
+
+  ~SwapchainSharedDepthFramebufferList() { releaseFramebuffers(); }
+
+  const Framebuffer &operator[](uint32_t index) const {
+    return this->framebuffers[index];
+  }
+
+private:
+  void createFramebuffers(std::span<const VkImage> images) {
+    this->depth =
+        vuloxr::vk::DepthImage(this->device, this->extent, this->depthFormat,
+                               this->sampleCountFlagBits);
+    this->depth.memory =
+        this->physicalDevice.allocForTransfer(device, this->depth.image);
+
+    VkImageViewCreateInfo depthViewCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = this->depth.image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = this->depthFormat,
+        .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                       .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                       .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+        //     depthViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        //     depthViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        //     depthViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        //     depthViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = 1,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
+    };
+    vuloxr::vk::CheckVkResult(vkCreateImageView(
+        this->device, &depthViewCreateInfo, nullptr, &this->depthView));
+
+    this->framebuffers.resize(images.size());
+    for (int i = 0; i < images.size(); ++i) {
+      auto image = images[i];
+      auto framebuffer = &this->framebuffers[i];
+
+      VkImageViewCreateInfo imageViewCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+          .image = image,
+          .viewType = VK_IMAGE_VIEW_TYPE_2D,
+          .format = this->format,
+          .components = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                         .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                         .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                         .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+          //     colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+          //     colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+          //     colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+          //     colorViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+          .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                               .baseMipLevel = 0,
+                               .levelCount = 1,
+                               .baseArrayLayer = 0,
+                               .layerCount = 1},
+      };
+      vuloxr::vk::CheckVkResult(vkCreateImageView(this->device,
+                                                  &imageViewCreateInfo, nullptr,
+                                                  &framebuffer->imageView));
+
+      VkImageView attachments[] = {framebuffer->imageView, this->depthView};
+      VkFramebufferCreateInfo framebufferInfo{
+          .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+          .renderPass = renderPass,
+          .attachmentCount = static_cast<uint32_t>(std::size(attachments)),
+          .pAttachments = attachments,
+          .width = extent.width,
+          .height = extent.height,
+          .layers = 1,
+      };
+      vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
+          this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
+    }
+  }
+
+  void releaseFramebuffers() {
+    for (auto &framebuffer : this->framebuffers) {
+      vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);
+      vkDestroyImageView(this->device, framebuffer.imageView, nullptr);
+    }
+    this->framebuffers.clear();
+    vkDestroyImageView(this->device, this->depthView, nullptr);
+    this->depth = {};
+  }
+};
+
+struct SwapchainIsolatedDepthFramebufferList : NonCopyable {
   PhysicalDevice physicalDevice;
   VkDevice device;
   VkRenderPass renderPass;
@@ -633,6 +860,7 @@ private:
           this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
     }
   }
+
   void releaseFramebuffers() {
     for (auto &framebuffer : this->framebuffers) {
       vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);

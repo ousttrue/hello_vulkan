@@ -202,24 +202,30 @@ struct DepthImage : NonCopyable {
     CheckVkResult(
         vkCreateImage(this->device, &imageInfo, nullptr, &this->image));
   }
-  ~DepthImage() {
-    if (this->image != VK_NULL_HANDLE) {
-      vkDestroyImage(this->device, this->image, nullptr);
-    }
-  }
+  ~DepthImage() { release(); }
 
   DepthImage(DepthImage &&rhs) : memory(rhs.device) {
-    this->device = rhs.device;
+    release();
     this->image = rhs.image;
     rhs.image = VK_NULL_HANDLE;
     this->memory = std::move(rhs.memory);
+    this->device = rhs.device;
   }
   DepthImage &operator=(DepthImage &&rhs) {
-    this->device = rhs.device;
+    release();
     this->image = rhs.image;
     rhs.image = VK_NULL_HANDLE;
     this->memory = std::move(rhs.memory);
+    this->device = rhs.device;
     return *this;
+  }
+
+private:
+  void release() {
+    if (this->image != VK_NULL_HANDLE) {
+      vkDestroyImage(this->device, this->image, nullptr);
+      this->image = VK_NULL_HANDLE;
+    }
   }
 };
 

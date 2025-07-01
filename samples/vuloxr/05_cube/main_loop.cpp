@@ -24,27 +24,8 @@ const char FS[] = {
     , 0, 0, 0, 0,
 };
 
-/* Number of samples needs to be the same at image creation,      */
-/* renderpass creation and pipeline creation.                     */
-#define NUM_SAMPLES VK_SAMPLE_COUNT_1_BIT
-
-/* Number of viewports and number of scissors have to be the same */
-/* at pipeline creation and in any call to set them dynamically   */
-/* They also have to be the same as each other                    */
-#define NUM_VIEWPORTS 1
-#define NUM_SCISSORS NUM_VIEWPORTS
-
 /* Amount of time, in nanoseconds, to wait for a command buffer to complete */
 #define FENCE_TIMEOUT 100000000
-
-/*
- * Keep each of our swap chain buffers' image, command buffer and view in one
- * spot
- */
-typedef struct _swap_chain_buffers {
-  VkImage image;
-  VkImageView view;
-} swap_chain_buffer;
 
 static bool memory_type_from_properties(
     const VkPhysicalDeviceMemoryProperties &memory_properties,
@@ -65,11 +46,6 @@ static bool memory_type_from_properties(
   return false;
 }
 
-/*
- * Structure for tracking information used / created / modified
- * by utility functions.
- */
-
 struct sample_info {
   VkInstance inst;
   std::vector<VkPhysicalDevice> gpus;
@@ -82,13 +58,12 @@ struct sample_info {
   std::vector<VkQueueFamilyProperties> queue_props;
   VkPhysicalDeviceMemoryProperties memory_properties;
 
-  VkFramebuffer *framebuffers;
   int width, height;
   VkFormat format;
 
   uint32_t swapchainImageCount;
   VkSwapchainKHR swap_chain;
-  std::vector<swap_chain_buffer> buffers;
+  // std::vector<swap_chain_buffer> buffers;
   VkSemaphore imageAcquiredSemaphore;
 
   PFN_vkCreateDebugReportCallbackEXT dbgCreateDebugReportCallback;
@@ -112,8 +87,8 @@ static glm::mat4 mvp(int width, int height) {
     fov *= static_cast<float>(height) / static_cast<float>(width);
   }
   auto Projection = glm::perspective(
-      fov, static_cast<float>(width) / static_cast<float>(height),
-      0.1f, 100.0f);
+      fov, static_cast<float>(width) / static_cast<float>(height), 0.1f,
+      100.0f);
   auto View = glm::lookAt(
       glm::vec3(-5, 3, -10), // Camera is at (-5,3,-10), in World Space
       glm::vec3(0, 0, 0),    // and looks at the origin
@@ -125,35 +100,6 @@ static glm::mat4 mvp(int width, int height) {
                         0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f);
 
   return Clip * Projection * View * Model;
-}
-
-static void init_framebuffers(struct sample_info &info, VkImageView depth_view,
-                              VkRenderPass render_pass, bool include_depth) {
-  VkResult res;
-  VkImageView attachments[2];
-  attachments[1] = depth_view;
-
-  VkFramebufferCreateInfo fb_info = {};
-  fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-  fb_info.pNext = NULL;
-  fb_info.renderPass = render_pass;
-  fb_info.attachmentCount = include_depth ? 2 : 1;
-  fb_info.pAttachments = attachments;
-  fb_info.width = info.width;
-  fb_info.height = info.height;
-  fb_info.layers = 1;
-
-  uint32_t i;
-
-  info.framebuffers =
-      (VkFramebuffer *)malloc(info.swapchainImageCount * sizeof(VkFramebuffer));
-
-  for (i = 0; i < info.swapchainImageCount; i++) {
-    attachments[0] = info.buffers[i].view;
-    res =
-        vkCreateFramebuffer(info.device, &fb_info, NULL, &info.framebuffers[i]);
-    assert(res == VK_SUCCESS);
-  }
 }
 
 static VkFormat depthFormat() {
@@ -207,82 +153,6 @@ void main_loop(const std::function<bool()> &runLoop,
                      &info.present_queue);
   }
 
-  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
-    VkImageViewCreateInfo color_image_view = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = NULL,
-        .flags = 0,
-        .image = swapchain.images[i],
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = info.format,
-        .components =
-            {
-                .r = VK_COMPONENT_SWIZZLE_R,
-                .g = VK_COMPONENT_SWIZZLE_G,
-                .b = VK_COMPONENT_SWIZZLE_B,
-                .a = VK_COMPONENT_SWIZZLE_A,
-            },
-        .subresourceRange =
-            {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-    };
-
-    VkImageView view;
-    auto res = vkCreateImageView(info.device, &color_image_view, NULL, &view);
-
-    info.buffers.push_back({
-        .image = color_image_view.image,
-        .view = view,
-    });
-    assert(res == VK_SUCCESS);
-  }
-  info.current_buffer = 0;
-
-  vuloxr::vk::DepthImage depth(info.device,
-                               VkExtent2D{
-                                   .width = static_cast<uint32_t>(info.width),
-                                   .height = static_cast<uint32_t>(info.height),
-                               },
-                               depthFormat(), VK_SAMPLE_COUNT_1_BIT);
-  VkImageViewCreateInfo view_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .image = depth.image,
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = depth.imageInfo.format,
-      .components =
-          {
-              .r = VK_COMPONENT_SWIZZLE_R,
-              .g = VK_COMPONENT_SWIZZLE_G,
-              .b = VK_COMPONENT_SWIZZLE_B,
-              .a = VK_COMPONENT_SWIZZLE_A,
-          },
-      .subresourceRange =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-              .baseMipLevel = 0,
-              .levelCount = 1,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-  };
-  if (depth.imageInfo.format == VK_FORMAT_D16_UNORM_S8_UINT ||
-      depth.imageInfo.format == VK_FORMAT_D24_UNORM_S8_UINT ||
-      depth.imageInfo.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-    view_info.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-  }
-  depth.memory = physicalDevice.allocForTransfer(device, depth.image);
-  /* Create image view */
-  VkImageView depth_view;
-  vuloxr::vk::CheckVkResult(
-      vkCreateImageView(info.device, &view_info, NULL, &depth_view));
-
   vuloxr::vk::UniformBuffer<glm::mat4> ubo(info.device);
   ubo.memory = physicalDevice.allocForMap(device, ubo.buffer);
   ubo.value = mvp(info.width, info.height);
@@ -313,15 +183,19 @@ void main_loop(const std::function<bool()> &runLoop,
   vuloxr::vk::CheckVkResult(vkCreatePipelineLayout(
       info.device, &pPipelineLayoutCreateInfo, NULL, &pipeline_layout));
 
+  auto depth_format = depthFormat();
   auto [render_pass, depthstencil] = vuloxr::vk::createColorDepthRenderPass(
-      info.device, info.format, depth.imageInfo.format);
+      info.device, info.format, depth_format);
+
+  vuloxr::vk::SwapchainSharedDepthFramebufferList framebuffers(
+      physicalDevice, info.device, render_pass,
+      swapchain.createInfo.imageExtent, swapchain.createInfo.imageFormat,
+      depth_format, VK_SAMPLE_COUNT_1_BIT, swapchain.images);
 
   auto vs = vuloxr::vk::ShaderModule::createVertexShader(
       device, vuloxr::vk::glsl_vs_to_spv(VS), "main");
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
       device, vuloxr::vk::glsl_fs_to_spv(FS), "main");
-
-  init_framebuffers(info, depth_view, render_pass, true);
 
   vuloxr::vk::VertexBuffer vertex_buffer{
       .bindings =
@@ -376,34 +250,28 @@ void main_loop(const std::function<bool()> &runLoop,
       vertex_buffer.bindings, vertex_buffer.attributes, {}, {},
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
-  /* VULKAN_KEY_START */
+  VkClearValue clear_values[2] = {
+      {.color = {0.2f, 0.2f, 0.2f, 0.2f}},
+      {.depthStencil = {.depth = 1.0f, .stencil = 0}},
+  };
 
-  VkClearValue clear_values[2];
-  clear_values[0].color.float32[0] = 0.2f;
-  clear_values[0].color.float32[1] = 0.2f;
-  clear_values[0].color.float32[2] = 0.2f;
-  clear_values[0].color.float32[3] = 0.2f;
-  clear_values[1].depthStencil.depth = 1.0f;
-  clear_values[1].depthStencil.stencil = 0;
-
+  VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo{
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+  };
   VkSemaphore imageAcquiredSemaphore;
-  VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo;
-  imageAcquiredSemaphoreCreateInfo.sType =
-      VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  imageAcquiredSemaphoreCreateInfo.pNext = NULL;
-  imageAcquiredSemaphoreCreateInfo.flags = 0;
-
   vuloxr::vk::CheckVkResult(vkCreateSemaphore(info.device,
                                               &imageAcquiredSemaphoreCreateInfo,
                                               NULL, &imageAcquiredSemaphore));
 
-  VkCommandPool cmd_pool;
   VkCommandPoolCreateInfo cmd_pool_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .pNext = NULL,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
       .queueFamilyIndex = info.graphics_queue_family_index,
   };
+  VkCommandPool cmd_pool;
   vuloxr::vk::CheckVkResult(
       vkCreateCommandPool(info.device, &cmd_pool_info, NULL, &cmd_pool));
 
@@ -427,7 +295,7 @@ void main_loop(const std::function<bool()> &runLoop,
     {
       vuloxr::vk::RenderPassRecording recording(
           cmd, pipeline_layout, render_pass,
-          info.framebuffers[info.current_buffer],
+          framebuffers[info.current_buffer].framebuffer,
           swapchain.createInfo.imageExtent, clear_values,
           descriptor.descriptorSets[0],
           VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
@@ -459,18 +327,6 @@ void main_loop(const std::function<bool()> &runLoop,
   }
 
   vkDestroySemaphore(info.device, imageAcquiredSemaphore, NULL);
-
   vkDestroyPipelineCache(info.device, pipelineCache, NULL);
-
-  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
-    vkDestroyFramebuffer(info.device, info.framebuffers[i], NULL);
-  }
-  free(info.framebuffers);
-
-  for (uint32_t i = 0; i < info.swapchainImageCount; i++) {
-    vkDestroyImageView(info.device, info.buffers[i].view, NULL);
-  }
-  vkDestroyImageView(device, depth_view, NULL);
-
   vkDestroyCommandPool(info.device, cmd_pool, NULL);
 }
