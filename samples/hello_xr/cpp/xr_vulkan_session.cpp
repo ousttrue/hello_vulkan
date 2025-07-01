@@ -41,8 +41,8 @@ struct ViewRenderer : vuloxr::NonCopyable {
                VkSampleCountFlagBits sampleCountFlagBits,
                VkRenderPass renderPass)
       : device(_device), renderTargets(images.size()),
-        framebuffers(physicalDevice, _device, renderPass, extent, colorFormat,
-                     depthFormat, sampleCountFlagBits, images) {
+        framebuffers(_device, colorFormat, depthFormat, sampleCountFlagBits) {
+    framebuffers.reset(physicalDevice, renderPass, extent, images);
     vkGetDeviceQueue(this->device, queueFamilyIndex, 0, &this->queue);
 
     VkCommandPoolCreateInfo cmdPoolInfo{

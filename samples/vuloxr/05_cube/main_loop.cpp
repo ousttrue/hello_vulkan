@@ -147,9 +147,10 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   vuloxr::vk::SwapchainSharedDepthFramebufferList framebuffers(
-      physicalDevice, device, render_pass, swapchain.createInfo.imageExtent,
-      swapchain.createInfo.imageFormat, depth_format, VK_SAMPLE_COUNT_1_BIT,
-      swapchain.images);
+      device, swapchain.createInfo.imageFormat, depth_format,
+      VK_SAMPLE_COUNT_1_BIT);
+  framebuffers.reset(physicalDevice, render_pass,
+                     swapchain.createInfo.imageExtent, swapchain.images);
 
   VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,

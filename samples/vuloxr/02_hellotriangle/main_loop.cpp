@@ -88,8 +88,9 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, renderPass, swapchain.createInfo.imageFormat);
-  backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
+      device, swapchain.createInfo.imageFormat);
+  backbuffers.reset(renderPass, swapchain.createInfo.imageExtent,
+                    swapchain.images);
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
                                      swapchain.images.size());
@@ -138,7 +139,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         vuloxr::Logger::Warn("VK_ERROR_OUT_OF_DATE_KHR || VK_SUBOPTIMAL_KHR");
         vkQueueWaitIdle(swapchain.presentQueue);
         swapchain.create();
-        backbuffers.reset(swapchain.createInfo.imageExtent, swapchain.images);
+        // TODO: recreate renderPass
+        backbuffers.reset(renderPass, swapchain.createInfo.imageExtent, swapchain.images);
         continue;
       }
       // throw

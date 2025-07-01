@@ -45,8 +45,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   // swapchain
   //
   vuloxr::vk::SwapchainNoDepthFramebufferList images(
-      device, renderPass, swapchain.createInfo.imageFormat);
-  images.reset(swapchain.createInfo.imageExtent, swapchain.images);
+      device, swapchain.createInfo.imageFormat);
+  images.reset(renderPass, swapchain.createInfo.imageExtent, swapchain.images);
 
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
