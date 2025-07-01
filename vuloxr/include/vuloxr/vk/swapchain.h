@@ -333,9 +333,12 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
   // static
   VkDevice device;
   VkFormat format;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> commandBuffers;
 
   // mutable
   struct Framebuffer {
+    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
     VkFence submitFence = VK_NULL_HANDLE;
@@ -343,9 +346,27 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
   };
   std::vector<Framebuffer> framebuffers;
 
-  SwapchainNoDepthFramebufferList(VkDevice _device, VkFormat _format)
-      : device(_device), format(_format) {}
-  ~SwapchainNoDepthFramebufferList() { release(); }
+  SwapchainNoDepthFramebufferList(
+      VkDevice _device, VkFormat _format, uint32_t queueFamilyIndex,
+      VkCommandPoolCreateFlags flags =
+          VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+      : device(_device), format(_format) {
+
+    VkCommandPoolCreateInfo commandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = flags,
+        .queueFamilyIndex = queueFamilyIndex,
+    };
+    CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
+                                      nullptr, &this->pool));
+  }
+
+  ~SwapchainNoDepthFramebufferList() {
+    release();
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+
   void release() {
     for (auto &framebuffer : this->framebuffers) {
       vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);
@@ -354,7 +375,15 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
       vkDestroySemaphore(this->device, framebuffer.submitSemaphore, nullptr);
     }
     this->framebuffers.clear();
+
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+      this->commandBuffers.clear();
+    }
   }
+
   const Framebuffer &operator[](uint32_t index) const {
     return this->framebuffers[index];
   }
@@ -363,10 +392,21 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
              std::span<const VkImage> images) {
     release();
 
+    this->commandBuffers.resize(images.size());
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = this->pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = static_cast<uint32_t>(images.size()),
+    };
+    CheckVkResult(vkAllocateCommandBuffers(
+        this->device, &commandBufferAllocateInfo, this->commandBuffers.data()));
+
     this->framebuffers.resize(images.size());
     for (int i = 0; i < images.size(); ++i) {
       auto image = images[i];
       auto framebuffer = &this->framebuffers[i];
+      framebuffer->commandBuffer = this->commandBuffers[i];
 
       VkImageViewCreateInfo imageViewCreateInfo{
           .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,

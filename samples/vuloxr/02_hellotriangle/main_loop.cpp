@@ -88,12 +88,11 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, swapchain.createInfo.imageFormat);
+      device, swapchain.createInfo.imageFormat,
+      physicalDevice.graphicsFamilyIndex);
   backbuffers.reset(renderPass, swapchain.createInfo.imageExtent,
                     swapchain.images);
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
-  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
-                                     swapchain.images.size());
 
   vuloxr::FrameCounter counter;
   while (auto state = windowLoopOnce()) {
@@ -105,10 +104,6 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
                                                    acquireSemaphore);
 
-      // All queue submissions get a fence that CPU will wait
-      // on for synchronization purposes.
-      auto cmd = pool.commandBuffers[acquired.imageIndex];
-
       {
         VkClearValue clear[] = {{
             .color =
@@ -118,14 +113,14 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                 },
         }};
         vuloxr::vk::RenderPassRecording recording(
-            cmd, nullptr, pipeline.renderPass, backbuffer->framebuffer,
-            swapchain.createInfo.imageExtent, clear);
-        mesh.draw(cmd, pipeline);
+            backbuffer->commandBuffer, nullptr, pipeline.renderPass,
+            backbuffer->framebuffer, swapchain.createInfo.imageExtent, clear);
+        mesh.draw(backbuffer->commandBuffer, pipeline);
       }
 
-      vuloxr::vk::CheckVkResult(device.submit(cmd, acquireSemaphore,
-                                              backbuffer->submitSemaphore,
-                                              backbuffer->submitFence));
+      vuloxr::vk::CheckVkResult(
+          device.submit(backbuffer->commandBuffer, acquireSemaphore,
+                        backbuffer->submitSemaphore, backbuffer->submitFence));
 
       res = swapchain.present(acquired.imageIndex, backbuffer->submitSemaphore);
     } else {
@@ -140,7 +135,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         vkQueueWaitIdle(swapchain.presentQueue);
         swapchain.create();
         // TODO: recreate renderPass
-        backbuffers.reset(renderPass, swapchain.createInfo.imageExtent, swapchain.images);
+        backbuffers.reset(renderPass, swapchain.createInfo.imageExtent,
+                          swapchain.images);
         continue;
       }
       // throw

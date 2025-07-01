@@ -220,12 +220,11 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, swapchain.createInfo.imageFormat);
+      device, swapchain.createInfo.imageFormat,
+      physicalDevice.graphicsFamilyIndex);
   backbuffers.reset(imvulkan.renderPass, swapchain.createInfo.imageExtent,
                     swapchain.images);
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
-  vuloxr::vk::CommandBufferPool pool(device, physicalDevice.graphicsFamilyIndex,
-                                     swapchain.images.size());
 
   // Main loop
   while (auto state = windowLoopOnce()) {
@@ -312,10 +311,9 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
         auto backbuffer = &backbuffers[acquired.imageIndex];
         semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
                                                      acquireSemaphore);
-        auto cmd = pool.commandBuffers[acquired.imageIndex];
-        vkResetCommandBuffer(cmd, 0);
+        // vkResetCommandBuffer(cmd, 0);
 
-        imvulkan.render(cmd, backbuffer->framebuffer,
+        imvulkan.render(backbuffer->commandBuffer, backbuffer->framebuffer,
                         swapchain.createInfo.imageExtent, clear_color,
                         acquireSemaphore, backbuffer->submitSemaphore,
                         backbuffer->submitFence, draw_data);
@@ -329,7 +327,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
             .pWaitSemaphores = &acquireSemaphore,
             .pWaitDstStageMask = &waitStage,
             .commandBufferCount = 1,
-            .pCommandBuffers = &cmd,
+            .pCommandBuffers = &backbuffer->commandBuffer,
             .signalSemaphoreCount = 1,
             .pSignalSemaphores = &backbuffer->submitSemaphore,
         };
