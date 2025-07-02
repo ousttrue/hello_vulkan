@@ -128,17 +128,6 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                            },
                        }));
 
-  VkPipelineCacheCreateInfo pipelineCacheInfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .initialDataSize = 0,
-      .pInitialData = NULL,
-  };
-  VkPipelineCache pipelineCache;
-  vuloxr::vk::CheckVkResult(
-      vkCreatePipelineCache(device, &pipelineCacheInfo, NULL, &pipelineCache));
-
   vuloxr::vk::PipelineBuilder builder;
   auto pipeline = builder.create(
       device, render_pass, depthstencil, pipeline_layout,
@@ -151,81 +140,39 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       VK_SAMPLE_COUNT_1_BIT);
   framebuffers.reset(physicalDevice, render_pass,
                      swapchain.createInfo.imageExtent, swapchain.images);
+  vuloxr::vk::CommandBufferPool pool(device,
+                                     physicalDevice.graphicsFamilyIndex);
+  pool.reset(1);
 
-  VkSemaphoreCreateInfo imageAcquiredSemaphoreCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-  };
-  VkSemaphore imageAcquiredSemaphore;
-  vuloxr::vk::CheckVkResult(vkCreateSemaphore(device,
-                                              &imageAcquiredSemaphoreCreateInfo,
-                                              NULL, &imageAcquiredSemaphore));
-
-  VkCommandPoolCreateInfo cmd_pool_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .pNext = NULL,
-      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
-  };
-  VkCommandPool cmd_pool;
-  vuloxr::vk::CheckVkResult(
-      vkCreateCommandPool(device, &cmd_pool_info, NULL, &cmd_pool));
+  vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
 
   while (auto state = windowLoopOnce()) {
-    uint32_t imageIndex;
-    vuloxr::vk::CheckVkResult(vkAcquireNextImageKHR(
-        device, swapchain, UINT64_MAX, imageAcquiredSemaphore, VK_NULL_HANDLE,
-        &imageIndex));
+    auto acquireSemaphore = semaphorePool.getOrCreate();
+    auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
-    VkCommandBuffer cmd;
-    VkCommandBufferAllocateInfo cmdInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .pNext = NULL,
-        .commandPool = cmd_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    vuloxr::vk::CheckVkResult(vkAllocateCommandBuffers(device, &cmdInfo, &cmd));
+    auto cmd = &pool[0];
+    semaphorePool.resetFenceAndMakePairSemaphore(cmd->submitFence,
+                                                 acquireSemaphore);
 
     {
       vuloxr::vk::RenderPassRecording recording(
-          cmd, pipeline_layout, render_pass,
-          framebuffers[imageIndex].framebuffer,
+          cmd->commandBuffer, pipeline_layout, render_pass,
+          framebuffers[acquired.imageIndex].framebuffer,
           swapchain.createInfo.imageExtent, clear_values,
           descriptor.descriptorSets[0],
           VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
-      vertex_buffer.draw(cmd, pipeline);
+      vertex_buffer.draw(cmd->commandBuffer, pipeline);
     }
 
-    VkFenceCreateInfo fenceInfo{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .pNext = NULL,
-        .flags = 0,
-    };
-    VkFence drawFence;
-    vkCreateFence(device, &fenceInfo, NULL, &drawFence);
+    device.submit(cmd->commandBuffer, acquireSemaphore, {}, cmd->submitFence);
 
-    device.submit(cmd, imageAcquiredSemaphore, {}, drawFence);
+    // Make sure command buffer is finished before presenting
+    vuloxr::vk::CheckVkResult(cmd->waitFence(device));
 
-    /* Make sure command buffer is finished before presenting */
-    /* Amount of time, in nanoseconds, to wait for a command buffer to complete
-     */
-    auto FENCE_TIMEOUT = 100000000;
-    VkResult res;
-    do {
-      res = vkWaitForFences(device, 1, &drawFence, VK_TRUE, FENCE_TIMEOUT);
-    } while (res == VK_TIMEOUT);
-    assert(res == VK_SUCCESS);
-
-    vuloxr::vk::CheckVkResult(swapchain.present(imageIndex));
-
-    vkDestroyFence(device, drawFence, NULL);
-    vkFreeCommandBuffers(device, cmd_pool, 1, &cmd);
+    vuloxr::vk::CheckVkResult(
+        swapchain.present(acquired.imageIndex /*, cmd->submitSemaphore*/));
   }
 
-  vkDestroySemaphore(device, imageAcquiredSemaphore, NULL);
-  vkDestroyPipelineCache(device, pipelineCache, NULL);
-  vkDestroyCommandPool(device, cmd_pool, NULL);
+  vkDeviceWaitIdle(device);
 }

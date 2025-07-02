@@ -29,6 +29,17 @@ struct CommandSemahoreFence {
     };
     return vkQueueSubmit(this->queue, 1, &submitInfo, this->submitFence);
   }
+
+  VkResult waitFence(VkDevice device,
+                     uint32_t FENCE_TIMEOUT_NANO = 100000000) const {
+    VkResult res = VK_TIMEOUT;
+    for (; res == VK_TIMEOUT;
+         res = vkWaitForFences(device, 1, &this->submitFence, VK_TRUE,
+                               FENCE_TIMEOUT_NANO)) {
+      ;
+    }
+    return res;
+  }
 };
 
 struct CommandBufferPool : NonCopyable {
