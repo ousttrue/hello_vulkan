@@ -1,6 +1,7 @@
 // https://github.com/LunarG/VulkanSamples/blob/master/API-Samples/15-draw_cube/15-draw_cube.cpp
 #include "../main_loop.h"
 #include "cube_data.h"
+#include <DirectXMath.h>
 #include <assert.h>
 #include <string.h>
 #include <vuloxr/vk.h>
@@ -9,29 +10,42 @@
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-static glm::mat4 mvp(int width, int height) {
-  float fov = glm::radians(45.0f);
-  if (width > height) {
-    fov *= static_cast<float>(height) / static_cast<float>(width);
-  }
-  auto Projection = glm::perspective(
-      fov, static_cast<float>(width) / static_cast<float>(height), 0.1f,
-      100.0f);
-  auto View = glm::lookAt(
-      glm::vec3(-5, 3, -10), // Camera is at (-5,3,-10), in World Space
-      glm::vec3(0, 0, 0),    // and looks at the origin
-      glm::vec3(0, -1, 0)    // Head is up (set to 0,-1,0 to look upside-down)
-  );
-  auto Model = glm::mat4(1.0f);
-  // Vulkan clip space has inverted Y and half Z.
-  auto Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-                        0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f);
+struct Camera {
+  DirectX::XMFLOAT4X4 projection;
+  DirectX::XMFLOAT4X4 view;
 
-  return Clip * Projection * View * Model;
-}
+  Camera() {}
+
+  void setProjection(float fovYDegrees, int width, int height) {
+    auto fov = DirectX::XMConvertToRadians(fovYDegrees);
+    auto aspectRatio = static_cast<float>(width) / static_cast<float>(height);
+    DirectX::XMStoreFloat4x4(
+        &this->projection,
+        DirectX::XMMatrixPerspectiveFovRH(fov, aspectRatio, 0.1f, 100.0f));
+  }
+
+  void setView(const DirectX::XMFLOAT3 &eye, const DirectX::XMFLOAT3 &focus,
+               const DirectX::XMFLOAT3 &up) {
+    DirectX::XMStoreFloat4x4(
+        &this->view, DirectX::XMMatrixLookAtRH(DirectX::XMLoadFloat3(&eye),
+                                               DirectX::XMLoadFloat3(&focus),
+                                               DirectX::XMLoadFloat3(&up)));
+  }
+
+  DirectX::XMFLOAT4X4 mvp() {
+    auto Model = DirectX::XMMatrixIdentity();
+    // Vulkan clip space has inverted Y and half Z.
+    auto Clip = DirectX::XMMatrixSet(1.0f, 0.0f, 0.0f, 0.0f,  //
+                                     0.0f, -1.0f, 0.0f, 0.0f, //
+                                     0.0f, 0.0f, 0.5f, 0.0f,  //
+                                     0.0f, 0.0f, 0.5f, 1.0f);
+    auto m = Model * DirectX::XMLoadFloat4x4(&this->view) *
+             DirectX::XMLoadFloat4x4(&this->projection) * Clip;
+    DirectX::XMFLOAT4X4 out;
+    DirectX::XMStoreFloat4x4(&out, m);
+    return out;
+  }
+};
 
 VkClearValue clear_values[2] = {
     {.color = {0.2f, 0.2f, 0.2f, 0.2f}},
@@ -53,10 +67,14 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *window) {
 
-  vuloxr::vk::UniformBuffer<glm::mat4> ubo(device);
+  Camera camera;
+  camera.setProjection(45.0f, swapchain.createInfo.imageExtent.width,
+                       swapchain.createInfo.imageExtent.height);
+  camera.setView({-5, 3, -10}, {0, 0, 0}, {0, 1, 0});
+
+  vuloxr::vk::UniformBuffer<DirectX::XMFLOAT4X4> ubo(device);
   ubo.memory = physicalDevice.allocForMap(device, ubo.buffer);
-  ubo.value = mvp(swapchain.createInfo.imageExtent.width,
-                  swapchain.createInfo.imageExtent.height);
+  ubo.value = camera.mvp();
   ubo.mapWrite();
 
   vuloxr::vk::DescriptorSet descriptor(
