@@ -91,7 +91,8 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
     stagingMemory.mapWrite(pixels, imageSize);
 
     vuloxr::vk::CommandBufferPool pool(device,
-                                       physicalDevice.graphicsFamilyIndex, 1);
+                                       physicalDevice.graphicsFamilyIndex);
+    pool.allocate(1);
     auto cmd = pool.commandBuffers[0];
 
     {

@@ -33,35 +33,62 @@ struct CommandSemahoreFence {
 
 struct CommandBufferPool : NonCopyable {
   VkDevice device;
-  VkCommandPool pool = VK_NULL_HANDLE;
+  uint32_t queueFamilyIndex;
+  VkCommandPool pool;
   std::vector<VkCommandBuffer> commandBuffers;
   std::vector<CommandSemahoreFence> commands;
 
-  CommandBufferPool(
-      VkDevice _device, uint32_t graphicsQueueIndex, uint32_t poolSize,
-      uint32_t flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
-                       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-      : device(_device), commandBuffers(poolSize) {
+  CommandBufferPool(VkDevice _device, uint32_t _queueFamilyIndex,
+                    VkCommandPoolCreateFlags flags =
+                        VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+      : device(_device), queueFamilyIndex(_queueFamilyIndex) {
     VkCommandPoolCreateInfo commandPoolCreateInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = flags,
-        .queueFamilyIndex = graphicsQueueIndex,
+        .queueFamilyIndex = _queueFamilyIndex,
     };
     CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
                                       nullptr, &this->pool));
+  }
 
+  ~CommandBufferPool() {
+    release();
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
+  }
+
+  void release() {
+    for (auto &cmd : this->commands) {
+      vkDestroyFence(this->device, cmd.submitFence, nullptr);
+      vkDestroySemaphore(this->device, cmd.submitSemaphore, nullptr);
+    }
+    this->commands.clear();
+
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+    }
+    this->commandBuffers.clear();
+  }
+
+  void allocate(uint32_t poolSize) {
+    release();
+
+    this->commandBuffers.resize(poolSize);
     VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = this->pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = poolSize,
     };
-    CheckVkResult(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
-                                           this->commandBuffers.data()));
+    CheckVkResult(vkAllocateCommandBuffers(
+        this->device, &commandBufferAllocateInfo, this->commandBuffers.data()));
 
     this->commands.resize(poolSize);
     for (int i = 0; i < poolSize; ++i) {
-      vkGetDeviceQueue(device, graphicsQueueIndex, 0, &this->commands[i].queue);
+      vkGetDeviceQueue(device, this->queueFamilyIndex, 0,
+                       &this->commands[i].queue);
       this->commands[i].commandBuffer = this->commandBuffers[i];
 
       VkFenceCreateInfo fenceInfo = {
@@ -77,21 +104,6 @@ struct CommandBufferPool : NonCopyable {
       CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
                                       &this->commands[i].submitSemaphore));
     }
-  }
-
-  ~CommandBufferPool() {
-    for (auto &cmd : this->commands) {
-      vkDestroyFence(this->device, cmd.submitFence, nullptr);
-      vkDestroySemaphore(this->device, cmd.submitSemaphore, nullptr);
-    }
-
-    if (this->commandBuffers.size()) {
-      vkFreeCommandBuffers(this->device, this->pool,
-                           this->commandBuffers.size(),
-                           this->commandBuffers.data());
-    }
-
-    vkDestroyCommandPool(this->device, this->pool, nullptr);
   }
 
   const CommandSemahoreFence &operator[](uint32_t index) const {

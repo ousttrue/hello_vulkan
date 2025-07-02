@@ -18,8 +18,6 @@ VkClearValue clear[] = {{
     .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
 }};
 
-struct SwapchainRenderPass {};
-
 void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
