@@ -295,28 +295,25 @@ struct PhysicalDevice {
   }
 
   VkFormat depthFormat() const {
-    auto format = VK_FORMAT_UNDEFINED;
     /* allow custom depth formats */
 #ifdef __ANDROID__
     // Depth format needs to be VK_FORMAT_D24_UNORM_S8_UINT on
     // Android (if available).
-    vkGetPhysicalDeviceFormatProperties(info.gpus[0],
+    VkFormatProperties props;
+    vkGetPhysicalDeviceFormatProperties(this->physicalDevice,
                                         VK_FORMAT_D24_UNORM_S8_UINT, &props);
     if ((props.linearTilingFeatures &
          VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
         (props.optimalTilingFeatures &
          VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
-      info.depth.format = VK_FORMAT_D24_UNORM_S8_UINT;
+      return VK_FORMAT_D24_UNORM_S8_UINT;
     else
-      info.depth.format = VK_FORMAT_D16_UNORM;
+      return VK_FORMAT_D16_UNORM;
 #elif defined(VK_USE_PLATFORM_IOS_MVK)
-    if (info.depth.format == VK_FORMAT_UNDEFINED)
-      info.depth.format = VK_FORMAT_D32_SFLOAT;
+    return VK_FORMAT_D32_SFLOAT;
 #else
-    if (format == VK_FORMAT_UNDEFINED)
-      format = VK_FORMAT_D16_UNORM;
+    return VK_FORMAT_D16_UNORM;
 #endif
-    return format;
   }
 };
 

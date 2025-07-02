@@ -45,10 +45,10 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
   swapchain.create();
 
   main_loop(
-      [userdata, app]() {
+      [userdata, app]()->std::optional<vuloxr::gui::WindowState> {
         while (true) {
           if (!userdata->_active) {
-            return false;
+            return {};
           }
 
           struct android_poll_source *source;
@@ -56,13 +56,13 @@ static bool _main_loop(android_app *app, vuloxr::android::UserData *userdata) {
           if (ALooper_pollOnce(
                   // timeout 0 for vulkan animation
                   0, nullptr, &events, (void **)&source) < 0) {
-            return true;
+            return vuloxr::gui::WindowState{};
           }
           if (source) {
             source->process(app, source);
           }
           if (app->destroyRequested) {
-            return false;
+            return {};
           }
         }
       },
