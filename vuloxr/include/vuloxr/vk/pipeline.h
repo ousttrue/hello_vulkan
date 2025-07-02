@@ -604,5 +604,93 @@ createPipelineLayoutWithConstantSize(VkDevice device, uint32_t constantSize) {
   return layout;
 }
 
+struct RenderPassRecording : NonCopyable {
+  VkCommandBuffer commandBuffer;
+
+  struct ClearColor {
+    float r, g, b, a;
+  };
+
+  RenderPassRecording(VkCommandBuffer _commandBuffer,
+                      VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
+                      VkFramebuffer framebuffer, VkExtent2D extent,
+                      std::span<const VkClearValue> clearValues,
+                      VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
+                      VkCommandBufferUsageFlags flags =
+                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+      : commandBuffer(_commandBuffer) {
+    VkCommandBufferBeginInfo beginInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = flags,
+    };
+    CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
+
+    VkRenderPassBeginInfo renderPassInfo{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = renderPass,
+        .framebuffer = framebuffer,
+        .renderArea = {.offset = {0, 0}, .extent = extent},
+        .clearValueCount = static_cast<uint32_t>(std::size(clearValues)),
+        .pClearValues = clearValues.data(),
+    };
+    vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport viewport{
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(this->commandBuffer, 0, 1, &viewport);
+
+    VkRect2D scissor{
+        .offset = {0, 0},
+        .extent = extent,
+    };
+    vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
+
+    if (pipelineLayout != VK_NULL_HANDLE && descriptorSet != VK_NULL_HANDLE) {
+      // take the descriptor set for the corresponding swap image, and bind it
+      // to the descriptors in the shader
+      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    }
+  }
+
+  ~RenderPassRecording() {
+    vkCmdEndRenderPass(this->commandBuffer);
+    CheckVkResult(vkEndCommandBuffer(this->commandBuffer));
+  }
+
+  void draw(VkPipeline pipeline, VkBuffer buffer, uint32_t vertexCount) {
+    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      pipeline);
+
+    if (buffer != VK_NULL_HANDLE) {
+      VkDeviceSize offset = 0;
+      vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &buffer, &offset);
+    }
+
+    vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
+  }
+
+  // void drawIndexed(const IndexedMesh &mesh) {
+  //   if (mesh.vertexBuffer->buffer != VK_NULL_HANDLE) {
+  //     VkBuffer vertexBuffers[] = {mesh.vertexBuffer->buffer};
+  //     VkDeviceSize offsets[] = {0};
+  //     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+  //   }
+  //   if (mesh.indexBuffer->buffer != VK_NULL_HANDLE) {
+  //     vkCmdBindIndexBuffer(commandBuffer, mesh.indexBuffer->buffer, 0,
+  //                          VK_INDEX_TYPE_UINT16);
+  //   }
+  //   vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
+  // }
+};
+
+
 } // namespace vk
 } // namespace vuloxr

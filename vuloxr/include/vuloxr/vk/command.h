@@ -5,102 +5,112 @@ namespace vuloxr {
 
 namespace vk {
 
-struct RenderPassRecording : NonCopyable {
-  VkCommandBuffer commandBuffer;
+struct CommandSemahoreFence {
+  VkQueue queue = VK_NULL_HANDLE;
+  VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+  VkFence submitFence = VK_NULL_HANDLE;
+  VkSemaphore submitSemaphore = VK_NULL_HANDLE;
 
-  struct ClearColor {
-    float r, g, b, a;
-  };
+  VkResult submit(VkSemaphore acquireSemaphore,
+                  VkPipelineStageFlags waitDstStageMask =
+                      VK_PIPELINE_STAGE_TRANSFER_BIT |
+                      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) const {
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &acquireSemaphore,
+        .pWaitDstStageMask = &waitDstStageMask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &this->commandBuffer,
+    };
+    if (submitSemaphore != VK_NULL_HANDLE) {
+      submitInfo.signalSemaphoreCount = 1;
+      submitInfo.pSignalSemaphores = &this->submitSemaphore;
+    }
+    return vkQueueSubmit(this->queue, 1, &submitInfo, this->submitFence);
+  }
+};
 
-  RenderPassRecording(VkCommandBuffer _commandBuffer,
-                      VkPipelineLayout pipelineLayout, VkRenderPass renderPass,
-                      VkFramebuffer framebuffer, VkExtent2D extent,
-                      std::span<const VkClearValue> clearValues,
-                      VkDescriptorSet descriptorSet = VK_NULL_HANDLE,
-                      VkCommandBufferUsageFlags flags =
-                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
-      : commandBuffer(_commandBuffer) {
-    VkCommandBufferBeginInfo beginInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+struct CommandBufferPool : NonCopyable {
+  VkDevice device;
+  VkCommandPool pool = VK_NULL_HANDLE;
+  std::vector<VkCommandBuffer> commandBuffers;
+  std::vector<CommandSemahoreFence> commands;
+
+  CommandBufferPool(
+      VkDevice _device, uint32_t graphicsQueueIndex, uint32_t poolSize,
+      uint32_t flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
+                       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
+      : device(_device), commandBuffers(poolSize) {
+    VkCommandPoolCreateInfo commandPoolCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = flags,
+        .queueFamilyIndex = graphicsQueueIndex,
     };
-    CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
+    CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
+                                      nullptr, &this->pool));
 
-    VkRenderPassBeginInfo renderPassInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = renderPass,
-        .framebuffer = framebuffer,
-        .renderArea = {.offset = {0, 0}, .extent = extent},
-        .clearValueCount = static_cast<uint32_t>(std::size(clearValues)),
-        .pClearValues = clearValues.data(),
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = this->pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = poolSize,
     };
-    vkCmdBeginRenderPass(this->commandBuffer, &renderPassInfo,
-                         VK_SUBPASS_CONTENTS_INLINE);
+    CheckVkResult(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
+                                           this->commandBuffers.data()));
 
-    VkViewport viewport{
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = static_cast<float>(extent.width),
-        .height = static_cast<float>(extent.height),
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    vkCmdSetViewport(this->commandBuffer, 0, 1, &viewport);
+    this->commands.resize(poolSize);
+    for (int i = 0; i < poolSize; ++i) {
+      vkGetDeviceQueue(device, graphicsQueueIndex, 0, &this->commands[i].queue);
+      this->commands[i].commandBuffer = this->commandBuffers[i];
 
-    VkRect2D scissor{
-        .offset = {0, 0},
-        .extent = extent,
-    };
-    vkCmdSetScissor(this->commandBuffer, 0, 1, &scissor);
+      VkFenceCreateInfo fenceInfo = {
+          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+      };
+      CheckVkResult(vkCreateFence(this->device, &fenceInfo, nullptr,
+                                  &this->commands[i].submitFence));
 
-    if (pipelineLayout != VK_NULL_HANDLE && descriptorSet != VK_NULL_HANDLE) {
-      // take the descriptor set for the corresponding swap image, and bind it
-      // to the descriptors in the shader
-      vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                              pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+      VkSemaphoreCreateInfo semaphoreInfo = {
+          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      };
+      CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
+                                      &this->commands[i].submitSemaphore));
     }
   }
 
-  ~RenderPassRecording() {
-    vkCmdEndRenderPass(this->commandBuffer);
-    CheckVkResult(vkEndCommandBuffer(this->commandBuffer));
-  }
-
-  void draw(VkPipeline pipeline, VkBuffer buffer, uint32_t vertexCount) {
-    vkCmdBindPipeline(this->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipeline);
-
-    if (buffer != VK_NULL_HANDLE) {
-      VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(this->commandBuffer, 0, 1, &buffer, &offset);
+  ~CommandBufferPool() {
+    for (auto &cmd : this->commands) {
+      vkDestroyFence(this->device, cmd.submitFence, nullptr);
+      vkDestroySemaphore(this->device, cmd.submitSemaphore, nullptr);
     }
 
-    vkCmdDraw(this->commandBuffer, vertexCount, 1, 0, 0);
+    if (this->commandBuffers.size()) {
+      vkFreeCommandBuffers(this->device, this->pool,
+                           this->commandBuffers.size(),
+                           this->commandBuffers.data());
+    }
+
+    vkDestroyCommandPool(this->device, this->pool, nullptr);
   }
 
-  // void drawIndexed(const IndexedMesh &mesh) {
-  //   if (mesh.vertexBuffer->buffer != VK_NULL_HANDLE) {
-  //     VkBuffer vertexBuffers[] = {mesh.vertexBuffer->buffer};
-  //     VkDeviceSize offsets[] = {0};
-  //     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-  //   }
-  //   if (mesh.indexBuffer->buffer != VK_NULL_HANDLE) {
-  //     vkCmdBindIndexBuffer(commandBuffer, mesh.indexBuffer->buffer, 0,
-  //                          VK_INDEX_TYPE_UINT16);
-  //   }
-  //   vkCmdDrawIndexed(commandBuffer, mesh.indexDrawCount, 1, 0, 0, 0);
-  // }
+  const CommandSemahoreFence &operator[](uint32_t index) const {
+    return this->commands[index];
+  }
 };
 
 struct CommandScope : NonCopyable {
+  uint32_t queueFamilyIndex;
   VkCommandBuffer commandBuffer;
 
-  CommandScope(VkCommandBuffer _commandBuffer,
+  CommandScope(uint32_t _queueFamilyIndex, VkCommandBuffer _commandBuffer,
                VkCommandBufferUsageFlags flags =
                    VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
-      : commandBuffer(_commandBuffer) {
+      //       .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+      : queueFamilyIndex(_queueFamilyIndex), commandBuffer(_commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
         .flags = flags,
     };
     CheckVkResult(vkBeginCommandBuffer(this->commandBuffer, &beginInfo));
@@ -195,6 +205,49 @@ struct CommandScope : NonCopyable {
                          VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
                          VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &depthBarrier);
+  }
+
+  void clearImage(VkClearColorValue clearColorValue, VkImage image,
+                  const VkImageSubresourceRange &subResourceRange = {
+                      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                      .baseMipLevel = 0,
+                      .levelCount = 1,
+                      .baseArrayLayer = 0,
+                      .layerCount = 1,
+                  }) {
+    VkImageMemoryBarrier presentToClearBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = this->queueFamilyIndex,
+        .dstQueueFamilyIndex = this->queueFamilyIndex,
+        .image = image,
+        .subresourceRange = subResourceRange,
+    };
+    vkCmdPipelineBarrier(this->commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &presentToClearBarrier);
+
+    vkCmdClearColorImage(this->commandBuffer, image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColorValue,
+                         1, &subResourceRange);
+
+    VkImageMemoryBarrier clearToPresentBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = this->queueFamilyIndex,
+        .dstQueueFamilyIndex = this->queueFamilyIndex,
+        .image = image,
+        .subresourceRange = subResourceRange,
+    };
+    vkCmdPipelineBarrier(this->commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &clearToPresentBarrier);
   }
 };
 

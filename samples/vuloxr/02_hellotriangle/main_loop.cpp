@@ -19,6 +19,10 @@ struct Vertex {
   float color[4];
 };
 
+VkClearValue clear[] = {
+    {.color = {.float32 = {0.1f, 0.1f, 0.2f, 1.0f}}},
+};
+
 // A simple counter-clockwise triangle.
 // We specify the positions directly in clip space.
 static const Vertex data[] = {
@@ -35,8 +39,6 @@ static const Vertex data[] = {
         {0.0f, 0.0f, 1.0f, 1.0f},
     },
 };
-
-struct MapMemory {};
 
 void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
@@ -61,7 +63,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
               .location = 1,
               .binding = 0,
               .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-              .offset = offsetof(Vertex, color), // 4 * sizeof(float),
+              .offset = offsetof(Vertex, color),
           },
       }};
   mesh.allocate(physicalDevice, device, std::span<const Vertex>(data));
@@ -105,13 +107,6 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                                                    acquireSemaphore);
 
       {
-        VkClearValue clear[] = {{
-            .color =
-                {
-                    .float32 = {0.1f, 0.1f, 0.2f, 1.0f},
-
-                },
-        }};
         vuloxr::vk::RenderPassRecording recording(
             backbuffer->commandBuffer, nullptr, pipeline.renderPass,
             backbuffer->framebuffer, swapchain.createInfo.imageExtent, clear);

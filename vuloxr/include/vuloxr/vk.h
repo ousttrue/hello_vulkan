@@ -704,44 +704,6 @@ struct Device : NonCopyable {
   }
 };
 
-struct CommandBufferPool : NonCopyable {
-  VkDevice device;
-  VkCommandPool pool = VK_NULL_HANDLE;
-  std::vector<VkCommandBuffer> commandBuffers;
-
-  CommandBufferPool(
-      VkDevice _device, uint32_t graphicsQueueIndex, uint32_t poolSize,
-      uint32_t flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
-                       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-      : device(_device), commandBuffers(poolSize) {
-    VkCommandPoolCreateInfo commandPoolCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = flags,
-        .queueFamilyIndex = graphicsQueueIndex,
-    };
-    CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
-                                      nullptr, &this->pool));
-
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = this->pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = poolSize,
-    };
-    CheckVkResult(vkAllocateCommandBuffers(_device, &commandBufferAllocateInfo,
-                                           this->commandBuffers.data()));
-  }
-
-  ~CommandBufferPool() {
-    if (this->commandBuffers.size()) {
-      vkFreeCommandBuffers(this->device, this->pool,
-                           this->commandBuffers.size(),
-                           this->commandBuffers.data());
-    }
-    vkDestroyCommandPool(this->device, this->pool, nullptr);
-  }
-};
-
 struct Fence : NonCopyable {
   VkDevice device = VK_NULL_HANDLE;
   VkFence fence = VK_NULL_HANDLE;

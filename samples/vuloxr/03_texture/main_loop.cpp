@@ -93,7 +93,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
     auto cmd = pool.commandBuffers[0];
 
     {
-      vuloxr::vk::CommandScope(cmd)
+      vuloxr::vk::CommandScope(physicalDevice.graphicsFamilyIndex, cmd)
           .transitionImageLayout(texture.image, VK_FORMAT_R8G8B8_SRGB,
                                  VK_IMAGE_LAYOUT_UNDEFINED,
                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
