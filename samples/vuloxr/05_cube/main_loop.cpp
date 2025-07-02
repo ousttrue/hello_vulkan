@@ -1,51 +1,17 @@
 // https://github.com/LunarG/VulkanSamples/blob/master/API-Samples/15-draw_cube/15-draw_cube.cpp
 #include "../main_loop.h"
 #include "cube_data.h"
-#include <DirectXMath.h>
 #include <assert.h>
+#include <chrono>
+#include <functional>
+#include <numbers>
 #include <string.h>
+#include <vuloxr/scene/camera.h>
 #include <vuloxr/vk.h>
 #include <vuloxr/vk/buffer.h>
 #include <vuloxr/vk/command.h>
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
-
-struct Camera {
-  DirectX::XMFLOAT4X4 projection;
-  DirectX::XMFLOAT4X4 view;
-
-  Camera() {}
-
-  void setProjection(float fovYDegrees, int width, int height) {
-    auto fov = DirectX::XMConvertToRadians(fovYDegrees);
-    auto aspectRatio = static_cast<float>(width) / static_cast<float>(height);
-    DirectX::XMStoreFloat4x4(
-        &this->projection,
-        DirectX::XMMatrixPerspectiveFovRH(fov, aspectRatio, 0.1f, 100.0f));
-  }
-
-  void setView(const DirectX::XMFLOAT3 &eye, const DirectX::XMFLOAT3 &focus,
-               const DirectX::XMFLOAT3 &up) {
-    DirectX::XMStoreFloat4x4(
-        &this->view, DirectX::XMMatrixLookAtRH(DirectX::XMLoadFloat3(&eye),
-                                               DirectX::XMLoadFloat3(&focus),
-                                               DirectX::XMLoadFloat3(&up)));
-  }
-
-  DirectX::XMFLOAT4X4 mvp() {
-    auto Model = DirectX::XMMatrixIdentity();
-    // Vulkan clip space has inverted Y and half Z.
-    auto Clip = DirectX::XMMatrixSet(1.0f, 0.0f, 0.0f, 0.0f,  //
-                                     0.0f, -1.0f, 0.0f, 0.0f, //
-                                     0.0f, 0.0f, 0.5f, 0.0f,  //
-                                     0.0f, 0.0f, 0.5f, 1.0f);
-    auto m = Model * DirectX::XMLoadFloat4x4(&this->view) *
-             DirectX::XMLoadFloat4x4(&this->projection) * Clip;
-    DirectX::XMFLOAT4X4 out;
-    DirectX::XMStoreFloat4x4(&out, m);
-    return out;
-  }
-};
 
 VkClearValue clear_values[2] = {
     {.color = {0.2f, 0.2f, 0.2f, 0.2f}},
@@ -61,21 +27,75 @@ const char FS[] = {
     , 0, 0, 0, 0,
 };
 
+static DirectX::XMFLOAT4X4 rotate(std::chrono::nanoseconds nano) {
+  auto sec = std::chrono::duration_cast<std::chrono::duration<double>>(nano);
+  DirectX::XMFLOAT4X4 m;
+  DirectX::XMStoreFloat4x4(
+      &m, DirectX::XMMatrixRotationY(fmod(sec.count(), std::numbers::pi * 2)));
+  return m;
+}
+
+struct OrbitView {
+  float yawRadians = 0;
+  float pitchRadians = 0;
+  DirectX::XMFLOAT3 shift = {0, 0, -10.0f};
+  DirectX::XMFLOAT4X4 matrix;
+  DirectX::XMFLOAT4X4 &calc() {
+    auto yaw = DirectX::XMMatrixRotationY(this->yawRadians);
+    auto pitch = DirectX::XMMatrixRotationX(this->pitchRadians);
+    auto t = DirectX::XMMatrixTranslation(this->shift.x, this->shift.y,
+                                          this->shift.z);
+    DirectX::XMStoreFloat4x4(&this->matrix, yaw * pitch * t);
+    return this->matrix;
+  }
+};
+
+struct DragState {
+  vuloxr::gui::MouseState state = {0};
+
+  std::function<void(const vuloxr::gui::MouseState &newState,
+                     const vuloxr::gui::MouseState &lastState)>
+      onRightDrag;
+
+  void update(const vuloxr::gui::MouseState &newState) {
+    if (this->state.rightDown) {
+      if (newState.rightDown) {
+        if (onRightDrag) {
+          onRightDrag(newState, this->state);
+        }
+      }
+    }
+    this->state = newState;
+  }
+};
+
 void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *window) {
 
-  Camera camera;
-  camera.setProjection(45.0f, swapchain.createInfo.imageExtent.width,
-                       swapchain.createInfo.imageExtent.height);
-  camera.setView({-5, 3, -10}, {0, 0, 0}, {0, 1, 0});
+  vuloxr::camera::PerspectiveProjection projection;
+  projection.setViewSize(swapchain.createInfo.imageExtent.width,
+                         swapchain.createInfo.imageExtent.height);
+  projection.calc();
+
+  OrbitView view;
+  view.calc();
+
+  DragState drag;
+  drag.onRightDrag = [&view](auto newState, auto lastState) {
+    auto dx = newState.x - lastState.x;
+    view.yawRadians += dx * 0.1f;
+
+    auto dy = newState.y - lastState.y;
+    view.pitchRadians += dy * 0.1f;
+
+    view.calc();
+  };
 
   vuloxr::vk::UniformBuffer<DirectX::XMFLOAT4X4> ubo(device);
   ubo.memory = physicalDevice.allocForMap(device, ubo.buffer);
-  ubo.value = camera.mvp();
-  ubo.mapWrite();
 
   vuloxr::vk::DescriptorSet descriptor(
       device, 1,
@@ -164,14 +184,29 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
 
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
 
+  DirectX::XMFLOAT4X4 model = {
+      1, 0, 0, 0, //
+      0, 1, 0, 0, //
+      0, 0, 1, 0, //
+      0, 0, 0, 1, //
+  };
+
   while (auto state = windowLoopOnce()) {
+    // acquire
     auto acquireSemaphore = semaphorePool.getOrCreate();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
+    // update animation
+    drag.update(state->mouse);
+    // model = rotate(std::chrono::nanoseconds(acquired.presentTimeNano));
+    ubo.value = vuloxr::camera::vulkanViewProjectionClip(view.matrix,
+                                                         projection.matrix);
+    ubo.mapWrite();
+
+    // render
     auto cmd = &pool[0];
     semaphorePool.resetFenceAndMakePairSemaphore(cmd->submitFence,
                                                  acquireSemaphore);
-
     {
       vuloxr::vk::RenderPassRecording recording(
           cmd->commandBuffer, pipeline_layout, render_pass,
