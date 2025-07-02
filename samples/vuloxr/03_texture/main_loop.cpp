@@ -92,7 +92,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
 
     vuloxr::vk::CommandBufferPool pool(device,
                                        physicalDevice.graphicsFamilyIndex);
-    pool.allocate(1);
+    pool.reset(1);
     auto cmd = pool.commandBuffers[0];
 
     {
@@ -204,8 +204,9 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, swapchain.createInfo.imageFormat,
-      physicalDevice.graphicsFamilyIndex);
+      device, swapchain.createInfo.imageFormat);
+  vuloxr::vk::CommandBufferPool pool(device,
+                                     physicalDevice.graphicsFamilyIndex);
   std::vector<std::shared_ptr<vuloxr::vk::UniformBuffer<UniformBufferObject>>>
       uniformBuffers(swapchain.images.size());
 
@@ -252,24 +253,23 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       if (backbuffers.empty()) {
         backbuffers.reset(renderPass, swapchain.createInfo.imageExtent,
                           swapchain.images);
+        pool.reset(swapchain.images.size());
       }
       auto backbuffer = &backbuffers[acquired.imageIndex];
-      semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+      auto cmd = &pool[acquired.imageIndex];
+      semaphorePool.resetFenceAndMakePairSemaphore(cmd->submitFence,
                                                    acquireSemaphore);
       auto descriptorSet = descriptorSets.descriptorSets[acquired.imageIndex];
       {
         vuloxr::vk::RenderPassRecording recording(
-            backbuffer->commandBuffer, pipelineLayout, pipeline.renderPass,
+            cmd->commandBuffer, pipelineLayout, pipeline.renderPass,
             backbuffer->framebuffer, swapchain.createInfo.imageExtent, clear,
             descriptorSet, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
 
-        indexBuffer.draw(backbuffer->commandBuffer, pipeline,
-                         vertexBuffer.buffer);
+        indexBuffer.draw(cmd->commandBuffer, pipeline, vertexBuffer.buffer);
       }
-      vuloxr::vk::CheckVkResult(
-          device.submit(backbuffer->commandBuffer, acquireSemaphore,
-                        backbuffer->submitSemaphore, backbuffer->submitFence));
-      res = swapchain.present(acquired.imageIndex, backbuffer->submitSemaphore);
+      vuloxr::vk::CheckVkResult(cmd->submit(acquireSemaphore));
+      res = swapchain.present(acquired.imageIndex, cmd->submitSemaphore);
     }
 
     // check if the swap chain is no longer adaquate for presentation

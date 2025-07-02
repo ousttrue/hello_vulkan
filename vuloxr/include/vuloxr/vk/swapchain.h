@@ -333,55 +333,25 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
   // static
   VkDevice device;
   VkFormat format;
-  VkCommandPool pool = VK_NULL_HANDLE;
-  std::vector<VkCommandBuffer> commandBuffers;
 
   // mutable
   struct Framebuffer {
-    VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    VkFence submitFence = VK_NULL_HANDLE;
-    VkSemaphore submitSemaphore = VK_NULL_HANDLE;
   };
   std::vector<Framebuffer> framebuffers;
 
-  SwapchainNoDepthFramebufferList(
-      VkDevice _device, VkFormat _format, uint32_t queueFamilyIndex,
-      VkCommandPoolCreateFlags flags =
-          VK_COMMAND_POOL_CREATE_TRANSIENT_BIT |
-          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT)
-      : device(_device), format(_format) {
+  SwapchainNoDepthFramebufferList(VkDevice _device, VkFormat _format)
+      : device(_device), format(_format) {}
 
-    VkCommandPoolCreateInfo commandPoolCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = flags,
-        .queueFamilyIndex = queueFamilyIndex,
-    };
-    CheckVkResult(vkCreateCommandPool(this->device, &commandPoolCreateInfo,
-                                      nullptr, &this->pool));
-  }
-
-  ~SwapchainNoDepthFramebufferList() {
-    release();
-    vkDestroyCommandPool(this->device, this->pool, nullptr);
-  }
+  ~SwapchainNoDepthFramebufferList() { release(); }
 
   void release() {
     for (auto &framebuffer : this->framebuffers) {
       vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);
       vkDestroyImageView(this->device, framebuffer.imageView, nullptr);
-      vkDestroyFence(this->device, framebuffer.submitFence, nullptr);
-      vkDestroySemaphore(this->device, framebuffer.submitSemaphore, nullptr);
     }
     this->framebuffers.clear();
-
-    if (this->commandBuffers.size()) {
-      vkFreeCommandBuffers(this->device, this->pool,
-                           this->commandBuffers.size(),
-                           this->commandBuffers.data());
-      this->commandBuffers.clear();
-    }
   }
 
   bool empty() const { return this->framebuffers.empty(); }
@@ -393,21 +363,10 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
              std::span<const VkImage> images) {
     release();
 
-    this->commandBuffers.resize(images.size());
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = this->pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = static_cast<uint32_t>(images.size()),
-    };
-    CheckVkResult(vkAllocateCommandBuffers(
-        this->device, &commandBufferAllocateInfo, this->commandBuffers.data()));
-
     this->framebuffers.resize(images.size());
     for (int i = 0; i < images.size(); ++i) {
       auto image = images[i];
       auto framebuffer = &this->framebuffers[i];
-      framebuffer->commandBuffer = this->commandBuffers[i];
 
       VkImageViewCreateInfo imageViewCreateInfo{
           .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -439,19 +398,6 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
       };
       vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
           this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
-
-      VkFenceCreateInfo fenceInfo = {
-          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-      };
-      CheckVkResult(vkCreateFence(this->device, &fenceInfo, nullptr,
-                                  &framebuffer->submitFence));
-
-      VkSemaphoreCreateInfo semaphoreInfo = {
-          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      };
-      CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
-                                      &framebuffer->submitSemaphore));
     }
   }
 };
@@ -468,8 +414,6 @@ struct SwapchainSharedDepthFramebufferList : NonCopyable {
   struct Framebuffer {
     VkImageView imageView = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    VkFence submitFence = VK_NULL_HANDLE;
-    VkSemaphore submitSemaphore = VK_NULL_HANDLE;
   };
   std::vector<Framebuffer> framebuffers;
 
@@ -485,8 +429,6 @@ struct SwapchainSharedDepthFramebufferList : NonCopyable {
     for (auto &framebuffer : this->framebuffers) {
       vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);
       vkDestroyImageView(this->device, framebuffer.imageView, nullptr);
-      vkDestroyFence(this->device, framebuffer.submitFence, nullptr);
-      vkDestroySemaphore(this->device, framebuffer.submitSemaphore, nullptr);
     }
     this->framebuffers.clear();
     vkDestroyImageView(this->device, this->depthView, nullptr);
@@ -559,19 +501,6 @@ struct SwapchainSharedDepthFramebufferList : NonCopyable {
       };
       vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
           this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
-
-      VkFenceCreateInfo fenceInfo = {
-          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-      };
-      CheckVkResult(vkCreateFence(this->device, &fenceInfo, nullptr,
-                                  &framebuffer->submitFence));
-
-      VkSemaphoreCreateInfo semaphoreInfo = {
-          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      };
-      CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
-                                      &framebuffer->submitSemaphore));
     }
   }
 };
@@ -587,8 +516,6 @@ struct SwapchainIsolatedDepthFramebufferList : NonCopyable {
     DepthImage depth;
     VkImageView depthView = VK_NULL_HANDLE;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
-    VkFence submitFence = VK_NULL_HANDLE;
-    VkSemaphore submitSemaphore = VK_NULL_HANDLE;
   };
   std::vector<Framebuffer> framebuffers;
 
@@ -605,8 +532,6 @@ struct SwapchainIsolatedDepthFramebufferList : NonCopyable {
       vkDestroyFramebuffer(this->device, framebuffer.framebuffer, nullptr);
       vkDestroyImageView(this->device, framebuffer.imageView, nullptr);
       vkDestroyImageView(this->device, framebuffer.depthView, nullptr);
-      vkDestroyFence(this->device, framebuffer.submitFence, nullptr);
-      vkDestroySemaphore(this->device, framebuffer.submitSemaphore, nullptr);
     }
     this->framebuffers.clear();
   }
@@ -700,19 +625,6 @@ struct SwapchainIsolatedDepthFramebufferList : NonCopyable {
       };
       vuloxr::vk::CheckVkResult(vkCreateFramebuffer(
           this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
-
-      VkFenceCreateInfo fenceInfo = {
-          .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-          .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-      };
-      CheckVkResult(vkCreateFence(this->device, &fenceInfo, nullptr,
-                                  &framebuffer->submitFence));
-
-      VkSemaphoreCreateInfo semaphoreInfo = {
-          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      };
-      CheckVkResult(vkCreateSemaphore(this->device, &semaphoreInfo, nullptr,
-                                      &framebuffer->submitSemaphore));
     }
   }
 };

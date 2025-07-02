@@ -46,26 +46,25 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::PhysicalDevice &physicalDevice,
                const vuloxr::vk::Device &device, void *) {
 
-  vuloxr::vk::VertexBuffer mesh{
-      .bindings = {{
-          .binding = 0,
-          .stride = sizeof(Vertex),
-          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-      }},
-      .attributes = {
-          {
-              .location = 0,
-              .binding = 0,
-              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-              .offset = 0,
-          },
-          {
-              .location = 1,
-              .binding = 0,
-              .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-              .offset = offsetof(Vertex, color),
-          },
-      }};
+  vuloxr::vk::VertexBuffer mesh{.bindings = {{
+                                    .binding = 0,
+                                    .stride = sizeof(Vertex),
+                                    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+                                }},
+                                .attributes = {
+                                    {
+                                        .location = 0,
+                                        .binding = 0,
+                                        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                                        .offset = 0,
+                                    },
+                                    {
+                                        .location = 1,
+                                        .binding = 0,
+                                        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+                                        .offset = offsetof(Vertex, color),
+                                    },
+                                }};
   mesh.allocate(physicalDevice, device, std::span<const Vertex>(data));
 
   auto [renderPass, depthStencil] = vuloxr::vk::createColorRenderPass(
@@ -90,10 +89,12 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, swapchain.createInfo.imageFormat,
-      physicalDevice.graphicsFamilyIndex);
+      device, swapchain.createInfo.imageFormat);
   backbuffers.reset(renderPass, swapchain.createInfo.imageExtent,
                     swapchain.images);
+  vuloxr::vk::CommandBufferPool pool(device,
+                                     physicalDevice.graphicsFamilyIndex);
+  pool.reset(swapchain.images.size());
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
 
   vuloxr::FrameCounter counter;
@@ -103,21 +104,19 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
 
     if (res == VK_SUCCESS) {
       auto backbuffer = &backbuffers[acquired.imageIndex];
-      semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+      auto cmd = &pool[acquired.imageIndex];
+      semaphorePool.resetFenceAndMakePairSemaphore(cmd->submitFence,
                                                    acquireSemaphore);
 
       {
         vuloxr::vk::RenderPassRecording recording(
-            backbuffer->commandBuffer, nullptr, pipeline.renderPass,
+            cmd->commandBuffer, nullptr, pipeline.renderPass,
             backbuffer->framebuffer, swapchain.createInfo.imageExtent, clear);
-        mesh.draw(backbuffer->commandBuffer, pipeline);
+        mesh.draw(cmd->commandBuffer, pipeline);
       }
 
-      vuloxr::vk::CheckVkResult(
-          device.submit(backbuffer->commandBuffer, acquireSemaphore,
-                        backbuffer->submitSemaphore, backbuffer->submitFence));
-
-      res = swapchain.present(acquired.imageIndex, backbuffer->submitSemaphore);
+      vuloxr::vk::CheckVkResult(cmd->submit( acquireSemaphore));
+      res = swapchain.present(acquired.imageIndex, cmd->submitSemaphore);
     } else {
       semaphorePool.reuse(acquireSemaphore);
     }

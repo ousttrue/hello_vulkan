@@ -72,7 +72,7 @@ struct CommandBufferPool : NonCopyable {
     this->commandBuffers.clear();
   }
 
-  void allocate(uint32_t poolSize) {
+  void reset(uint32_t poolSize) {
     release();
 
     this->commandBuffers.resize(poolSize);

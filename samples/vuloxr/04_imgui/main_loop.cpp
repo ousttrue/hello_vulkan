@@ -3,6 +3,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
 #include <json/json.h>
+#include <vuloxr/vk/command.h>
 
 const char gltf[] = {
 #embed "triangle.gltf"
@@ -220,10 +221,12 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   vuloxr::vk::SwapchainNoDepthFramebufferList backbuffers(
-      device, swapchain.createInfo.imageFormat,
-      physicalDevice.graphicsFamilyIndex);
+      device, swapchain.createInfo.imageFormat);
   backbuffers.reset(imvulkan.renderPass, swapchain.createInfo.imageExtent,
                     swapchain.images);
+  vuloxr::vk::CommandBufferPool pool(device,
+                                     physicalDevice.graphicsFamilyIndex);
+  pool.reset(swapchain.images.size());
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
 
   // Main loop
@@ -309,14 +312,15 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
       auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
       if (res == VK_SUCCESS) {
         auto backbuffer = &backbuffers[acquired.imageIndex];
-        semaphorePool.resetFenceAndMakePairSemaphore(backbuffer->submitFence,
+        auto cmd = &pool[acquired.imageIndex];
+        semaphorePool.resetFenceAndMakePairSemaphore(cmd->submitFence,
                                                      acquireSemaphore);
         // vkResetCommandBuffer(cmd, 0);
 
-        imvulkan.render(backbuffer->commandBuffer, backbuffer->framebuffer,
+        imvulkan.render(cmd->commandBuffer, backbuffer->framebuffer,
                         swapchain.createInfo.imageExtent, clear_color,
-                        acquireSemaphore, backbuffer->submitSemaphore,
-                        backbuffer->submitFence, draw_data);
+                        acquireSemaphore, cmd->submitSemaphore,
+                        cmd->submitFence, draw_data);
 
         const VkPipelineStageFlags waitStage =
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -327,17 +331,17 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
             .pWaitSemaphores = &acquireSemaphore,
             .pWaitDstStageMask = &waitStage,
             .commandBufferCount = 1,
-            .pCommandBuffers = &backbuffer->commandBuffer,
+            .pCommandBuffers = &cmd->commandBuffer,
             .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &backbuffer->submitSemaphore,
+            .pSignalSemaphores = &cmd->submitSemaphore,
         };
         vuloxr::vk::CheckVkResult(
-            vkQueueSubmit(device.queue, 1, &info, backbuffer->submitFence));
+            vkQueueSubmit(device.queue, 1, &info, cmd->submitFence));
 
         VkPresentInfoKHR present = {
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &backbuffer->submitSemaphore,
+            .pWaitSemaphores = &cmd->submitSemaphore,
             .swapchainCount = 1,
             .pSwapchains = &swapchain.swapchain,
             .pImageIndices = &acquired.imageIndex,

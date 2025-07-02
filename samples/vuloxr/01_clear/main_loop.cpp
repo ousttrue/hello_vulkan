@@ -22,7 +22,7 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
   vuloxr::vk::CommandBufferPool pool(device,
                                      physicalDevice.graphicsFamilyIndex);
-  pool.allocate(swapchain.images.size());
+  pool.reset(swapchain.images.size());
 
   while (auto state = windowLoopOnce()) {
     // acquire
