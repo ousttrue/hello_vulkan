@@ -13,20 +13,20 @@ struct CommandSemahoreFence {
 
   VkResult submit(VkSemaphore acquireSemaphore,
                   VkPipelineStageFlags waitDstStageMask =
-                      VK_PIPELINE_STAGE_TRANSFER_BIT |
                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) const {
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        // wait swapchain image ready
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &acquireSemaphore,
         .pWaitDstStageMask = &waitDstStageMask,
+        // command
         .commandBufferCount = 1,
         .pCommandBuffers = &this->commandBuffer,
+        // signal
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &this->submitSemaphore,
     };
-    if (submitSemaphore != VK_NULL_HANDLE) {
-      submitInfo.signalSemaphoreCount = 1;
-      submitInfo.pSignalSemaphores = &this->submitSemaphore;
-    }
     return vkQueueSubmit(this->queue, 1, &submitInfo, this->submitFence);
   }
 };

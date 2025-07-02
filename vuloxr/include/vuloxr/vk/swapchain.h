@@ -384,6 +384,7 @@ struct SwapchainNoDepthFramebufferList : NonCopyable {
     }
   }
 
+  bool empty() const { return this->framebuffers.empty(); }
   const Framebuffer &operator[](uint32_t index) const {
     return this->framebuffers[index];
   }

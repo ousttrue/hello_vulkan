@@ -14,6 +14,12 @@ const char FS[] = {
 #embed "shader.frag"
 };
 
+VkClearValue clear[] = {{
+    .color = {.float32 = {0.0f, 0.0f, 0.0f, 1.0f}},
+}};
+
+struct SwapchainRenderPass {};
+
 void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
                const vuloxr::vk::Instance &instance,
                vuloxr::vk::Swapchain &swapchain,
@@ -47,7 +53,6 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   vuloxr::vk::SwapchainNoDepthFramebufferList images(
       device, swapchain.createInfo.imageFormat,
       physicalDevice.graphicsFamilyIndex);
-  images.reset(renderPass, swapchain.createInfo.imageExtent, swapchain.images);
 
   vuloxr::vk::AcquireSemaphorePool semaphorePool(device);
 
@@ -55,18 +60,16 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
     auto acquireSemaphore = semaphorePool.getOrCreate();
     auto [res, acquired] = swapchain.acquireNextImage(acquireSemaphore);
 
+    if (images.empty()) {
+      images.reset(renderPass, swapchain.createInfo.imageExtent,
+                   swapchain.images);
+    }
     auto image = &images[acquired.imageIndex];
 
     semaphorePool.resetFenceAndMakePairSemaphore(image->submitFence,
                                                  acquireSemaphore);
 
     {
-      VkClearValue clear[] = {{
-          .color =
-              {
-                  .float32 = {0.0f, 0.0f, 0.0f, 1.0f},
-              },
-      }};
       vuloxr::vk::RenderPassRecording recording(
           image->commandBuffer, nullptr, pipeline.renderPass,
           image->framebuffer, swapchain.createInfo.imageExtent, clear);
