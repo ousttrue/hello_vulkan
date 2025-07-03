@@ -53,10 +53,6 @@ void android_main(struct android_app *app) {
           instance, physicalDevice, physicalDevice.graphicsFamilyIndex, device);
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
-      auto selectedFormat = vuloxr::vk::selectColorSwapchainFormat(
-          session.formats, SupportedColorSwapchainFormats);
-      assert(selectedFormat);
-
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
           .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
           .next = 0,
@@ -101,10 +97,14 @@ void android_main(struct android_app *app) {
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
           //
-          *selectedFormat, physicalDevice, physicalDevice.graphicsFamilyIndex,
-          device,
-          //
-          {{0.184313729f, 0.309803933f, 0.309803933f, 1.0f}});
+          {
+              .format = *vuloxr::vk::selectColorSwapchainFormat(
+                  session.formats, SupportedColorSwapchainFormats),
+              .physicalDevice = physicalDevice,
+              .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
+              .device = device,
+              .clearColor{{0.184313729f, 0.309803933f, 0.309803933f, 1.0f}},
+          });
       // session scope
     }
     // vulkan scope

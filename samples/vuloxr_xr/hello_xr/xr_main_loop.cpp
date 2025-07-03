@@ -141,17 +141,10 @@ struct ViewRenderer : vuloxr::NonCopyable {
   }
 };
 
-void xr_main_loop(const std::function<bool(bool)> &runLoop,
-                       XrInstance instance, XrSystemId systemId,
-                       XrSession session, XrSpace appSpace,
-                       //
-                       VkFormat viewFormat,
-                       const vuloxr::vk::PhysicalDevice &physicalDevice,
-                       uint32_t queueFamilyIndex, VkDevice device,
-                       //
-                       VkClearColorValue clearColor,
-                       XrEnvironmentBlendMode blendMode,
-                       XrViewConfigurationType viewConfigurationType) {
+void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
+                  XrSystemId systemId, XrSession session, XrSpace appSpace,
+                  const XrGraphics &graphics, XrEnvironmentBlendMode blendMode,
+                  XrViewConfigurationType viewConfigurationType) {
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
   vuloxr::vk::VertexBuffer vertices{
@@ -177,11 +170,12 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
               .offset = offsetof(Vertex, Color),
           },
       }};
-  vertices.allocate(physicalDevice, device,
+  vertices.allocate(graphics.physicalDevice, graphics.device,
                     std::span<const Vertex>(c_cubeVertices));
 
   vuloxr::vk::IndexBuffer indices(
-      physicalDevice, device, std::span<const unsigned short>(c_cubeIndices));
+      graphics.physicalDevice, graphics.device,
+      std::span<const unsigned short>(c_cubeIndices));
 
   auto depthFormat = VK_FORMAT_D32_SFLOAT;
 
@@ -190,19 +184,19 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
 
   // pieline
   auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
-      device, sizeof(float) * 16);
-  auto [renderPass, depthStencil] =
-      vuloxr::vk::createColorDepthRenderPass(device, viewFormat, depthFormat);
+      graphics.device, sizeof(float) * 16);
+  auto [renderPass, depthStencil] = vuloxr::vk::createColorDepthRenderPass(
+      graphics.device, graphics.format, depthFormat);
 
   auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
   assert(vertexSPIRV.size());
-  auto vs =
-      vuloxr::vk::ShaderModule::createVertexShader(device, vertexSPIRV, "main");
+  auto vs = vuloxr::vk::ShaderModule::createVertexShader(graphics.device,
+                                                         vertexSPIRV, "main");
 
   auto fragmentSPIRV = vuloxr::vk::glsl_fs_to_spv(FragmentShaderGlsl);
   assert(fragmentSPIRV.size());
   auto fs = vuloxr::vk::ShaderModule::createFragmentShader(
-      device, fragmentSPIRV, "main");
+      graphics.device, fragmentSPIRV, "main");
 
   std::vector<VkPipelineShaderStageCreateInfo> stages = {
       vs.pipelineShaderStageCreateInfo,
@@ -211,8 +205,8 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
 
   vuloxr::vk::PipelineBuilder builder;
   auto pipeline =
-      builder.create(device, renderPass, depthStencil, pipelineLayout, stages,
-                     vertices.bindings, vertices.attributes, {}, {},
+      builder.create(graphics.device, renderPass, depthStencil, pipelineLayout,
+                     stages, vertices.bindings, vertices.attributes, {}, {},
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   // Create resources for each view.
@@ -223,7 +217,7 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
     auto swapchain = std::make_shared<VulkanSwapchain>(
-        session, i, stereoscope.viewConfigurations[i], viewFormat,
+        session, i, stereoscope.viewConfigurations[i], graphics.format,
         XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
     swapchains.push_back(swapchain);
 
@@ -237,8 +231,8 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
       images.push_back(image.image);
     }
     renderers.push_back(ViewRenderer(
-        physicalDevice, device, queueFamilyIndex, images, extent, viewFormat,
-        depthFormat,
+        graphics.physicalDevice, graphics.device, graphics.queueFamilyIndex,
+        images, extent, graphics.format, depthFormat,
         (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
         renderPass));
   }
@@ -314,7 +308,7 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
                            renderers[i].matrices);
 
           VkClearValue clearValues[] = {
-              {.color = clearColor},
+              {.color = graphics.clearColor},
               {.depthStencil = {.depth = 1.0f, .stencil = 0}},
           };
 
@@ -333,5 +327,5 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop,
                          blendMode);
   }
 
-  vkDeviceWaitIdle(device);
+  vkDeviceWaitIdle(graphics.device);
 }
