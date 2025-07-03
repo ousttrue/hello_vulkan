@@ -1,6 +1,3 @@
-# dependencies
-subdirs(xro)
-
 function(add_glsl TARGET SHADER)
   find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
   set(current-input-path ${CMAKE_CURRENT_LIST_DIR}/${SHADER})
@@ -14,8 +11,6 @@ function(add_glsl TARGET SHADER)
   set_source_files_properties(${current-output-path} PROPERTIES GENERATED TRUE)
   target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_glsl)
-
-subdirs(vko)
 
 subdirs(#
         hello_xr/cpp vuloxr)
