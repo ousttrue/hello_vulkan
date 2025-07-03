@@ -20,10 +20,10 @@ int main(int argc, char **argv) {
   auto window = glfw.createWindow(1024, 768, NAME);
 
   try {
-    auto [instance, physicalDevice, device, swapchain] =
-        glfw.createVulkan(useDebug);
-    main_loop(glfw.makeWindowLoopOnce(), instance, swapchain, physicalDevice,
-              device, window);
+    vuloxr::vk::Vulkan vulkan = glfw.createVulkan(useDebug);
+
+    main_loop(glfw.makeWindowLoopOnce(), vulkan.instance, vulkan.swapchain,
+              vulkan.physicalDevice, vulkan.device, window);
   } catch (const std::exception &ex) {
     vuloxr::Logger::Error("%s", ex.what());
   } catch (...) {

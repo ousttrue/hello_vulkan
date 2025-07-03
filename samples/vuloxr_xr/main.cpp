@@ -1,17 +1,10 @@
 #include "xr_main_loop.h"
 #include <thread>
-#include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr.h>
 #include <vuloxr/xr/graphics/vulkan.h>
 #include <vuloxr/xr/session.h>
 
-// List of supported color swapchain formats.
-constexpr VkFormat SupportedColorSwapchainFormats[] = {
-    VK_FORMAT_B8G8R8A8_SRGB,
-    VK_FORMAT_R8G8B8A8_SRGB,
-    VK_FORMAT_B8G8R8A8_UNORM,
-    VK_FORMAT_R8G8B8A8_UNORM,
-};
+// #include <vuloxr/vk/swapchain.h>
 
 int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
@@ -31,7 +24,7 @@ int main(int argc, char *argv[]) {
   }
 
   {
-    auto [instance, physicalDevice, device] =
+    auto vulkan =
         vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
@@ -39,16 +32,15 @@ int main(int argc, char *argv[]) {
       XrGraphicsBindingVulkan2KHR graphicsBinding{
           .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
           .next = nullptr,
-          .instance = instance,
-          .physicalDevice = physicalDevice,
-          .device = device,
-          .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
+          .instance = vulkan.instance,
+          .physicalDevice = vulkan.physicalDevice,
+          .device = vulkan.device,
+          .queueFamilyIndex = vulkan.physicalDevice.graphicsFamilyIndex,
           .queueIndex = 0,
       };
 
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
-
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
           .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
           .next = 0,
@@ -60,9 +52,6 @@ int main(int argc, char *argv[]) {
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
 
-      VkClearColorValue clearColor{
-          .float32 = {0, 0, 0, 0},
-      };
       xr_main_loop(
           [pQuit = &quitKeyPressed](bool isSessionRunning) {
             if (*pQuit) {
@@ -71,11 +60,7 @@ int main(int argc, char *argv[]) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          *vuloxr::vk::selectColorSwapchainFormat(
-              session.formats, SupportedColorSwapchainFormats),
-          physicalDevice, physicalDevice.graphicsFamilyIndex, device,
-          //
-          clearColor);
+          session.formats, vulkan, {0, 0, 0, 0});
 
       // session
     }

@@ -38,12 +38,12 @@ pub fn build(b: *std.Build) void {
             .package_name = "corg.khronos.openxr.hello_xr",
             .apk_name = "hello_xr",
             .contents = .{
-                .android_manifest = b.path("samples/hello_xr/AndroidManifest.xml"),
-                .resource_directory = b.path("samples/hello_xr/res"),
+                .android_manifest = b.path("samples/vuloxr_xr/hello_xr/AndroidManifest.xml"),
+                .resource_directory = b.path("samples/vuloxr_xr/hello_xr/res"),
                 .appends = &.{
                     .{
                         .path = .{
-                            .src = so.build_dir.path(b, "samples/hello_xr/libhello_xr.so"),
+                            .src = so.build_dir.path(b, "samples/vuloxr_xr/libhello_xr.so"),
                             .dst = "lib/arm64-v8a/libhello_xr.so",
                         },
                     },

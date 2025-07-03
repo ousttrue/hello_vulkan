@@ -45,12 +45,13 @@ void android_main(struct android_app *app) {
   vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
 
   {
-    auto [instance, physicalDevice, device] =
+    auto vulkan =
         vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
 
     {
       auto graphicsBinding = vuloxr::xr::getGraphicsBindingVulkan2KHR(
-          instance, physicalDevice, physicalDevice.graphicsFamilyIndex, device);
+          vulkan.instance, vulkan.physicalDevice,
+          vulkan.physicalDevice.graphicsFamilyIndex, vulkan.device);
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
@@ -64,47 +65,41 @@ void android_main(struct android_app *app) {
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
 
-      xr_main_loop(
-          [app](bool isSessionRunning) {
-            if (app->destroyRequested) {
-              return false;
-            }
+      auto runLoop = [app](bool isSessionRunning) {
+        if (app->destroyRequested) {
+          return false;
+        }
 
-            // Read all pending events.
-            for (;;) {
-              int events;
-              struct android_poll_source *source;
-              // If the timeout is zero, returns immediately without blocking.
-              // If the timeout is negative, waits indefinitely until an event
-              // appears.
-              const int timeoutMilliseconds =
-                  (!((vuloxr::android::UserData *)app->userData)->_active &&
-                   !isSessionRunning && app->destroyRequested == 0)
-                      ? -1
-                      : 0;
-              if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
-                                   (void **)&source) < 0) {
-                break;
-              }
+        // Read all pending events.
+        for (;;) {
+          int events;
+          struct android_poll_source *source;
+          // If the timeout is zero, returns immediately without blocking.
+          // If the timeout is negative, waits indefinitely until an event
+          // appears.
+          const int timeoutMilliseconds =
+              (!((vuloxr::android::UserData *)app->userData)->_active &&
+               !isSessionRunning && app->destroyRequested == 0)
+                  ? -1
+                  : 0;
+          if (ALooper_pollOnce(timeoutMilliseconds, nullptr, &events,
+                               (void **)&source) < 0) {
+            break;
+          }
 
-              // Process this event.
-              if (source != nullptr) {
-                source->process(app, source);
-              }
-            }
+          // Process this event.
+          if (source != nullptr) {
+            source->process(app, source);
+          }
+        }
 
-            return true;
-          },
-          xr_instance.instance, xr_instance.systemId, session, appSpace,
-          //
-          {
-              .format = *vuloxr::vk::selectColorSwapchainFormat(
-                  session.formats, SupportedColorSwapchainFormats),
-              .physicalDevice = physicalDevice,
-              .queueFamilyIndex = physicalDevice.graphicsFamilyIndex,
-              .device = device,
-              .clearColor{{0.184313729f, 0.309803933f, 0.309803933f, 1.0f}},
-          });
+        return true;
+      };
+
+      xr_main_loop(runLoop, xr_instance.instance, xr_instance.systemId, session,
+                   appSpace, session.formats,
+                   //
+                   vulkan, {0.184313729f, 0.309803933f, 0.309803933f, 1.0f});
       // session scope
     }
     // vulkan scope

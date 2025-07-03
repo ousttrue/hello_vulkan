@@ -12,6 +12,8 @@
 
 #include <openxr/openxr_platform.h>
 
+#include "../../vk/swapchain.h"
+
 namespace vuloxr {
 namespace xr {
 
@@ -77,7 +79,7 @@ createVulkanDeviceKHR(XrInstance instance,
                                   vulkanResult);
 }
 
-std::tuple<vk::Instance, vk::PhysicalDevice, vk::Device>
+vk::Vulkan
 createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
              PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback = nullptr) {
   // Create the Vulkan device for the adapter associated with the system.
@@ -223,8 +225,11 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   device.reset(vkDevice, queueInfo.queueFamilyIndex);
   vk::CheckVkResult(err);
 
-  return {std::move(instance), vk::PhysicalDevice(vkPhysicalDevice),
-          std::move(device)};
+  return {
+      .instance = std::move(instance),
+      .physicalDevice = vk::PhysicalDevice(vkPhysicalDevice),
+      .device = std::move(device),
+  };
 }
 
 inline XrGraphicsBindingVulkan2KHR

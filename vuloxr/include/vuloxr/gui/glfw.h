@@ -7,7 +7,7 @@
 // #define GLFW_EXPOSE_NATIVE_WIN32
 // #include <GLFW/glfw3native.h>
 
-#include "vuloxr.h"
+#include "../vk/swapchain.h"
 
 namespace vuloxr {
 namespace gui {
@@ -91,13 +91,7 @@ public:
     return glfwGetWindowAttrib(this->window, GLFW_ICONIFIED) != 0;
   }
 
-  struct VulkanResources {
-    vk::Instance instance;
-    vk::PhysicalDevice physicalDevice;
-    vk::Device device;
-    vk::Swapchain swapchain;
-  };
-  VulkanResources createVulkan(bool useDebug) {
+  vk::Vulkan createVulkan(bool useDebug) {
     vk::Instance instance;
 
     uint32_t glfwExtensionCount = 0;
@@ -139,8 +133,12 @@ public:
                             *presentFamilyIndex, device, device.queueFamily);
     swapchain.create();
 
-    return {std::move(instance), *physicalDevice, std::move(device),
-            std::move(swapchain)};
+    return {
+        .instance = std::move(instance),
+        .physicalDevice = *physicalDevice,
+        .device = std::move(device),
+        .swapchain = std::move(swapchain),
+    };
   }
 };
 

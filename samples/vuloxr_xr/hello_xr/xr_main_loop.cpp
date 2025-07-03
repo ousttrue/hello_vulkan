@@ -143,7 +143,8 @@ struct ViewRenderer : vuloxr::NonCopyable {
 
 void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                   XrSystemId systemId, XrSession session, XrSpace appSpace,
-                  const XrGraphics &graphics, XrEnvironmentBlendMode blendMode,
+                  std::span<const int64_t> formats, const Graphics &graphics,
+                  XrColor4f clearColor, XrEnvironmentBlendMode blendMode,
                   XrViewConfigurationType viewConfigurationType) {
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");
@@ -182,11 +183,21 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
 
+  // List of supported color swapchain formats.
+  constexpr VkFormat SupportedColorSwapchainFormats[] = {
+      VK_FORMAT_B8G8R8A8_SRGB,
+      VK_FORMAT_R8G8B8A8_SRGB,
+      VK_FORMAT_B8G8R8A8_UNORM,
+      VK_FORMAT_R8G8B8A8_UNORM,
+  };
+  VkFormat format = *vuloxr::vk::selectColorSwapchainFormat(
+      formats, SupportedColorSwapchainFormats);
+
   // pieline
   auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
       graphics.device, sizeof(float) * 16);
   auto [renderPass, depthStencil] = vuloxr::vk::createColorDepthRenderPass(
-      graphics.device, graphics.format, depthFormat);
+      graphics.device, format, depthFormat);
 
   auto vertexSPIRV = vuloxr::vk::glsl_vs_to_spv(VertexShaderGlsl);
   assert(vertexSPIRV.size());
@@ -217,7 +228,7 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
     auto swapchain = std::make_shared<VulkanSwapchain>(
-        session, i, stereoscope.viewConfigurations[i], graphics.format,
+        session, i, stereoscope.viewConfigurations[i], format,
         XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
     swapchains.push_back(swapchain);
 
@@ -231,8 +242,9 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
       images.push_back(image.image);
     }
     renderers.push_back(ViewRenderer(
-        graphics.physicalDevice, graphics.device, graphics.queueFamilyIndex,
-        images, extent, graphics.format, depthFormat,
+        graphics.physicalDevice, graphics.device,
+        graphics.physicalDevice.graphicsFamilyIndex, images, extent, format,
+        depthFormat,
         (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount,
         renderPass));
   }
@@ -308,7 +320,8 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                            renderers[i].matrices);
 
           VkClearValue clearValues[] = {
-              {.color = graphics.clearColor},
+              {.color = {clearColor.r, clearColor.g, clearColor.b,
+                         clearColor.a}},
               {.depthStencil = {.depth = 1.0f, .stencil = 0}},
           };
 

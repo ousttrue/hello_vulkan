@@ -85,7 +85,7 @@
             "name": "hello_xr",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/hello_xr/cpp/hello_xr.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/hello_xr.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

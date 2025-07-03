@@ -139,7 +139,7 @@ struct PhysicalDevice {
   uint32_t graphicsFamilyIndex = UINT_MAX;
   VkPhysicalDeviceMemoryProperties memoryProps = {};
 
-  // PhysicalDevice() {}
+  PhysicalDevice() {}
   PhysicalDevice(VkPhysicalDevice _physicalDevice)
       : physicalDevice(_physicalDevice) {
     vkGetPhysicalDeviceProperties(this->physicalDevice, &this->properties);

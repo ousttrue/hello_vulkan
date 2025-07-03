@@ -10,7 +10,7 @@ namespace vuloxr {
 namespace vk {
 
 inline std::optional<VkFormat>
-selectColorSwapchainFormat(const std::vector<int64_t> formats,
+selectColorSwapchainFormat(std::span<const int64_t> formats,
                            std::span<const VkFormat> candidates) {
   auto b = std::begin(candidates);
   auto e = std::end(candidates);
@@ -40,11 +40,11 @@ selectColorSwapchainFormat(const std::vector<int64_t> formats,
 }
 
 struct Swapchain : public NonCopyable {
-  VkInstance instance;
-  VkSurfaceKHR surface;
-  VkPhysicalDevice physicalDevice;
-  uint32_t presentFamily;
-  VkDevice device;
+  VkInstance instance = VK_NULL_HANDLE;
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  uint32_t presentFamily = UINT_MAX;
+  VkDevice device = VK_NULL_HANDLE;
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   operator VkSwapchainKHR() const { return this->swapchain; }
   std::vector<VkImage> images;
@@ -54,6 +54,8 @@ struct Swapchain : public NonCopyable {
   VkQueue presentQueue;
   std::vector<VkPresentModeKHR> presentModes;
   uint32_t graphicsFamily;
+
+  Swapchain() {}
 
   Swapchain(VkInstance _instance, VkSurfaceKHR _surface,
             VkPhysicalDevice _physicalDevice, uint32_t _presentFamily,
@@ -627,6 +629,13 @@ struct SwapchainIsolatedDepthFramebufferList : NonCopyable {
           this->device, &framebufferInfo, nullptr, &framebuffer->framebuffer));
     }
   }
+};
+
+struct Vulkan {
+  Instance instance;
+  PhysicalDevice physicalDevice;
+  Device device;
+  Swapchain swapchain;
 };
 
 } // namespace vk
