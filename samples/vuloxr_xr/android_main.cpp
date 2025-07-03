@@ -4,19 +4,19 @@
 
 #include "xr_main_loop.h"
 #include <cstddef>
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr/graphics/vulkan.h>
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
+#include <vuloxr/xr/graphics/egl.h>
+#endif
+
 #include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
-
-// List of supported color swapchain formats.
-constexpr VkFormat SupportedColorSwapchainFormats[] = {
-    VK_FORMAT_B8G8R8A8_SRGB,
-    VK_FORMAT_R8G8B8A8_SRGB,
-    VK_FORMAT_B8G8R8A8_UNORM,
-    VK_FORMAT_R8G8B8A8_UNORM,
-};
 
 void android_main(struct android_app *app) {
 #ifdef NDEBUG
@@ -39,19 +39,22 @@ void android_main(struct android_app *app) {
   vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+#ifdef XR_USE_GRAPHICS_API_VULKAN
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+#define createGraphics vuloxr::xr::createVulkan
+#endif
+#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
+  xr_instance.extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
+#endif
 
   auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
   vuloxr::xr::CheckXrResult(xr_instance.create(&instanceCreateInfoAndroid));
 
   {
-    auto vulkan =
-        vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
+    auto [graphics, graphicsBinding] =
+        createGraphics(xr_instance.instance, xr_instance.systemId);
 
     {
-      auto graphicsBinding = vuloxr::xr::getGraphicsBindingVulkan2KHR(
-          vulkan.instance, vulkan.physicalDevice,
-          vulkan.physicalDevice.graphicsFamilyIndex, vulkan.device);
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
                                   &graphicsBinding);
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
@@ -99,7 +102,7 @@ void android_main(struct android_app *app) {
       xr_main_loop(runLoop, xr_instance.instance, xr_instance.systemId, session,
                    appSpace, session.formats,
                    //
-                   vulkan, {0.184313729f, 0.309803933f, 0.309803933f, 1.0f});
+                   graphics, {0.184313729f, 0.309803933f, 0.309803933f, 1.0f});
       // session scope
     }
     // vulkan scope

@@ -15,6 +15,15 @@
 #define EGLASSERT() AssertEGLError(__FILE__, __LINE__)
 
 namespace vuloxr {
+
+namespace egl {
+
+struct OpenGLES {
+  //
+};
+
+} // namespace egl
+
 namespace xr {
 
 inline EGLConfig _egl_get_config() {

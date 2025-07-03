@@ -17,7 +17,7 @@
 namespace vuloxr {
 namespace xr {
 
-static XrResult getVulkanGraphicsRequirements2KHR(
+inline XrResult getVulkanGraphicsRequirements2KHR(
     XrInstance instance, XrSystemId systemId,
     XrGraphicsRequirementsVulkan2KHR *graphicsRequirements) {
   PFN_xrGetVulkanGraphicsRequirements2KHR pfnGetVulkanGraphicsRequirements2KHR =
@@ -33,7 +33,7 @@ static XrResult getVulkanGraphicsRequirements2KHR(
                                               graphicsRequirements);
 }
 
-static XrResult
+inline XrResult
 createVulkanInstanceKHR(XrInstance instance,
                         const XrVulkanInstanceCreateInfoKHR *createInfo,
                         VkInstance *vulkanInstance, VkResult *vulkanResult) {
@@ -48,7 +48,7 @@ createVulkanInstanceKHR(XrInstance instance,
                                     vulkanResult);
 }
 
-static XrResult
+inline XrResult
 getVulkanGraphicsDevice2KHR(XrInstance instance,
                             const XrVulkanGraphicsDeviceGetInfoKHR *getInfo,
                             VkPhysicalDevice *vulkanPhysicalDevice) {
@@ -64,7 +64,7 @@ getVulkanGraphicsDevice2KHR(XrInstance instance,
                                         vulkanPhysicalDevice);
 }
 
-static XrResult
+inline XrResult
 createVulkanDeviceKHR(XrInstance instance,
                       const XrVulkanDeviceCreateInfoKHR *createInfo,
                       VkDevice *vulkanDevice, VkResult *vulkanResult) {
@@ -79,7 +79,22 @@ createVulkanDeviceKHR(XrInstance instance,
                                   vulkanResult);
 }
 
-vk::Vulkan
+inline XrGraphicsBindingVulkan2KHR
+getGraphicsBindingVulkan2KHR(VkInstance instance,
+                             VkPhysicalDevice physicalDevice,
+                             uint32_t graphicsFamilyIndex, VkDevice device) {
+  return XrGraphicsBindingVulkan2KHR{
+      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+      .next = nullptr,
+      .instance = instance,
+      .physicalDevice = physicalDevice,
+      .device = device,
+      .queueFamilyIndex = graphicsFamilyIndex,
+      .queueIndex = 0,
+  };
+}
+
+inline std::tuple<vk::Vulkan, XrGraphicsBindingVulkan2KHR>
 createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
              PFN_vkDebugUtilsMessengerCallbackEXT pfnUserCallback = nullptr) {
   // Create the Vulkan device for the adapter associated with the system.
@@ -225,25 +240,25 @@ createVulkan(XrInstance xr_instance, XrSystemId xr_systemId,
   device.reset(vkDevice, queueInfo.queueFamilyIndex);
   vk::CheckVkResult(err);
 
-  return {
+  XrGraphicsBindingVulkan2KHR bindings{
+      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+      .next = nullptr,
+      .instance = instance,
+      .physicalDevice = vkPhysicalDevice,
+      .device = device,
+      .queueFamilyIndex = queueInfo.queueFamilyIndex,
+      .queueIndex = 0,
+  };
+
+  vk::Vulkan vulkan{
       .instance = std::move(instance),
       .physicalDevice = vk::PhysicalDevice(vkPhysicalDevice),
       .device = std::move(device),
   };
-}
 
-inline XrGraphicsBindingVulkan2KHR
-getGraphicsBindingVulkan2KHR(VkInstance instance,
-                             VkPhysicalDevice physicalDevice,
-                             uint32_t graphicsFamilyIndex, VkDevice device) {
-  return XrGraphicsBindingVulkan2KHR{
-      .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-      .next = nullptr,
-      .instance = instance,
-      .physicalDevice = physicalDevice,
-      .device = device,
-      .queueFamilyIndex = graphicsFamilyIndex,
-      .queueIndex = 0,
+  return {
+      std::move(vulkan),
+      bindings,
   };
 }
 

@@ -1,10 +1,16 @@
 #pragma once
 #include <functional>
 #include <openxr/openxr.h>
+#include <span>
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <vuloxr/vk/swapchain.h>
 using Graphics = vuloxr::vk::Vulkan;
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
+#include <vuloxr/xr/graphics/egl.h>
+using Graphics = vuloxr::egl::OpenGLES;
 #endif
 
 void xr_main_loop(
