@@ -3,12 +3,18 @@ if(ANDROID)
     add_library(
       ${TARGET_NAME} SHARED
       #
-      android_main.cpp ${ARGV})
+      android_main.cpp ${ARGN})
     target_compile_definitions(${TARGET_NAME}
                                PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
     target_link_libraries(
-      ${TARGET_NAME} PRIVATE android_native_app_glue android log vuloxr vulkan
-                             shaderc)
+      ${TARGET_NAME}
+      PRIVATE android_native_app_glue
+              android
+              log
+              vuloxr
+              vulkan
+              shaderc
+              glm)
 
   endfunction()
 
@@ -17,7 +23,7 @@ else()
     add_executable(
       ${TARGET_NAME}
       #
-      main.cpp ${ARGV})
+      main.cpp ${ARGN})
     target_link_libraries(${TARGET_NAME} PRIVATE vuloxr Vulkan::Vulkan glfw
                                                  shaderc vuloxr)
   endfunction()

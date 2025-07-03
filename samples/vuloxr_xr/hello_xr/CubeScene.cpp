@@ -1,5 +1,4 @@
 #include "CubeScene.h"
-#include "xr_linear.h"
 
 inline XrPosef RotateCCWAboutYAxis(float radians, XrVector3f translation) {
   XrPosef t{

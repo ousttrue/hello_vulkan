@@ -5,7 +5,7 @@
 #include <vulkan/vulkan_core.h>
 #include <vuloxr/vk.h>
 
-void xr_vulkan_session(
+void xr_main_loop(
     const std::function<bool(bool)> &runLoop, XrInstance instance,
     XrSystemId systemId, XrSession session, XrSpace appSpace,
     //

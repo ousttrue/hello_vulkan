@@ -1,4 +1,4 @@
-#include "xr_vulkan_session.h"
+#include "xr_main_loop.h"
 #include <thread>
 #include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr.h>
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
       VkClearColorValue clearColor{
           .float32 = {0, 0, 0, 0},
       };
-      xr_vulkan_session(
+      xr_main_loop(
           [pQuit = &quitKeyPressed](bool isSessionRunning) {
             if (*pQuit) {
               return false;

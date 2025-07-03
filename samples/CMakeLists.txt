@@ -12,8 +12,7 @@ function(add_glsl TARGET SHADER)
   target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_glsl)
 
-subdirs(#
-        hello_xr/cpp vuloxr)
+subdirs(vuloxr vuloxr_xr)
 
 if(ANDROID_NDK)
   # https://developer.android.com/ndk/guides/graphics/shader-compilers

@@ -1,4 +1,4 @@
-#include "xr_vulkan_session.h"
+#include "../xr_main_loop.h"
 #include "CubeScene.h"
 #include "xr_linear.h"
 #include <thread>
@@ -141,7 +141,7 @@ struct ViewRenderer : vuloxr::NonCopyable {
   }
 };
 
-void xr_vulkan_session(const std::function<bool(bool)> &runLoop,
+void xr_main_loop(const std::function<bool(bool)> &runLoop,
                        XrInstance instance, XrSystemId systemId,
                        XrSession session, XrSpace appSpace,
                        //

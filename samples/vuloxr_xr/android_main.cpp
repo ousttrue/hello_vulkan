@@ -1,10 +1,11 @@
+#include <vuloxr/xr/platform/android.h>
+
 #include <vuloxr/android/userdata.h>
 
-#include "xr_vulkan_session.h"
+#include "xr_main_loop.h"
 #include <cstddef>
 #include <vuloxr/vk/swapchain.h>
 #include <vuloxr/xr/graphics/vulkan.h>
-#include <vuloxr/xr/platform/android.h>
 #include <vuloxr/xr/session.h>
 
 auto APP_NAME = "hello_xr";
@@ -67,7 +68,7 @@ void android_main(struct android_app *app) {
       vuloxr::xr::CheckXrResult(xrCreateReferenceSpace(
           session, &referenceSpaceCreateInfo, &appSpace));
 
-      xr_vulkan_session(
+      xr_main_loop(
           [app](bool isSessionRunning) {
             if (app->destroyRequested) {
               return false;
