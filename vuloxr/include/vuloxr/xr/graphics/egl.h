@@ -5,8 +5,7 @@
 #include <EGL/eglext.h>
 #include <GLES3/gl31.h>
 
-#include <openxr/openxr.h>
-#include <openxr/openxr_platform.h>
+#include "../../xr.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -71,16 +70,6 @@ inline EGLContext _egl_get_context() {
   return ctx;
 }
 
-inline XrGraphicsBindingOpenGLESAndroidKHR
-getGraphicsBindingOpenGLESAndroidKHR() {
-  return XrGraphicsBindingOpenGLESAndroidKHR{
-      .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
-      .display = eglGetCurrentDisplay(),
-      .config = _egl_get_config(),
-      .context = _egl_get_context(),
-  };
-}
-
 inline const char *GetEGLErrMsg(int nCode) {
   switch (nCode) {
   case EGL_SUCCESS:
@@ -138,30 +127,6 @@ inline void AssertEGLError(const char *lpFile, int nLine) {
     printf("[EGL ASSERT ERR] \"%s\"(%d):0x%04x(%s)\n", lpFile, nLine, error,
            GetEGLErrMsg(error));
   }
-}
-
-inline void getGLESGraphicsRequirementsKHR(XrInstance instance,
-                                           XrSystemId sysid) {
-  PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR;
-  xrGetInstanceProcAddr(
-      instance, "xrGetOpenGLESGraphicsRequirementsKHR",
-      (PFN_xrVoidFunction *)&xrGetOpenGLESGraphicsRequirementsKHR);
-
-  XrGraphicsRequirementsOpenGLESKHR gfxReq = {
-      XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
-  xrGetOpenGLESGraphicsRequirementsKHR(instance, sysid, &gfxReq);
-
-  GLint major, minor;
-  glGetIntegerv(GL_MAJOR_VERSION, &major);
-  glGetIntegerv(GL_MINOR_VERSION, &minor);
-  XrVersion glver = XR_MAKE_VERSION(major, minor, 0);
-
-  Logger::Info(
-      "GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
-      glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
-
-  assert(glver >= gfxReq.minApiVersionSupported ||
-         glver <= gfxReq.maxApiVersionSupported);
 }
 
 static EGLConfig find_egl_config(int r, int g, int b, int a, int d, int s,
@@ -267,7 +232,42 @@ exit:
   return conf;
 }
 
-inline void createEgl(XrInstance xr_instance, XrSystemId xr_systemId) {
+inline XrGraphicsBindingOpenGLESAndroidKHR
+getGraphicsBindingOpenGLESAndroidKHR() {
+  return XrGraphicsBindingOpenGLESAndroidKHR{
+      .type = XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
+      .display = eglGetCurrentDisplay(),
+      .config = _egl_get_config(),
+      .context = _egl_get_context(),
+  };
+}
+
+inline void getGLESGraphicsRequirementsKHR(XrInstance instance,
+                                           XrSystemId sysid) {
+  PFN_xrGetOpenGLESGraphicsRequirementsKHR xrGetOpenGLESGraphicsRequirementsKHR;
+  xrGetInstanceProcAddr(
+      instance, "xrGetOpenGLESGraphicsRequirementsKHR",
+      (PFN_xrVoidFunction *)&xrGetOpenGLESGraphicsRequirementsKHR);
+
+  XrGraphicsRequirementsOpenGLESKHR gfxReq = {
+      XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
+  xrGetOpenGLESGraphicsRequirementsKHR(instance, sysid, &gfxReq);
+
+  GLint major, minor;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  XrVersion glver = XR_MAKE_VERSION(major, minor, 0);
+
+  Logger::Info(
+      "GLES version: %" PRIx64 ", supported: (%" PRIx64 " - %" PRIx64 ")\n",
+      glver, gfxReq.minApiVersionSupported, gfxReq.maxApiVersionSupported);
+
+  assert(glver >= gfxReq.minApiVersionSupported ||
+         glver <= gfxReq.maxApiVersionSupported);
+}
+
+inline std::tuple<egl::OpenGLES, XrGraphicsBindingOpenGLESAndroidKHR>
+createEgl(XrInstance xr_instance, XrSystemId xr_systemId) {
   EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
   EGLint sfc_attr[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
 
@@ -300,7 +300,7 @@ inline void createEgl(XrInstance xr_instance, XrSystemId xr_systemId) {
     break;
   default:
     assert(false);
-    return;
+    return {};
   }
 
   auto s_ctx = eglCreateContext(s_dpy, config, EGL_NO_CONTEXT, context_attribs);
@@ -310,6 +310,14 @@ inline void createEgl(XrInstance xr_instance, XrSystemId xr_systemId) {
   ret = eglMakeCurrent(s_dpy, s_sfc, s_sfc, s_ctx);
   assert(ret == EGL_TRUE);
   EGLASSERT();
+
+  getGLESGraphicsRequirementsKHR(xr_instance, xr_systemId);
+
+  egl::OpenGLES graphics;
+
+  auto binding = getGraphicsBindingOpenGLESAndroidKHR();
+
+  return {graphics, binding};
 }
 
 } // namespace xr

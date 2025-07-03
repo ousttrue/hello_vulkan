@@ -2,17 +2,26 @@
 #include <EGL/eglext.h>
 #include <GLES3/gl31.h>
 
+#include "../../vuloxr_xr/xr_main_loop.h"
 #include "ViewRenderer.h"
-#include "xr_session.h"
 
 #include <thread>
 #include <vuloxr/xr/session.h>
 #include <vuloxr/xr/swapchain.h>
 
-void xr_session(const std::function<bool(bool)> &runLoop, XrInstance instance,
-                XrSystemId systemId, XrSession session, XrSpace appSpace) {
-
-  auto viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
+void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
+                  XrSystemId systemId, XrSession session, XrSpace appSpace,
+                  std::span<const int64_t> formats,
+                  //
+                  const Graphics &graphics,
+                  //
+                  XrColor4f clearColor, XrEnvironmentBlendMode blendMode,
+                  XrViewConfigurationType viewConfigurationType)
+// void xr_session(const std::function<bool(bool)> &runLoop, XrInstance
+// instance,
+//                 XrSystemId systemId, XrSession session, XrSpace appSpace)
+{
+  // auto viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
   vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);

@@ -45,6 +45,7 @@ void android_main(struct android_app *app) {
 #endif
 #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
   xr_instance.extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
+#define createGraphics vuloxr::xr::createEgl
 #endif
 
   auto instanceCreateInfoAndroid = vuloxr::xr::androidLoader(app);
