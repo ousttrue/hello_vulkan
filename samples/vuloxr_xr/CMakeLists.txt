@@ -58,3 +58,24 @@ endif()
 
 add_xr_sample(hello_xr hello_xr/xr_main_loop.cpp hello_xr/CubeScene.cpp)
 target_compile_definitions(hello_xr PUBLIC -DXR_USE_GRAPHICS_API_VULKAN)
+
+if(ANDROID)
+  subdirs(android_openxr_gles)
+
+  set(TARGET_NAME gl2triOXR)
+  add_library(
+    ${TARGET_NAME} SHARED
+    #
+    android_main.cpp gl2triOXR/xr_main_loop.cpp 
+    gl2triOXR/ViewRenderer.cpp
+  )
+  target_compile_definitions(
+    ${TARGET_NAME} PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1
+                           -DXR_USE_PLATFORM_ANDROID)
+  target_compile_options(${TARGET_NAME} PUBLIC # DirectXMath
+                                               -Wno-defaulted-function-deleted)
+  target_link_libraries(
+    ${TARGET_NAME} PRIVATE vuloxr android_openxr_gles OpenXR::openxr_loader
+                           android_native_app_glue DirectXMath sal)
+
+endif()

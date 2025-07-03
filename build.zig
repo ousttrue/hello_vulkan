@@ -212,12 +212,12 @@ pub fn build(b: *std.Build) void {
             .package_name = "com.example.gl2triOXR",
             .apk_name = "gl2triOXR",
             .contents = .{
-                .android_manifest = b.path("samples/android_openxr_gles/gl2triOXR/AndroidManifest.xml"),
+                .android_manifest = b.path("samples/vuloxr_xr/gl2triOXR/AndroidManifest.xml"),
                 // .assets_directory = shaders_wf.getDirectory(),
                 .appends = &.{
                     .{
                         .path = .{
-                            .src = so.build_dir.path(b, "samples/android_openxr_gles/gl2triOXR/libgl2triOXR.so"),
+                            .src = so.build_dir.path(b, "samples/vuloxr_xr/libgl2triOXR.so"),
                             .dst = "lib/arm64-v8a/libgl2triOXR.so",
                         },
                     },

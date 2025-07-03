@@ -13,10 +13,3 @@ function(add_glsl TARGET SHADER)
 endfunction(add_glsl)
 
 subdirs(vuloxr vuloxr_xr)
-
-if(ANDROID_NDK)
-  # https://developer.android.com/ndk/guides/graphics/shader-compilers
-  subdirs(ovr_openxr_mobile_sdk android_openxr_gles)
-else()
-
-endif()
