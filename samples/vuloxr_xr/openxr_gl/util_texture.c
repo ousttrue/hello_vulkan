@@ -4,7 +4,7 @@
  * ------------------------------------------------ */
 #include <stdio.h>
 #include <stdlib.h>
-#include <GLES2/gl2.h>
+#include "api_gl.h"
 #include "util_texture.h"
 #include "assertgl.h"
 

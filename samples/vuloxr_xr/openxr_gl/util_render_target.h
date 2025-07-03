@@ -4,9 +4,7 @@
  * ------------------------------------------------ */
 #ifndef UTIL_RENDER_TARGET_H
 #define UTIL_RENDER_TARGET_H
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES3/gl31.h>
+#include "api_gl.h"
 
 #define RTARGET_DEFAULT     (0 << 0)
 #define RTARGET_COLOR       (1 << 0)

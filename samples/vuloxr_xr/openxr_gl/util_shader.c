@@ -4,10 +4,7 @@
  * ------------------------------------------------ */
 #include <stdio.h>
 #include <stdlib.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#include <GLES3/gl31.h>
-#include <GLES3/gl3ext.h>
+#include "api_gl.h"
 #include "util_shader.h"
 #include "util_log.h"
 #include "assertgl.h"

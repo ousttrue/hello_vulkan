@@ -1,6 +1,4 @@
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES3/gl31.h>
+#include "../openxr_gl/api_gl.h"
 
 #include "../../vuloxr_xr/xr_main_loop.h"
 #include "ViewRenderer.h"

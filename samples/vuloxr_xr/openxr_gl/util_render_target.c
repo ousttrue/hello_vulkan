@@ -5,8 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
+
+#include "api_gl.h"
+
 #include "assertgl.h"
 #include "util_render_target.h"
 

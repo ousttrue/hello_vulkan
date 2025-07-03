@@ -5,9 +5,7 @@
 #ifndef SHADER_UTIL_H
 #define SHADER_UTIL_H
 
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES3/gl31.h>
+#include "api_gl.h"
 
 struct uniform_info {
   const char *name;

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 #define M_PId180f     (3.1415926f / 180.0f)
 #include "util_matrix.h"
 

@@ -1,12 +1,10 @@
 #include "ViewRenderer.h"
 
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GLES3/gl31.h>
+#include "../openxr_gl/api_gl.h"
+#include "../openxr_gl/util_shader.h"
 
 #include <openxr/openxr.h>
 
-#include "util_shader.h"
 #include <assert.h>
 #include <vuloxr.h>
 

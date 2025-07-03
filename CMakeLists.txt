@@ -67,6 +67,18 @@ else()
   target_include_directories(${TARGET_NAME} PUBLIC ${imgui_SOURCE_DIR}
                                                    ${imgui_SOURCE_DIR}/backends)
   target_link_libraries(${TARGET_NAME} PUBLIC Vulkan::Vulkan glfw)
+
+  include(FetchContent)
+  FetchContent_Populate(
+    glew
+    URL https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download
+  )
+  add_library(glew SHARED ${glew_SOURCE_DIR}/src/glew.c
+                          ${glew_SOURCE_DIR}/src/glewinfo.c)
+  target_include_directories(glew PUBLIC ${glew_SOURCE_DIR}/include)
+  target_compile_definitions(glew PRIVATE GLEW_BUILD # PUBLIC GLEW_STATIC
+  )
+  target_link_libraries(glew PUBLIC OpenGL32)
 endif()
 
 FetchContent_Declare(
