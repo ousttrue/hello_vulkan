@@ -39,10 +39,12 @@ void android_main(struct android_app *app) {
   vuloxr::xr::Instance xr_instance;
   xr_instance.extensions.push_back(
       XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+
 #ifdef XR_USE_GRAPHICS_API_VULKAN
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
 #define createGraphics vuloxr::xr::createVulkan
 #endif
+
 #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
   xr_instance.extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
 #define createGraphics vuloxr::xr::createEgl

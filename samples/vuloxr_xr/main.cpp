@@ -1,10 +1,28 @@
 #include "xr_main_loop.h"
 #include <thread>
 #include <vuloxr/xr.h>
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <vuloxr/xr/graphics/vulkan.h>
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL
+#include <vuloxr/xr/graphics/gl.h>
+#endif
+
 #include <vuloxr/xr/session.h>
 
 // #include <vuloxr/vk/swapchain.h>
+// // XrSession
+// XrGraphicsBindingVulkan2KHR graphicsBinding{
+//     .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
+//     .next = nullptr,
+//     .instance = vulkan.instance,
+//     .physicalDevice = vulkan.physicalDevice,
+//     .device = vulkan.device,
+//     .queueFamilyIndex = vulkan.physicalDevice.graphicsFamilyIndex,
+//     .queueIndex = 0,
+// };
 
 int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
@@ -17,30 +35,30 @@ int main(int argc, char *argv[]) {
   exitPollingThread.detach();
 
   vuloxr::xr::Instance xr_instance;
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
   xr_instance.extensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+#define createGraphics vuloxr::xr::createVulkan
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL
+  xr_instance.extensions.push_back(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME);
+#define createGraphics vuloxr::xr::createGl
+#endif
+
   if (xr_instance.create(nullptr) != XR_SUCCESS) {
     vuloxr::Logger::Info("no xro::Instance. no Oculus link ? shutdown...");
     return 1;
   }
 
   {
-    auto vulkan =
-        vuloxr::xr::createVulkan(xr_instance.instance, xr_instance.systemId);
+    auto [vulkan, binding] =
+        createGraphics(xr_instance.instance, xr_instance.systemId);
 
     {
-      // XrSession
-      XrGraphicsBindingVulkan2KHR graphicsBinding{
-          .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-          .next = nullptr,
-          .instance = vulkan.instance,
-          .physicalDevice = vulkan.physicalDevice,
-          .device = vulkan.device,
-          .queueFamilyIndex = vulkan.physicalDevice.graphicsFamilyIndex,
-          .queueIndex = 0,
-      };
 
       vuloxr::xr::Session session(xr_instance.instance, xr_instance.systemId,
-                                  &graphicsBinding);
+                                  &binding);
       XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{
           .type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
           .next = 0,

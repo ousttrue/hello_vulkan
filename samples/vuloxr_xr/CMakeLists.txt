@@ -39,7 +39,7 @@ else()
               Vulkan::Vulkan
               glfw
               #
-    )
+              glew_s)
     target_compile_definitions(
       ${TARGET_NAME} PUBLIC -DXR_USE_PLATFORM_WIN32 -DWIN32_LEAN_AND_MEAN
                             -DNOMINMAX)
@@ -49,7 +49,8 @@ else()
       target_compile_options(${TARGET_NAME} PRIVATE /Zc:wchar_t /Zc:forScope
                                                     /W4 /EHsc)
     else()
-      target_compile_options(hello_xr PRIVATE -Wno-defaulted-function-deleted)
+      target_compile_options(${TARGET_NAME}
+                             PRIVATE -Wno-defaulted-function-deleted)
     endif()
 
   endfunction()
@@ -67,9 +68,10 @@ if(ANDROID)
   add_library(
     ${TARGET_NAME} SHARED
     #
-    android_main.cpp gl2triOXR/xr_main_loop.cpp gl2triOXR/ViewRenderer.cpp)
-  target_compile_definitions(${TARGET_NAME}
-                             PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1)
+    android_main.cpp gl2triOXR/xr_main_loop.cpp)
+  target_compile_definitions(
+    ${TARGET_NAME} PRIVATE ANDROID=1 VK_USE_PLATFORM_ANDROID_KHR=1
+                           -DXR_USE_GRAPHICS_API_OPENGL_ES)
   target_compile_options(${TARGET_NAME} PUBLIC # DirectXMath
                                                -Wno-defaulted-function-deleted)
   target_link_libraries(
@@ -91,8 +93,9 @@ else()
             glfw
             #
   )
-  target_compile_definitions(${TARGET_NAME} PUBLIC -DWIN32_LEAN_AND_MEAN
-                                                   -DNOMINMAX)
+  target_compile_definitions(
+    ${TARGET_NAME} PUBLIC # -DWIN32_LEAN_AND_MEAN -DNOMINMAX
+                          -DXR_USE_GRAPHICS_API_OPENGL)
   target_compile_definitions(${TARGET_NAME} PUBLIC)
 
   if(MSVC)
@@ -100,7 +103,8 @@ else()
     target_compile_options(${TARGET_NAME} PRIVATE /Zc:wchar_t /Zc:forScope /W4
                                                   /EHsc)
   else()
-    target_compile_options(hello_xr PRIVATE -Wno-defaulted-function-deleted)
+    target_compile_options(${TARGET_NAME}
+                           PRIVATE -Wno-defaulted-function-deleted)
   endif()
 
 endif()

@@ -93,6 +93,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "gl2triOXR",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2triOXR.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "vulfwk",
             "type": "cppvsdbg",
             "request": "launch",

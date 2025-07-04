@@ -1,6 +1,5 @@
 #pragma once
 #include <functional>
-#include <openxr/openxr.h>
 #include <span>
 
 #ifdef XR_USE_GRAPHICS_API_VULKAN
@@ -12,6 +11,13 @@ using Graphics = vuloxr::vk::Vulkan;
 #include <vuloxr/xr/graphics/egl.h>
 using Graphics = vuloxr::egl::OpenGLES;
 #endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL
+#include <vuloxr/xr/graphics/gl.h>
+using Graphics = vuloxr::gl::OpenGL;
+#endif
+
+#include <openxr/openxr.h>
 
 void xr_main_loop(
     const std::function<bool(bool)> &runLoop, XrInstance instance,

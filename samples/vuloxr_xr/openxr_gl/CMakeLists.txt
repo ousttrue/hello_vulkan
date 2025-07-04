@@ -14,20 +14,25 @@ if(ANDROID)
   target_compile_definitions(
     ${TARGET_NAME} PUBLIC XR_OS_ANDROID XR_USE_PLATFORM_ANDROID
                           XR_USE_GRAPHICS_API_OPENGL_ES)
+
+  target_link_libraries(
+    ${TARGET_NAME}
+    PUBLIC OpenXR::openxr_loader
+           stb
+           #
+           android_native_app_glue
+           android
+           EGL
+           GLESv3
+           log)
 else()
 
   target_compile_definitions(
     ${TARGET_NAME} PUBLIC XR_OS_WINDOWS XR_USE_PLATFORM_WIN32
                           XR_USE_GRAPHICS_API_OPENGL)
-  target_link_libraries(${TARGET_NAME} PUBLIC glew)
+  target_link_libraries(
+    ${TARGET_NAME}
+    PUBLIC OpenXR::openxr_loader stb
+           #
+           glew_s)
 endif()
-
-target_link_libraries(
-  ${TARGET_NAME}
-  PUBLIC android_native_app_glue
-         OpenXR::openxr_loader
-         android
-         EGL
-         GLESv3
-         log
-         stb)
