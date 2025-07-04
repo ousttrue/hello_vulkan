@@ -10,8 +10,16 @@ namespace vuloxr {
 namespace vk {
 
 inline std::optional<VkFormat>
-selectColorSwapchainFormat(std::span<const int64_t> formats,
-                           std::span<const VkFormat> candidates) {
+selectColorSwapchainFormat(std::span<const int64_t> formats) {
+
+  // List of supported color swapchain formats.
+  constexpr VkFormat candidates[] = {
+      VK_FORMAT_B8G8R8A8_SRGB,
+      VK_FORMAT_R8G8B8A8_SRGB,
+      VK_FORMAT_B8G8R8A8_UNORM,
+      VK_FORMAT_R8G8B8A8_UNORM,
+  };
+
   auto b = std::begin(candidates);
   auto e = std::end(candidates);
 
@@ -102,6 +110,9 @@ struct Swapchain : public NonCopyable {
       src->swapchain = VK_NULL_HANDLE;
       this->images.swap(src->images);
       src->surface = VK_NULL_HANDLE;
+    }
+    if (this->device == VK_NULL_HANDLE) {
+      return;
     }
 
     vkGetDeviceQueue(this->device, this->presentFamily, 0, &this->presentQueue);

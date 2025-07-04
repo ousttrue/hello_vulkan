@@ -183,15 +183,7 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
 
-  // List of supported color swapchain formats.
-  constexpr VkFormat SupportedColorSwapchainFormats[] = {
-      VK_FORMAT_B8G8R8A8_SRGB,
-      VK_FORMAT_R8G8B8A8_SRGB,
-      VK_FORMAT_B8G8R8A8_UNORM,
-      VK_FORMAT_R8G8B8A8_UNORM,
-  };
-  VkFormat format = *vuloxr::vk::selectColorSwapchainFormat(
-      formats, SupportedColorSwapchainFormats);
+  auto format = *vuloxr::vk::selectColorSwapchainFormat(formats);
 
   // pieline
   auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
@@ -224,7 +216,6 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
   std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
   std::vector<ViewRenderer> renderers;
-
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
     auto swapchain = std::make_shared<VulkanSwapchain>(

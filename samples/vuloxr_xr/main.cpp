@@ -12,17 +12,7 @@
 
 #include <vuloxr/xr/session.h>
 
-// #include <vuloxr/vk/swapchain.h>
-// // XrSession
-// XrGraphicsBindingVulkan2KHR graphicsBinding{
-//     .type = XR_TYPE_GRAPHICS_BINDING_VULKAN2_KHR,
-//     .next = nullptr,
-//     .instance = vulkan.instance,
-//     .physicalDevice = vulkan.physicalDevice,
-//     .device = vulkan.device,
-//     .queueFamilyIndex = vulkan.physicalDevice.graphicsFamilyIndex,
-//     .queueIndex = 0,
-// };
+XrColor4f clearColor{0, 0.1f, 0, 0};
 
 int main(int argc, char *argv[]) {
   // Spawn a thread to wait for a keypress
@@ -78,7 +68,7 @@ int main(int argc, char *argv[]) {
             return true;
           },
           xr_instance.instance, xr_instance.systemId, session, appSpace,
-          session.formats, vulkan, {0, 0, 0, 0});
+          session.formats, vulkan, clearColor);
 
       // session
     }
