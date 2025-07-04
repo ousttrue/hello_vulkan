@@ -78,8 +78,7 @@ if(ANDROID)
     ${TARGET_NAME} PRIVATE vuloxr openxr_gl OpenXR::openxr_loader
                            android_native_app_glue DirectXMath sal)
 else()
-  add_executable(${TARGET_NAME} main.cpp gl2triOXR/xr_main_loop.cpp
-                                gl2triOXR/ViewRenderer.cpp)
+  add_executable(${TARGET_NAME} main.cpp gl2triOXR/xr_main_loop.cpp)
 
   target_link_libraries(
     ${TARGET_NAME}

@@ -144,7 +144,7 @@ struct ViewRenderer : vuloxr::NonCopyable {
 void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                   XrSystemId systemId, XrSession session, XrSpace appSpace,
                   std::span<const int64_t> formats, const Graphics &graphics,
-                  XrColor4f clearColor, XrEnvironmentBlendMode blendMode,
+                  const XrColor4f &clearColor, XrEnvironmentBlendMode blendMode,
                   XrViewConfigurationType viewConfigurationType) {
 
   static_assert(sizeof(Vertex) == 24, "Unexpected Vertex size");

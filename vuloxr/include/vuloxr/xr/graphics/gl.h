@@ -16,6 +16,9 @@
 #include <openxr/openxr_platform.h>
 #include <openxr/openxr_reflection.h>
 
+#include <span>
+#include <algorithm>
+
 namespace vuloxr {
 
 namespace gl {
@@ -476,8 +479,8 @@ createGl(XrInstance instance, XrSystemId systemId) {
   };
 }
 
-inline int64_t selectColorSwapchainFormat(
-    std::span<const int64_t> runtimeFormats) const override {
+inline int64_t
+selectColorSwapchainFormat(std::span<const int64_t> runtimeFormats) {
   // List of supported color swapchain formats.
   constexpr int64_t SupportedColorSwapchainFormats[] = {
       GL_RGB10_A2,
@@ -494,7 +497,7 @@ inline int64_t selectColorSwapchainFormat(
                          std::begin(SupportedColorSwapchainFormats),
                          std::end(SupportedColorSwapchainFormats));
   if (swapchainFormatIt == runtimeFormats.end()) {
-    THROW("No runtime swapchain format supported for color swapchain");
+    throw std::runtime_error("No runtime swapchain format supported for color swapchain");
   }
 
   return *swapchainFormatIt;

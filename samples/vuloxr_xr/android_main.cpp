@@ -16,6 +16,9 @@
 
 #include <vuloxr/xr/session.h>
 
+// const XrColor4f clearColor = {0.184313729f, 0.309803933f, 0.309803933f, 1.0f};
+const XrColor4f clearColor = {0.984313729f, 0.309803933f, 0.309803933f, 1.0f};
+
 auto APP_NAME = "hello_xr";
 
 void android_main(struct android_app *app) {
@@ -105,7 +108,7 @@ void android_main(struct android_app *app) {
       xr_main_loop(runLoop, xr_instance.instance, xr_instance.systemId, session,
                    appSpace, session.formats,
                    //
-                   graphics, {0.184313729f, 0.309803933f, 0.309803933f, 1.0f});
+                   graphics, clearColor);
       // session scope
     }
     // vulkan scope

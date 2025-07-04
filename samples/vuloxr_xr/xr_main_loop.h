@@ -26,7 +26,7 @@ void xr_main_loop(
     //
     const Graphics &graphics,
     //
-    XrColor4f clearColor,
+    const XrColor4f &clearColor,
     XrEnvironmentBlendMode blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
     XrViewConfigurationType viewConfigurationType =
         XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO);
