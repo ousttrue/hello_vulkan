@@ -18,6 +18,33 @@ using Graphics = vuloxr::gl::OpenGL;
 #endif
 
 #include <openxr/openxr.h>
+#include <vuloxr/xr/swapchain.h>
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
+using SwapchainImageType = XrSwapchainImageOpenGLESKHR;
+const SwapchainImageType SwapchainImage{
+    .type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR,
+};
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_OPENGL
+using SwapchainImageType = XrSwapchainImageOpenGLKHR;
+const SwapchainImageType SwapchainImage{
+    .type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR,
+};
+#endif
+
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+using SwapchainImageType = XrSwapchainImageVulkan2KHR;
+const SwapchainImageType SwapchainImage{
+    .type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR,
+};
+#endif
+
+using GraphicsSwapchain = vuloxr::xr::Swapchain<SwapchainImageType>;
+// using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
+
+
 
 void xr_main_loop(
     const std::function<bool(bool)> &runLoop, XrInstance instance,

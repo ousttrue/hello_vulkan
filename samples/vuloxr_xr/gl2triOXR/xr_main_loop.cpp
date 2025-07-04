@@ -4,30 +4,8 @@
 #include <DirectXMath.h>
 
 #include <vuloxr/xr/session.h>
-#include <vuloxr/xr/swapchain.h>
 
 #include <thread>
-
-#ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-using GraphicsSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageOpenGLESKHR>;
-const XrSwapchainImageOpenGLESKHR SwapchainImage{
-    .type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR,
-};
-#endif
-
-#ifdef XR_USE_GRAPHICS_API_OPENGL
-using GraphicsSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageOpenGLKHR>;
-const XrSwapchainImageOpenGLKHR SwapchainImage{
-    .type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR,
-};
-#endif
-
-#ifdef XR_USE_GRAPHICS_API_VULKAN
-using GraphicsSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
-XrSwapchainImageVulkan2KHR SwapchainImage{
-    .type = XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR,
-};
-#endif
 
 static XrVector2f s_vtx[] = {
     {-0.5f, 0.5f},  //

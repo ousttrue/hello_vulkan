@@ -213,12 +213,11 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                      {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR});
 
   // Create resources for each view.
-  using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
-  std::vector<std::shared_ptr<VulkanSwapchain>> swapchains;
+  std::vector<std::shared_ptr<GraphicsSwapchain>> swapchains;
   std::vector<ViewRenderer> renderers;
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
     // XrSwapchain
-    auto swapchain = std::make_shared<VulkanSwapchain>(
+    auto swapchain = std::make_shared<GraphicsSwapchain>(
         session, i, stereoscope.viewConfigurations[i], format,
         XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
     swapchains.push_back(swapchain);
