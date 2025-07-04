@@ -28,17 +28,6 @@ struct Impl {
 
   ~Impl() {}
 
-  void initSwapchain(int width, int height,
-                     std::span<const SwapchainImageType> images) {
-    this->swapchainWidth = width;
-    this->swapchainHeight = height;
-
-    for (auto &image : images) {
-      this->backbuffers.push_back(std::make_shared<vuloxr::gl::RenderTarget>(
-          image.image, width, height));
-    }
-  }
-
   void initScene(const char *vs, const char *fs,
                  std::span<const VertexAttributeLayout> layouts,
                  const void *vertices, uint32_t vertexCount) {
@@ -61,6 +50,17 @@ struct Impl {
     this->vao.assign(stride, attributes);
   }
 
+  void initSwapchain(int width, int height,
+                     std::span<const SwapchainImageType> images) {
+    this->swapchainWidth = width;
+    this->swapchainHeight = height;
+
+    for (auto &image : images) {
+      this->backbuffers.push_back(std::make_shared<vuloxr::gl::RenderTarget>(
+          image.image, width, height));
+    }
+  }
+
   void render(uint32_t index, const XrColor4f &clearColor) {
     auto sobj = &getShader();
     auto &backbuffer = this->backbuffers[index];
@@ -78,20 +78,21 @@ struct Impl {
   }
 };
 
-ViewRenderer::ViewRenderer(const Graphics *_graphics)
+ViewRenderer::ViewRenderer(const Graphics *_graphics,
+                           const std::shared_ptr<GraphicsSwapchain> &)
     : _impl(new Impl(_graphics)) {}
 
 ViewRenderer::~ViewRenderer() { delete this->_impl; }
-
-void ViewRenderer::initSwapchain(int width, int height,
-                                 std::span<const SwapchainImageType> images) {
-  this->_impl->initSwapchain(width, height, images);
-}
 
 void ViewRenderer::initScene(const char *vs, const char *fs,
                              std::span<const VertexAttributeLayout> layouts,
                              const void *vertices, uint32_t vertexCount) {
   this->_impl->initScene(vs, fs, layouts, vertices, vertexCount);
+}
+
+void ViewRenderer::initSwapchain(int width, int height,
+                                 std::span<const SwapchainImageType> images) {
+  this->_impl->initSwapchain(width, height, images);
 }
 
 void ViewRenderer::render(uint32_t index, const XrColor4f &clearColor) {

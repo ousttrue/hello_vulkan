@@ -80,15 +80,20 @@ struct VertexBuffer : NonCopyable {
     return *this;
   }
 
+  void allocate(const PhysicalDevice &physicalDevice, VkDevice device,
+                const void *data, size_t bufferSize, uint32_t drawCount) {
+    this->buffer =
+        Buffer(device, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+    this->memory = physicalDevice.allocForMap(device, this->buffer);
+    this->memory.mapWrite(data, bufferSize);
+    this->drawCount = drawCount;
+  }
+
   template <typename T>
   void allocate(const PhysicalDevice &physicalDevice, VkDevice device,
                 std::span<const T> values) {
     auto bufferSize = sizeof(T) * values.size();
-    this->buffer =
-        Buffer(device, bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
-    this->memory = physicalDevice.allocForMap(device, this->buffer);
-    this->memory.mapWrite(values.data(), bufferSize);
-    this->drawCount = values.size();
+    allocate(physicalDevice, device, values.data(), bufferSize, values.size());
   }
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline) {

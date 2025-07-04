@@ -1,20 +1,27 @@
 #include "../xr_main_loop.h"
 
 #include "ViewRenderer.h"
-#include <DirectXMath.h>
 
 #include <vuloxr/xr/session.h>
 
 #include <thread>
 
 const char VS[]{
-#embed "shader.vert"
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+#embed "vk.vert"
+#else
+#embed "gl.vert"
+#endif
     ,
     0,
 };
 
 const char FS[]{
-#embed "shader.frag"
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+#embed "vk.frag"
+#else
+#embed "gl.frag"
+#endif
     ,
     0,
 };
@@ -43,7 +50,6 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
   auto format = Graphics::selectColorSwapchainFormat(formats);
 
-  // auto viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
   vuloxr::xr::SessionState state(instance, session, viewConfigurationType);
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
@@ -51,16 +57,18 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   std::vector<std::shared_ptr<GraphicsSwapchain>> swapchains;
   std::vector<std::shared_ptr<ViewRenderer>> renderers;
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
-    // XrSwapchain
     auto swapchain = std::make_shared<GraphicsSwapchain>(
         session, i, stereoscope.viewConfigurations[i], format, SwapchainImage);
     swapchains.push_back(swapchain);
 
-    auto r = std::make_shared<ViewRenderer>(&graphics);
+    auto r = std::make_shared<ViewRenderer>(&graphics, swapchain);
+
+    r->initScene(VS, FS, layouts, vertices, std::size(vertices));
+
     r->initSwapchain(swapchain->swapchainCreateInfo.width,
                      swapchain->swapchainCreateInfo.height,
                      swapchain->swapchainImages);
-    r->initScene(VS, FS, layouts, vertices, std::size(vertices));
+
     renderers.push_back(r);
   }
 
@@ -88,11 +96,10 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
           auto swapchain = swapchains[i];
           auto [index, image, projectionLayer] =
               swapchain->AcquireSwapchain(stereoscope.views[i]);
+          composition.pushView(projectionLayer);
 
           auto r = renderers[i];
           r->render(index, clearColor);
-
-          composition.pushView(projectionLayer);
 
           swapchain->EndSwapchain();
         }
