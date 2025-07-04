@@ -9,44 +9,6 @@
 namespace vuloxr {
 namespace vk {
 
-inline std::optional<VkFormat>
-selectColorSwapchainFormat(std::span<const int64_t> formats) {
-
-  // List of supported color swapchain formats.
-  constexpr VkFormat candidates[] = {
-      VK_FORMAT_B8G8R8A8_SRGB,
-      VK_FORMAT_R8G8B8A8_SRGB,
-      VK_FORMAT_B8G8R8A8_UNORM,
-      VK_FORMAT_R8G8B8A8_UNORM,
-  };
-
-  auto b = std::begin(candidates);
-  auto e = std::end(candidates);
-
-  std::optional<VkFormat> selected = {};
-  std::string swapchainFormatsString;
-  for (auto _format : formats) {
-    auto format = (VkFormat)_format;
-
-    auto found = std::find(b, e, format);
-    swapchainFormatsString += " ";
-    if (found != e) {
-      swapchainFormatsString += "[";
-    }
-    swapchainFormatsString += magic_enum::enum_name(format);
-    if (found != e) {
-      swapchainFormatsString += "]";
-    }
-
-    if (!selected && found != e) {
-      selected = *found;
-    }
-  }
-  vuloxr::Logger::Info("Swapchain Formats: %s", swapchainFormatsString.c_str());
-
-  return selected;
-}
-
 struct Swapchain : public NonCopyable {
   VkInstance instance = VK_NULL_HANDLE;
   VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -647,6 +609,44 @@ struct Vulkan {
   PhysicalDevice physicalDevice;
   Device device;
   Swapchain swapchain;
+
+  static VkFormat selectColorSwapchainFormat(std::span<const int64_t> formats) {
+
+    // List of supported color swapchain formats.
+    constexpr VkFormat candidates[] = {
+        VK_FORMAT_B8G8R8A8_SRGB,
+        VK_FORMAT_R8G8B8A8_SRGB,
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_UNORM,
+    };
+
+    auto b = std::begin(candidates);
+    auto e = std::end(candidates);
+
+    VkFormat selected = VK_FORMAT_UNDEFINED;
+    std::string swapchainFormatsString;
+    for (auto _format : formats) {
+      auto format = (VkFormat)_format;
+
+      auto found = std::find(b, e, format);
+      swapchainFormatsString += " ";
+      if (found != e) {
+        swapchainFormatsString += "[";
+      }
+      swapchainFormatsString += magic_enum::enum_name(format);
+      if (found != e) {
+        swapchainFormatsString += "]";
+      }
+
+      if (!selected && found != e) {
+        selected = *found;
+      }
+    }
+    vuloxr::Logger::Info("Swapchain Formats: %s",
+                         swapchainFormatsString.c_str());
+
+    return selected;
+  }
 };
 
 } // namespace vk

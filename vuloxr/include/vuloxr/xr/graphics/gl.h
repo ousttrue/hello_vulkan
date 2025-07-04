@@ -16,15 +16,38 @@
 #include <openxr/openxr_platform.h>
 #include <openxr/openxr_reflection.h>
 
-#include <span>
 #include <algorithm>
+#include <span>
 
 namespace vuloxr {
 
 namespace gl {
 
 struct OpenGL {
-  //
+  static int64_t
+  selectColorSwapchainFormat(std::span<const int64_t> runtimeFormats) {
+    // List of supported color swapchain formats.
+    constexpr int64_t SupportedColorSwapchainFormats[] = {
+        GL_RGB10_A2,
+        GL_RGBA16F,
+        // The two below should only be used as a fallback, as they are linear
+        // color formats without enough bits for color depth, thus leading to
+        // banding.
+        GL_RGBA8,
+        GL_RGBA8_SNORM,
+    };
+
+    auto swapchainFormatIt =
+        std::find_first_of(runtimeFormats.begin(), runtimeFormats.end(),
+                           std::begin(SupportedColorSwapchainFormats),
+                           std::end(SupportedColorSwapchainFormats));
+    if (swapchainFormatIt == runtimeFormats.end()) {
+      throw std::runtime_error(
+          "No runtime swapchain format supported for color swapchain");
+    }
+
+    return *swapchainFormatIt;
+  }
 };
 
 } // namespace gl
@@ -477,30 +500,6 @@ createGl(XrInstance instance, XrSystemId systemId) {
       {},
       binding,
   };
-}
-
-inline int64_t
-selectColorSwapchainFormat(std::span<const int64_t> runtimeFormats) {
-  // List of supported color swapchain formats.
-  constexpr int64_t SupportedColorSwapchainFormats[] = {
-      GL_RGB10_A2,
-      GL_RGBA16F,
-      // The two below should only be used as a fallback, as they are linear
-      // color formats without enough bits for color depth, thus leading to
-      // banding.
-      GL_RGBA8,
-      GL_RGBA8_SNORM,
-  };
-
-  auto swapchainFormatIt =
-      std::find_first_of(runtimeFormats.begin(), runtimeFormats.end(),
-                         std::begin(SupportedColorSwapchainFormats),
-                         std::end(SupportedColorSwapchainFormats));
-  if (swapchainFormatIt == runtimeFormats.end()) {
-    throw std::runtime_error("No runtime swapchain format supported for color swapchain");
-  }
-
-  return *swapchainFormatIt;
 }
 
 } // namespace xr

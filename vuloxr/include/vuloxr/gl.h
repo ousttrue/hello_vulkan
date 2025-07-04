@@ -1,7 +1,5 @@
 #pragma once
 
-#include <GL/glew.h>
-
 namespace vuloxr {
 
 namespace gl {
@@ -59,15 +57,17 @@ struct RenderTarget : vuloxr::NonCopyable {
 
 struct Vbo {
   uint32_t id;
+  uint32_t drawCount = 0;
   Vbo() { glGenBuffers(1, &this->id); }
   ~Vbo() {}
 
   void bind() { glBindBuffer(GL_ARRAY_BUFFER, this->id); }
   void unbind() { glBindBuffer(GL_ARRAY_BUFFER, 0); }
-  void assign(const void *p, uint32_t size) {
+  void assign(const void *p, uint32_t size, uint32_t drawCount) {
     bind();
     glBufferData(GL_ARRAY_BUFFER, size, p, GL_STATIC_DRAW);
     unbind();
+    this->drawCount = drawCount;
   }
   template <typename T> void assign(std::span<const T> data) {
     assign(data.data(), sizeof(T) * data.size());
@@ -79,7 +79,6 @@ struct Vao {
     int32_t attribute;
     uint32_t vbo;
     uint32_t components;
-    uint32_t stride;
     uint32_t offset;
   };
   uint32_t id;
@@ -87,13 +86,13 @@ struct Vao {
   ~Vao() {}
   void bind() { glBindVertexArray(this->id); }
   void unbind() { glBindVertexArray(0); }
-  void assign(std::span<const AttributeLayout> layouts) {
+  void assign(uint32_t stride, std::span<const AttributeLayout> layouts) {
     bind();
     for (auto &layout : layouts) {
       glEnableVertexAttribArray(layout.attribute);
       glBindBuffer(GL_ARRAY_BUFFER, layout.vbo);
       glVertexAttribPointer(layout.attribute, layout.components, GL_FLOAT,
-                            GL_FALSE, layout.stride,
+                            GL_FALSE, stride,
                             (const void *)(int64_t)layout.offset);
     }
     unbind();

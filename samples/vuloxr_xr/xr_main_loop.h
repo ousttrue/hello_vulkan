@@ -42,9 +42,6 @@ const SwapchainImageType SwapchainImage{
 #endif
 
 using GraphicsSwapchain = vuloxr::xr::Swapchain<SwapchainImageType>;
-// using VulkanSwapchain = vuloxr::xr::Swapchain<XrSwapchainImageVulkan2KHR>;
-
-
 
 void xr_main_loop(
     const std::function<bool(bool)> &runLoop, XrInstance instance,

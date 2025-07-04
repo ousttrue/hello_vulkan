@@ -19,7 +19,30 @@ namespace vuloxr {
 namespace egl {
 
 struct OpenGLES {
-  //
+
+  static int64_t
+  selectColorSwapchainFormat(std::span<const int64_t> runtimeFormats) {
+    // List of supported color swapchain formats.
+    std::vector<int64_t> supportedColorSwapchainFormats{GL_RGBA8,
+                                                        GL_RGBA8_SNORM};
+
+    // In OpenGLES 3.0+, the R, G, and B values after blending are converted
+    // into the non-linear sRGB automatically. if (m_contextApiMajorVersion >=
+    // 3) {
+    supportedColorSwapchainFormats.push_back(GL_SRGB8_ALPHA8);
+    // }
+
+    auto swapchainFormatIt =
+        std::find_first_of(runtimeFormats.begin(), runtimeFormats.end(),
+                           supportedColorSwapchainFormats.begin(),
+                           supportedColorSwapchainFormats.end());
+    if (swapchainFormatIt == runtimeFormats.end()) {
+      throw std::runtime_error(
+          "No runtime swapchain format supported for color swapchain");
+    }
+
+    return *swapchainFormatIt;
+  }
 };
 
 } // namespace egl
@@ -319,29 +342,6 @@ createEgl(XrInstance xr_instance, XrSystemId xr_systemId) {
   auto binding = getGraphicsBindingOpenGLESAndroidKHR();
 
   return {graphics, binding};
-}
-
-inline int64_t
-selectColorSwapchainFormat(std::span<const int64_t> runtimeFormats) {
-  // List of supported color swapchain formats.
-  std::vector<int64_t> supportedColorSwapchainFormats{GL_RGBA8, GL_RGBA8_SNORM};
-
-  // In OpenGLES 3.0+, the R, G, and B values after blending are converted into
-  // the non-linear sRGB automatically.
-  // if (m_contextApiMajorVersion >= 3) {
-  supportedColorSwapchainFormats.push_back(GL_SRGB8_ALPHA8);
-  // }
-
-  auto swapchainFormatIt =
-      std::find_first_of(runtimeFormats.begin(), runtimeFormats.end(),
-                         supportedColorSwapchainFormats.begin(),
-                         supportedColorSwapchainFormats.end());
-  if (swapchainFormatIt == runtimeFormats.end()) {
-    throw std::runtime_error(
-        "No runtime swapchain format supported for color swapchain");
-  }
-
-  return *swapchainFormatIt;
 }
 
 } // namespace xr

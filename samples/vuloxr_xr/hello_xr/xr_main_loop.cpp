@@ -183,7 +183,7 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
 
-  auto format = *vuloxr::vk::selectColorSwapchainFormat(formats);
+  auto format = Graphics::selectColorSwapchainFormat(formats);
 
   // pieline
   auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(

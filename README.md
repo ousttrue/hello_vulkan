@@ -2,6 +2,22 @@
 
 202505 作り直し
 
+| platform                 | graphics   | status | note       |
+| ------------------------ | ---------- | ------ | ---------- |
+| windows + glfw3          | OpenGL-4.3 | ok     | desktop    |
+| windows + glfw3          | Vulkan-1.3 | ok     | desktop    |
+| windows + openxr         | OpenGL-4.3 | ok     | quest link |
+| windows + openxr         | Vulkan-1.3 | ok     | quest link |
+| android + NativeActivity | OpenGLES3  | ok     | pixel3 etc |
+| android + NativeActivity | Vulkan     | ok     | pixel3 etc |
+| android + openxr         | OpenGLES3  | ok     | quest3     |
+| android + openxr         | Vulkan     | ok     | quest3     |
+
+note
+
+- clang-20(for `#embed` macro)
+- TODO: scene compatibility OpenGL betwenn Vulkan
+
 ## windows
 
 ```sh
