@@ -151,8 +151,9 @@ void main_loop(const vuloxr::gui::WindowLoopOnce &windowLoopOnce,
   vertexBuffer.allocate(physicalDevice, device,
                         std::span<const Vertex>(vertices));
 
-  vuloxr::vk::IndexBuffer indexBuffer(
-      physicalDevice, device, std::span<const uint16_t>({0, 1, 2, 2, 3, 0}));
+  vuloxr::vk::IndexBuffer indexBuffer;
+  indexBuffer.allocate(physicalDevice, device,
+                       std::span<const uint16_t>({0, 1, 2, 2, 3, 0}));
 
   vuloxr::vk::DescriptorSet descriptorSets(
       device, swapchain.images.size(),

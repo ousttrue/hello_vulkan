@@ -796,5 +796,18 @@ struct AcquireSemaphorePool : NonCopyable {
   }
 };
 
+inline VkFormat getFloatFormat(int components) {
+  switch (components) {
+  case 2:
+    return VK_FORMAT_R32G32_SFLOAT;
+  case 3:
+    return VK_FORMAT_R32G32B32_SFLOAT;
+  case 4:
+    return VK_FORMAT_R32G32B32A32_SFLOAT;
+  default:
+    throw std::runtime_error("unknown components count");
+  }
+}
+
 } // namespace vk
 } // namespace vuloxr

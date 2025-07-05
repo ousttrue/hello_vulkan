@@ -1,4 +1,5 @@
 #pragma once
+#include <DirectXMath.h>
 #include <functional>
 #include <span>
 
@@ -42,6 +43,33 @@ const SwapchainImageType SwapchainImage{
 #endif
 
 using GraphicsSwapchain = vuloxr::xr::Swapchain<SwapchainImageType>;
+
+struct VertexAttributeLayout {
+  uint32_t components;
+  uint32_t offset;
+};
+
+struct InputData {
+  const void *data = nullptr;
+  uint32_t stride = 0;
+  uint32_t drawCount = 0;
+
+  uint32_t byteSize() const { return stride * drawCount; }
+};
+
+struct ViewRenderer {
+  struct Impl *_impl;
+  ViewRenderer(const Graphics *_graphics,
+               const std::shared_ptr<GraphicsSwapchain> &swapchain);
+  ~ViewRenderer();
+  void initScene(const char *vs, const char *fs,
+                 std::span<const VertexAttributeLayout> layouts,
+                 const InputData &vertices, const InputData &indices = {});
+  void initSwapchain(int width, int height,
+                     std::span<const SwapchainImageType> images);
+  void render(uint32_t index, const XrColor4f &clearColor,
+              std::span<const DirectX::XMFLOAT4X4> matrices = {});
+};
 
 void xr_main_loop(
     const std::function<bool(bool)> &runLoop, XrInstance instance,

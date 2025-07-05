@@ -105,6 +105,20 @@ struct VertexBuffer : NonCopyable {
   }
 };
 
+inline VkIndexType getIndexType(uint32_t indexSize) {
+  // auto indexSize = bufferSize / drawCount;
+  switch (indexSize) {
+  case 2:
+    return VK_INDEX_TYPE_UINT16;
+
+  case 4:
+    return VK_INDEX_TYPE_UINT32;
+
+  default:
+    throw std::runtime_error("unknown index type");
+  }
+}
+
 struct IndexBuffer : NonCopyable {
   VkIndexType indexType;
 
@@ -120,27 +134,22 @@ struct IndexBuffer : NonCopyable {
     return *this;
   }
 
-  template <typename T>
-  IndexBuffer(const PhysicalDevice &physicalDevice, VkDevice device,
-              std::span<const T> values) {
-    switch (sizeof(T)) {
-    case 2:
-      this->indexType = VK_INDEX_TYPE_UINT16;
-      break;
+  void allocate(const PhysicalDevice &physicalDevice, VkDevice device,
+                const void *data, uint32_t bufferSize, uint32_t drawCount) {
+    this->indexType = getIndexType(bufferSize / drawCount);
 
-    case 4:
-      this->indexType = VK_INDEX_TYPE_UINT32;
-      break;
-
-    default:
-      throw std::runtime_error("unknown index type");
-    }
-
-    auto bufferSize = sizeof(T) * values.size();
+    // auto bufferSize = sizeof(T) * values.size();
     this->buffer = Buffer(device, bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
     this->memory = physicalDevice.allocForMap(device, this->buffer);
-    this->memory.mapWrite(values.data(), bufferSize);
-    this->drawCount = values.size();
+    this->memory.mapWrite(data, bufferSize);
+    this->drawCount = drawCount;
+  }
+
+  template <typename T>
+  void allocate(const PhysicalDevice &physicalDevice, VkDevice device,
+                std::span<const T> values) {
+    allocate(physicalDevice, device, values.data(), sizeof(T) * values.size(),
+             values.size());
   }
 
   void draw(VkCommandBuffer cmd, VkPipeline pipeline, VkBuffer vertices) {

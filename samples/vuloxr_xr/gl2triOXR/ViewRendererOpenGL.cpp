@@ -1,4 +1,4 @@
-#include "ViewRenderer.h"
+#include "../ViewRenderer.h"
 #include "util_shader.h"
 
 #include <vuloxr/gl.h>
@@ -30,7 +30,7 @@ struct Impl {
 
   void initScene(const char *vs, const char *fs,
                  std::span<const VertexAttributeLayout> layouts,
-                 const void *vertices, uint32_t vertexCount) {
+                 const InputData &vertices, const InputData &indices) {
     auto sobj = &getShader(vs, fs);
 
     uint32_t stride = 0;
@@ -61,7 +61,8 @@ struct Impl {
     }
   }
 
-  void render(uint32_t index, const XrColor4f &clearColor) {
+  void render(uint32_t index, const XrColor4f &clearColor,
+              std::span<const DirectX::XMFLOAT4X4> matrices) {
     auto sobj = &getShader();
     auto &backbuffer = this->backbuffers[index];
     backbuffer->beginFrame(this->swapchainWidth, this->swapchainHeight,
@@ -84,9 +85,10 @@ ViewRenderer::ViewRenderer(const Graphics *_graphics,
 
 ViewRenderer::~ViewRenderer() { delete this->_impl; }
 
-void ViewRenderer::initScene(const char *vs, const char *fs,
-                             std::span<const VertexAttributeLayout> layouts,
-                             const void *vertices, uint32_t vertexCount) {
+void ViewRenderer::void
+initScene(const char *vs, const char *fs,
+          std::span<const VertexAttributeLayout> layouts,
+          const InputData &vertices, const InputData &indices) {
   this->_impl->initScene(vs, fs, layouts, vertices, vertexCount);
 }
 
@@ -95,6 +97,7 @@ void ViewRenderer::initSwapchain(int width, int height,
   this->_impl->initSwapchain(width, height, images);
 }
 
-void ViewRenderer::render(uint32_t index, const XrColor4f &clearColor) {
+void ViewRenderer::render(uint32_t index, const XrColor4f &clearColor,
+                          std::span<const DirectX::XMFLOAT4X4> matrices) {
   this->_impl->render(index, clearColor);
 }

@@ -1,7 +1,5 @@
 #include "../xr_main_loop.h"
 
-#include "ViewRenderer.h"
-
 #include <vuloxr/xr/session.h>
 
 #include <thread>
@@ -63,7 +61,12 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
 
     auto r = std::make_shared<ViewRenderer>(&graphics, swapchain);
 
-    r->initScene(VS, FS, layouts, vertices, std::size(vertices));
+    r->initScene(VS, FS, layouts,
+                 {
+                     .data = vertices,
+                     .stride = static_cast<uint32_t>(sizeof(Vertex)),
+                     .drawCount = std::size(vertices),
+                 });
 
     r->initSwapchain(swapchain->swapchainCreateInfo.width,
                      swapchain->swapchainCreateInfo.height,

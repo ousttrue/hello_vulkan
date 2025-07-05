@@ -1,6 +1,4 @@
 #include "../xr_main_loop.h"
-
-#include <vuloxr/vk.h>
 #include <vuloxr/vk/pipeline.h>
 #include <vuloxr/vk/shaderc.h>
 
@@ -15,6 +13,7 @@ struct Impl {
   VkCommandPool commandPool = VK_NULL_HANDLE;
 
   vuloxr::vk::VertexBuffer vertices;
+  vuloxr::vk::IndexBuffer indices;
   vuloxr::vk::Pipeline pipeline;
 
   struct RenderTarget {
@@ -30,14 +29,14 @@ struct Impl {
             g->device, (VkFormat)swapchain->swapchainCreateInfo.format,
             DEPTH_FORMAT,
             (VkSampleCountFlagBits)swapchain->swapchainCreateInfo.sampleCount) {
-
-    vkGetDeviceQueue(this->device, g->physicalDevice.graphicsFamilyIndex, 0,
+    vkGetDeviceQueue(this->device,
+                     this->graphics->physicalDevice.graphicsFamilyIndex, 0,
                      &this->queue);
 
     VkCommandPoolCreateInfo cmdPoolInfo{
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = g->physicalDevice.graphicsFamilyIndex,
+        .queueFamilyIndex = this->graphics->physicalDevice.graphicsFamilyIndex,
     };
     vuloxr::vk::CheckVkResult(vkCreateCommandPool(this->device, &cmdPoolInfo,
                                                   nullptr, &this->commandPool));
@@ -52,7 +51,6 @@ struct Impl {
   void initScene(const char *vertexShaderGlsl, const char *fragmentShaderGlsl,
                  std::span<const VertexAttributeLayout> layouts,
                  const InputData &vertices, const InputData &indices) {
-
     this->vertices.bindings = {
         {
             .binding = 0,
@@ -71,6 +69,10 @@ struct Impl {
     this->vertices.allocate(this->graphics->physicalDevice,
                             this->graphics->device, vertices.data,
                             vertices.byteSize(), vertices.drawCount);
+
+    this->indices.allocate(this->graphics->physicalDevice,
+                           this->graphics->device, indices.data,
+                           indices.byteSize(), indices.drawCount);
 
     // pieline
     auto pipelineLayout = vuloxr::vk::createPipelineLayoutWithConstantSize(
@@ -130,7 +132,8 @@ struct Impl {
     }
   }
 
-  void render(uint32_t index, const XrColor4f &clearColor) {
+  void render(uint32_t index, const XrColor4f &clearColor,
+              std::span<const DirectX::XMFLOAT4X4> matrices) {
     auto framebuffer = &this->framebuffers[index];
     auto rt = this->renderTargets[index];
 
@@ -159,20 +162,21 @@ struct Impl {
                         pipeline);
 
       // Bind index and vertex buffers
-      // vkCmdBindIndexBuffer(rt->commandBuffer, indices, 0,
-      // VK_INDEX_TYPE_UINT16);
+      vkCmdBindIndexBuffer(rt->commandBuffer, indices.buffer, 0,
+                           VK_INDEX_TYPE_UINT16);
       VkDeviceSize offset = 0;
-      vkCmdBindVertexBuffers(rt->commandBuffer, 0, 1,
-                             &this->vertices.buffer.buffer, &offset);
+      vkCmdBindVertexBuffers(rt->commandBuffer, 0, 1, &vertices.buffer.buffer,
+                             &offset);
 
       // Render each cube
-      // for (auto &m : this->matrices) {
-      //   vkCmdPushConstants(rt->commandBuffer, pipelineLayout,
-      //                      VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m), &m.m);
-      //
-      // Draw the cube.
-      vkCmdDraw(rt->commandBuffer, this->vertices.drawCount, 1, 0, 0);
-      // }
+      for (auto &m : matrices) {
+        vkCmdPushConstants(rt->commandBuffer, this->pipeline.pipelineLayout,
+                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(m), &m.m);
+
+        // Draw the cube.
+        vkCmdDrawIndexed(rt->commandBuffer, this->indices.drawCount, 1, 0, 0,
+                         0);
+      }
     }
 
     VkSubmitInfo submitInfo{
@@ -188,21 +192,20 @@ struct Impl {
 ViewRenderer::ViewRenderer(const Graphics *g,
                            const std::shared_ptr<GraphicsSwapchain> &swapchain)
     : _impl(new Impl(g, swapchain)) {}
-ViewRenderer::~ViewRenderer() {}
+
+ViewRenderer::~ViewRenderer() { delete this->_impl; }
 
 void ViewRenderer::initScene(const char *vs, const char *fs,
                              std::span<const VertexAttributeLayout> layouts,
                              const InputData &vertices,
                              const InputData &indices) {
-  _impl->initScene(vs, fs, layouts, vertices, indices);
+  this->_impl->initScene(vs, fs, layouts, vertices, indices);
 }
-
 void ViewRenderer::initSwapchain(int width, int height,
                                  std::span<const SwapchainImageType> images) {
-  _impl->initSwapchain(width, height, images);
+  this->_impl->initSwapchain(width, height, images);
 }
-
 void ViewRenderer::render(uint32_t index, const XrColor4f &clearColor,
                           std::span<const DirectX::XMFLOAT4X4> matrices) {
-  _impl->render(index, clearColor);
+  this->_impl->render(index, clearColor, matrices);
 }
