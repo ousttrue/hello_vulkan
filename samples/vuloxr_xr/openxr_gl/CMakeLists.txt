@@ -12,7 +12,7 @@ target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
 if(ANDROID)
   target_compile_definitions(
-    ${TARGET_NAME} PUBLIC XR_OS_ANDROID XR_USE_PLATFORM_ANDROID
+    ${TARGET_NAME} PRIVATE XR_OS_ANDROID XR_USE_PLATFORM_ANDROID
                           XR_USE_GRAPHICS_API_OPENGL_ES)
 
   target_link_libraries(
@@ -28,7 +28,7 @@ if(ANDROID)
 else()
 
   target_compile_definitions(
-    ${TARGET_NAME} PUBLIC XR_OS_WINDOWS XR_USE_PLATFORM_WIN32
+    ${TARGET_NAME} PRIVATE XR_OS_WINDOWS XR_USE_PLATFORM_WIN32
                           XR_USE_GRAPHICS_API_OPENGL)
   target_link_libraries(
     ${TARGET_NAME}

@@ -1,27 +1,19 @@
 #include "../xr_main_loop.h"
-#include "util_shader.h"
 
 #include <vuloxr/gl.h>
 
-static const shader_obj_t &getShader(const char *vs = nullptr,
-                                     const char *fs = nullptr) {
-  static bool s_initialized = false;
-  static shader_obj_t s_sobj;
-  if (!s_initialized) {
-    generate_shader(&s_sobj, vs, fs);
-    s_initialized = true;
-    vuloxr::Logger::Info("generate_shader");
-  }
-  return s_sobj;
-}
+struct ShaderProgram {};
 
 struct Impl {
   uint32_t swapchainWidth;
   uint32_t swapchainHeight;
   std::vector<std::shared_ptr<vuloxr::gl::RenderTarget>> backbuffers;
 
+  vuloxr::gl::ShaderProgram shader;
   vuloxr::gl::Vbo vbo;
+  vuloxr::gl::Ibo ibo;
   vuloxr::gl::Vao vao;
+  std::shared_ptr<vuloxr::gl::Ubo> ubo;
   struct RenderTarget {};
 
   Impl(const Graphics *g) {}
@@ -31,22 +23,25 @@ struct Impl {
   void initScene(const char *vs, const char *fs,
                  std::span<const VertexAttributeLayout> layouts,
                  const InputData &vertices, const InputData &indices) {
-    auto sobj = &getShader(vs, fs);
-
+    const char *vsSrc[]{vs};
+    const char *fsSrc[]{fs};
+    assert(this->shader.compile(vsSrc, fsSrc));
     this->vbo.assign(vertices.data, vertices.byteSize(), vertices.drawCount);
+    this->ibo.assign(indices.data, indices.byteSize(), indices.drawCount);
 
     std::vector<vuloxr::gl::Vao::AttributeLayout> attributes;
     for (int i = 0; i < layouts.size(); ++i) {
       auto &layout = layouts[i];
-
       attributes.push_back({
-          .attribute = i == 0 ? sobj->loc_vtx : sobj->loc_clr,
+          .attribute = i,
           .vbo = this->vbo.id,
           .components = layout.components,
           .offset = static_cast<uint32_t>(layout.offset),
       });
     }
-    this->vao.assign(vertices.stride, attributes);
+    this->vao.assign(vertices.stride, attributes, this->ibo.id);
+
+    this->ubo = vuloxr::gl::Ubo::Create(4 * 16, nullptr);
   }
 
   void initSwapchain(int width, int height,
@@ -62,23 +57,34 @@ struct Impl {
 
   void render(uint32_t index, const XrColor4f &clearColor,
               std::span<const DirectX::XMFLOAT4X4> matrices) {
-    auto sobj = &getShader();
     auto &backbuffer = this->backbuffers[index];
     backbuffer->beginFrame(this->swapchainWidth, this->swapchainHeight,
                            clearColor);
 
-    glUseProgram(sobj->program);
-    this->vao.bind();
-    this->vbo.draw();
-    this->vao.unbind();
+    this->shader.bind();
+    {
+      this->vao.bind();
+
+      this->ubo->Bind();
+      this->ubo->SetBindingPoint(0);
+
+      for (auto matrix : matrices) {
+        this->ubo->Upload(matrix);
+
+        this->ibo.draw();
+      }
+
+      vao.unbind();
+    }
+    this->shader.unbind();
 
     backbuffer->endFrame();
   }
 };
 
-ViewRenderer::ViewRenderer(const Graphics *_graphics,
-                           const std::shared_ptr<GraphicsSwapchain> &)
-    : _impl(new Impl(_graphics)) {}
+ViewRenderer::ViewRenderer(const Graphics *g,
+                           const std::shared_ptr<GraphicsSwapchain> &swapchain)
+    : _impl(new Impl(g)) {}
 
 ViewRenderer::~ViewRenderer() { delete this->_impl; }
 
@@ -88,12 +94,10 @@ void ViewRenderer::initScene(const char *vs, const char *fs,
                              const InputData &indices) {
   this->_impl->initScene(vs, fs, layouts, vertices, indices);
 }
-
 void ViewRenderer::initSwapchain(int width, int height,
                                  std::span<const SwapchainImageType> images) {
   this->_impl->initSwapchain(width, height, images);
 }
-
 void ViewRenderer::render(uint32_t index, const XrColor4f &clearColor,
                           std::span<const DirectX::XMFLOAT4X4> matrices) {
   this->_impl->render(index, clearColor, matrices);

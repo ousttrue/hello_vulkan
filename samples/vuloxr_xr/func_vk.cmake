@@ -1,14 +1,15 @@
 set(XR_SAMPLE_COMMON_LIBS vuloxr shaderc OpenXR::openxr_loader DirectXMath)
 
 if(ANDROID)
-  function(add_vk_sample TARGET_NAME)
+  function(add_vk_sample TARGET_DIR)
+    set(TARGET_NAME "${TARGET_DIR}_vk")
     add_library(
       ${TARGET_NAME} SHARED
       #
       android_main.cpp
       #
-      ${TARGET_NAME}/xr_main_loop.cpp
-      ${TARGET_NAME}/ViewRendererVulkan.cpp
+      ${TARGET_DIR}/xr_main_loop.cpp
+      ${TARGET_DIR}/ViewRendererVulkan.cpp
       ${ARGN})
     target_compile_definitions(
       ${TARGET_NAME}
@@ -32,23 +33,21 @@ if(ANDROID)
   endfunction()
 
 else()
-  function(add_vk_sample TARGET_NAME)
+  function(add_vk_sample TARGET_DIR)
+    set(TARGET_NAME "${TARGET_DIR}_vk")
     add_executable(
       ${TARGET_NAME}
       #
       main.cpp
       #
-      ${TARGET_NAME}/xr_main_loop.cpp
-      ${TARGET_NAME}/ViewRendererVulkan.cpp
+      ${TARGET_DIR}/xr_main_loop.cpp
+      ${TARGET_DIR}/ViewRendererVulkan.cpp
       ${ARGN})
     target_link_libraries(
       ${TARGET_NAME}
       PRIVATE ${XR_SAMPLE_COMMON_LIBS}
               # windows
-              Vulkan::Vulkan
-              glfw
-              #
-              glew_s)
+              Vulkan::Vulkan glfw)
     target_compile_definitions(
       ${TARGET_NAME}
       PUBLIC -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_VULKAN
@@ -67,4 +66,3 @@ else()
   endfunction()
 
 endif()
-

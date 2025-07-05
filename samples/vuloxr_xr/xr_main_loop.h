@@ -6,16 +6,40 @@
 #ifdef XR_USE_GRAPHICS_API_VULKAN
 #include <vuloxr/vk/swapchain.h>
 using Graphics = vuloxr::vk::Vulkan;
+
+#if defined(XR_USE_GRAPHICS_API_OPENGL)
+static_assert(false, "VULKAN + OPENGL");
+#endif
+#if defined(XR_USE_GRAPHICS_API_OPENGL_ES)
+static_assert(false, "VULKAN + OPENGL_ES");
+#endif
+
 #endif
 
 #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
 #include <vuloxr/xr/graphics/egl.h>
 using Graphics = vuloxr::egl::OpenGLES;
+
+#if defined(XR_USE_GRAPHICS_API_OPENGL)
+static_assert(false, "OPENGL_ES + OPENGL");
+#endif
+#if defined(XR_USE_GRAPHICS_API_VULKAN)
+static_assert(false, "OPENGL_ES + VULKAN");
+#endif
+
 #endif
 
 #ifdef XR_USE_GRAPHICS_API_OPENGL
 #include <vuloxr/xr/graphics/gl.h>
 using Graphics = vuloxr::gl::OpenGL;
+
+#if defined(XR_USE_GRAPHICS_API_OPENGL_ES)
+static_assert(false, "OPENGL + OPENGL_ES");
+#endif
+#if defined(XR_USE_GRAPHICS_API_VULKAN)
+static_assert(false, "OPENGL + VULKAN");
+#endif
+
 #endif
 
 #include <openxr/openxr.h>

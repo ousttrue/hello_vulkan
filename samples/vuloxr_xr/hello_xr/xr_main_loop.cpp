@@ -187,8 +187,6 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                   const XrColor4f &clearColor, XrEnvironmentBlendMode blendMode,
                   XrViewConfigurationType viewConfigurationType) {
 
-  auto depthFormat = VK_FORMAT_D32_SFLOAT;
-
   vuloxr::xr::Stereoscope stereoscope(instance, systemId,
                                       viewConfigurationType);
 
@@ -198,21 +196,9 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
   std::vector<std::shared_ptr<GraphicsSwapchain>> swapchains;
   std::vector<std::shared_ptr<ViewRenderer>> renderers;
   for (uint32_t i = 0; i < stereoscope.views.size(); i++) {
-    // XrSwapchain
     auto swapchain = std::make_shared<GraphicsSwapchain>(
-        session, i, stereoscope.viewConfigurations[i], format,
-        XrSwapchainImageVulkan2KHR{XR_TYPE_SWAPCHAIN_IMAGE_VULKAN2_KHR});
+        session, i, stereoscope.viewConfigurations[i], format, SwapchainImage);
     swapchains.push_back(swapchain);
-
-    VkExtent2D extent = {
-        swapchain->swapchainCreateInfo.width,
-        swapchain->swapchainCreateInfo.height,
-    };
-
-    std::vector<VkImage> images;
-    for (auto image : swapchain->swapchainImages) {
-      images.push_back(image.image);
-    }
 
     auto r = std::make_shared<ViewRenderer>(&graphics, swapchain);
 
@@ -285,15 +271,21 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
               swapchain->AcquireSwapchain(stereoscope.views[i]);
           composition.pushView(projectionLayer);
 
-          VkExtent2D extent = {
-              swapchain->swapchainCreateInfo.width,
-              swapchain->swapchainCreateInfo.height,
-          };
-
           // Compute the view-projection transform. Note all matrixes (including
           // OpenXR's) are column-major, right-handed.
           XrMatrix4x4f proj;
-          XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_VULKAN,
+
+          XrMatrix4x4f_CreateProjectionFov(&proj,
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+                                           GRAPHICS_VULKAN,
+#elif defined(XR_USE_GRAPHICS_API_OPENGL_ES)
+                                           GRAPHICS_OPENGL_ES,
+#elif defined(XR_USE_GRAPHICS_API_OPENGL)
+                                           GRAPHICS_OPENGL,
+#else
+                                           static_assert(false, "no XR_USE_");
+#endif
+
                                            projectionLayer.fov, 0.05f, 100.0f);
           XrMatrix4x4f toView;
           XrMatrix4x4f_CreateFromRigidTransform(&toView, &projectionLayer.pose);
@@ -316,5 +308,5 @@ void xr_main_loop(const std::function<bool(bool)> &runLoop, XrInstance instance,
                          blendMode);
   }
 
-  vkDeviceWaitIdle(graphics.device);
+  // vkDeviceWaitIdle(graphics.device);
 }

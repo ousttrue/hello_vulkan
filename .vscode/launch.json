@@ -82,10 +82,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "hello_xr",
+            "name": "hello_xr_gl",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/vuloxr_xr/hello_xr.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/hello_xr_gl.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
@@ -93,10 +93,10 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "gl2triOXR",
+            "name": "gl2triOXR_gl",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2triOXR.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2triOXR_gl.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
