@@ -74,7 +74,7 @@
             "name": "xrhandsfb",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/builddir/samples/ovr_openxr_mobile_sdk/XrHandsFB/cpp/xrhandsfb.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/XrHandsFB.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

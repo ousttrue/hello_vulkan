@@ -73,7 +73,7 @@ else()
     URL https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download
   )
   add_library(glew_s STATIC ${glew_SOURCE_DIR}/src/glew.c
-                          ${glew_SOURCE_DIR}/src/glewinfo.c)
+                            ${glew_SOURCE_DIR}/src/glewinfo.c)
   target_include_directories(glew_s PUBLIC ${glew_SOURCE_DIR}/include)
   target_compile_definitions(
     glew_s
@@ -154,6 +154,9 @@ FetchContent_MakeAvailable(DirectXMath)
 # https://raw.githubusercontent.com/dotnet/runtime/main/src/coreclr/pal/inc/rt/sal.h
 add_library(sal INTERFACE)
 target_include_directories(sal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/sal/inc)
+
+add_library(glext INTERFACE)
+target_include_directories(glext INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/glext)
 
 #
 # subdirs

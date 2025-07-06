@@ -43,8 +43,7 @@ add_executable(
   gl2teapotOXR/app_engine.cpp
   gl2teapotOXR/render_scene.cpp
   gl2teapotOXR/teapot.cpp
-  gl2teapotOXR/teapot_data.cpp
-)
+  gl2teapotOXR/teapot_data.cpp)
 target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenXR::openxr_loader
                                              openxr_gl)
 target_compile_definitions(${TARGET_NAME} PRIVATE XR_USE_PLATFORM_WIN32
@@ -70,3 +69,14 @@ target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenXR::openxr_loader
                                              openxr_gl oxr_imgui)
 target_compile_definitions(${TARGET_NAME} PRIVATE XR_USE_PLATFORM_WIN32
                                                   XR_USE_GRAPHICS_API_OPENGL)
+
+set(TARGET_NAME XrHandsFB)
+add_executable(
+  ${TARGET_NAME}
+  #
+  XrHandsFB/main.cpp XrHandsFB/XrApp.cpp XrHandsFB/Misc/Log.c
+  XrHandsFB/Render/Egl.c XrHandsFB/Render/GlWrapperWin32.c
+  XrHandsFB/Render/Framebuffer.cpp)
+target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenXR::openxr_loader
+                                             glext OpenGL32)
+target_compile_definitions(${TARGET_NAME} PRIVATE WIN32)
