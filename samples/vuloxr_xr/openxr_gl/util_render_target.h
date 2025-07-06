@@ -4,7 +4,7 @@
  * ------------------------------------------------ */
 #ifndef UTIL_RENDER_TARGET_H
 #define UTIL_RENDER_TARGET_H
-#include "api_gl.h"
+
 
 #define RTARGET_DEFAULT     (0 << 0)
 #define RTARGET_COLOR       (1 << 0)
@@ -12,9 +12,9 @@
 
 typedef struct _render_target_t
 {
-    GLuint texc_id; /* color */
-    GLuint texz_id; /* depth */
-    GLuint fbo_id;
+    unsigned int texc_id; /* color */
+    unsigned int texz_id; /* depth */
+    unsigned int fbo_id;
     int width;
     int height;
 } render_target_t;
@@ -27,6 +27,7 @@ extern "C" {
 
 int create_render_target (render_target_t *rtarget, int w, int h, unsigned int flags);
 int destroy_render_target (render_target_t *rtarget);
+int set_render_target (render_target_t *rtarget);
 int get_render_target (render_target_t *rtarget);
 int blit_render_target (render_target_t *rtarget_src, int x, int y, int w, int h);
 

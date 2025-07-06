@@ -18,12 +18,16 @@ compile_shader_text (GLenum shaderType, const char *text)
   GLuint shader;
   GLint	 stat;
 
+  GLASSERT();
   shader = glCreateShader (shaderType);
+  GLASSERT();
   glShaderSource  (shader, 1, (const char **)&text, NULL);
+  GLASSERT();
   glCompileShader (shader);
+  GLASSERT();
 
   glGetShaderiv	(shader, GL_COMPILE_STATUS, &stat);
-  if (!stat) 
+  if (stat == GL_FALSE) 
     {
       GLsizei len;
       char    *lpBuf;
@@ -42,7 +46,6 @@ compile_shader_text (GLenum shaderType, const char *text)
       return 0;
     }
 
-  GLASSERT();
   return shader;
 }
 

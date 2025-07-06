@@ -22,7 +22,7 @@ void matrix_translate (float *m, float x, float y, float z);
 void matrix_rotate (float *m, float angle, float x, float y, float z);
 void matrix_scale (float *m, float x, float y, float z);
 void matrix_skew  (float *m, float x, float y);
-void matrix_mult (float *m, float *m1, float *m2);
+void matrix_mult (float *m, const float *m1, const float *m2);
 void matrix_identity (float *m);
 void matrix_perspective (float *m, float depth);
 void matrix_projectto2d (float *m);

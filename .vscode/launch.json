@@ -93,10 +93,43 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "gl2triOXR_gl",
+            "name": "gl2triOXR",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2triOXR_gl.exe",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2triOXR.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "gl2tri3dOXR",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2tri3dOXR.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "gl2teapotOXR",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2teapotOXR.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "gl2imguiOXR",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/gl2imguiOXR.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

@@ -825,7 +825,7 @@ matrix_modellookat (float *m, float *src_pos, float *tgt_pos, float twist)
      M = M1 * M2
 *******************************************/
 void
-matrix_mult (float *m, float *m1, float *m2)
+matrix_mult (float *m, const float *m1, const float *m2)
 {
     float fm0, fm1, fm2, fm3;
     float fpm00, fpm01, fpm02, fpm03;
