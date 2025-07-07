@@ -76,3 +76,13 @@ add_executable(
   #
   XrHandsFB/main.cpp XrHandsFB/Renderer.cpp XrHandsFB/XrApp.cpp)
 target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)
+
+set(TARGET_NAME XrPassthrough)
+add_executable(
+  ${TARGET_NAME}
+  #
+  XrPassthrough/XrPassthrough.cpp XrPassthrough/XrPassthroughGl.cpp
+  XrPassthrough/XrPassthroughInput.cpp
+  #
+)
+target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)

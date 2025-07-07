@@ -82,6 +82,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "XrPassthrough",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/XrPassthrough.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "hello_xr_gl",
             "type": "cppvsdbg",
             "request": "launch",

@@ -33,10 +33,6 @@ rights reserved.
 
 #include "Renderer.h"
 
-static inline XrTime ToXrTime(const double timeInSeconds) {
-  return (timeInSeconds * 1e9);
-}
-
 #define FORCE_ONLY_SIMPLE_CONTROLLER_PROFILE
 
 class XrHandsApp : public OVRFW::XrApp {
