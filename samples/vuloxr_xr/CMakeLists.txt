@@ -97,3 +97,11 @@ add_executable(
   #
 )
 target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)
+
+set(TARGET_NAME XrSceneModel)
+add_executable(
+  ${TARGET_NAME}
+  #
+  XrSceneModel/SceneModelXr.cpp XrSceneModel/SceneModelGl.cpp
+  XrSceneModel/SimpleXrInput.cpp)
+target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)

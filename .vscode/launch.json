@@ -104,6 +104,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "XrSceneModel",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/XrSceneModel.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "hello_xr_gl",
             "type": "cppvsdbg",
             "request": "launch",
