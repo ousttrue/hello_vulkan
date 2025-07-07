@@ -12,7 +12,6 @@ export default defineConfig({
       { text: "Examples", link: "/markdown-examples" },
     ],
     sidebar: [
-      { text: "Reference", link: "/reference" },
       {
         text: "Development",
         items: [
@@ -24,6 +23,7 @@ export default defineConfig({
       {
         text: "Vulkan",
         items: [
+          { text: "Vulkan samples", link: "/vulkan/reference" },
           {
             text: "device",
             link: "/vulkan/device/",
@@ -82,7 +82,9 @@ export default defineConfig({
       {
         text: "OpenXR",
         items: [
+          { text: "OpenXR samples", link: "/openxr/reference" },
           { text: "初期化", link: "/openxr/initialization" },
+          { text: "Swapchain", link: "openxr/swapchain" },
           {
             text: "Extensions", items: [
               { text: "Hand Tracking", link: "/openxr/extensions/hand_tracking" },

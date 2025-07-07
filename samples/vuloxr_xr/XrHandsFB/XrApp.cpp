@@ -28,9 +28,10 @@ Language    :   c++
 
 #include "XrApp.h"
 #include "xr_linear.h"
-#include <assert.h>
 #include <Windows.h>
+#include <assert.h>
 #include <inttypes.h>
+#include "OXR.h"
 
 static inline XrTime ToXrTime(const double timeInSeconds) {
   return (timeInSeconds * 1e9);
@@ -70,24 +71,6 @@ using OVR::Quatf;
 using OVR::Vector2f;
 using OVR::Vector3f;
 using OVR::Vector4f;
-
-std::string OXR_ResultToString(XrInstance instance, XrResult result) {
-  char errorBuffer[XR_MAX_RESULT_STRING_SIZE]{};
-  xrResultToString(instance, result, errorBuffer);
-  return std::string{errorBuffer};
-}
-
-void OXR_CheckErrors(XrInstance instance, XrResult result, const char *function,
-                     bool failOnError) {
-  if (XR_FAILED(result)) {
-    const std::string error = OXR_ResultToString(instance, result);
-    if (failOnError) {
-      ALOGE("OpenXR error: %s: %s\n", function, error.c_str());
-    } else {
-      ALOGV("OpenXR error: %s: %s\n", function, error.c_str());
-    }
-  }
-}
 
 namespace OVRFW {
 //
@@ -918,7 +901,7 @@ bool XrApp::Init(const xrJava &context) {
   //     }
   //   }
   // }
-  // SurfaceRender.Init();
+  SurfaceRender.Init();
 
   return AppInit(&context);
 }
@@ -1117,7 +1100,7 @@ void XrApp::EndSession() {
   SessionEnd();
   OXR(xrDestroySession(Session));
 
-  // ovrEgl_DestroyContext(&Egl);
+  ovrEgl_DestroyContext(&Egl);
 }
 
 void XrApp::DestroyInstance() { OXR(xrDestroyInstance(Instance)); }
@@ -1393,11 +1376,11 @@ void XrApp::AppRenderFrame(const OVRFW::ovrApplFrameIn &in,
 void XrApp::AppRenderEye(const OVRFW::ovrApplFrameIn &in,
                          OVRFW::ovrRendererOutput &out, int eye) {
   // Render the surfaces returned by Frame.
-  // SurfaceRender.RenderSurfaceList(
-  //     out.Surfaces,
-  //     out.FrameMatrices.EyeView[0], // always use 0 as it assumes an array
-  //     out.FrameMatrices.EyeProjection[0], // always use 0 as it assumes an
-  //     array eye);
+  SurfaceRender.RenderSurfaceList(
+      out.Surfaces,
+      out.FrameMatrices.EyeView[0],       // always use 0 as it assumes an array
+      out.FrameMatrices.EyeProjection[0], // always use 0 as it assumes an array
+      eye);
 }
 
 // Called once per eye each frame for default renderer
@@ -1421,9 +1404,7 @@ void XrApp::AppEyeGLStateSetup(const ovrApplFrameIn &in,
 bool XrApp::AppInit(const xrJava *context) { return true; }
 
 // Called when the application shuts down
-void XrApp::AppShutdown(const xrJava *context) {
-  // SurfaceRender.Shutdown();
-}
+void XrApp::AppShutdown(const xrJava *context) { SurfaceRender.Shutdown(); }
 
 // // Called when the application is resumed by the system.
 // void XrApp::AppResumed(const xrJava* contet) {}

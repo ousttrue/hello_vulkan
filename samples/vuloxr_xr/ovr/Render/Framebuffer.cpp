@@ -30,7 +30,7 @@ Copyright 	: 	Copyright 2015 Oculus VR, LLC. All Rights reserved.
  *************************************************************************************/
 
 #include "Framebuffer.h"
-#include "../Misc/Log.h"
+#include "Misc/Log.h"
 #include <vector>
 
 #define OXR(func)                                        \

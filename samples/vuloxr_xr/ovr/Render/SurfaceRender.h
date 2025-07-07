@@ -30,13 +30,13 @@ Authors     :   John Carmack
 #include <vector>
 #include <string>
 
-#include "../OVR_Math.h"
+#include "OVR_Math.h"
 
-// #include "GlGeometry.h"
-// #include "GpuState.h"
-// #include "GlProgram.h"
-// #include "GlBuffer.h"
-// #include "GlTexture.h"
+#include "GlGeometry.h"
+#include "GpuState.h"
+#include "GlProgram.h"
+#include "GlBuffer.h"
+#include "GlTexture.h"
 
 namespace OVRFW {
 
@@ -52,10 +52,10 @@ struct ovrSurfaceDef {
     // if primitive restart is supported, but it is a net speed
     // loss on most architectures.  Adreno docs still recommend,
     // so it might be worth trying.
-    // GlGeometry geo;
+    GlGeometry geo;
 
     // state + program + uniforms
-    // ovrGraphicsCommand graphicsCommand;
+    ovrGraphicsCommand graphicsCommand;
 
     // Number of instances to be rendered  (0 or 1 denotes no instancing)
     int numInstances;
@@ -124,12 +124,12 @@ class ovrSurfaceRender {
     // of the SceneMatrices UBO multiple times per frame.
     static const int MAX_SCENEMATRICES_UBOS = 8;
     int CurrentSceneMatricesIdx;
-    // GlBuffer SceneMatrices[MAX_SCENEMATRICES_UBOS]; // ubo for storing per-view scene matrices which
-    //                                                 // are common to the framework render programs
-    //                                                 // and do not change frequently.
-    //
-    // OVR::Matrix4f CachedViewMatrix[GlProgram::MAX_VIEWS];
-    // OVR::Matrix4f CachedProjectionMatrix[GlProgram::MAX_VIEWS];
+    GlBuffer SceneMatrices[MAX_SCENEMATRICES_UBOS]; // ubo for storing per-view scene matrices which
+                                                    // are common to the framework render programs
+                                                    // and do not change frequently.
+
+    OVR::Matrix4f CachedViewMatrix[GlProgram::MAX_VIEWS];
+    OVR::Matrix4f CachedProjectionMatrix[GlProgram::MAX_VIEWS];
 };
 
 // Set this true for log spew from BuildDrawSurfaceList and RenderSurfaceList.

@@ -40,8 +40,8 @@ Language    :   c++
 #include "FrameParams.h"
 // #include "OVR_FileSys.h"
 
-#include "Render/Egl.h"
 #include "Misc/Log.h"
+#include "Render/Egl.h"
 
 #if defined(ANDROID)
 #include <android/keycodes.h>
@@ -107,104 +107,12 @@ Language    :   c++
 
 // #include "Model/SceneView.h"
 #include "Render/Framebuffer.h"
-// #include "Render/SurfaceRender.h"
+#include "Render/SurfaceRender.h"
 
 std::string OXR_ResultToString(XrInstance instance, XrResult result);
 void OXR_CheckErrors(XrInstance instance, XrResult result, const char *function,
                      bool failOnError);
 
-#if defined(DEBUG) || defined(_DEBUG)
-#define OXR(func) OXR_CheckErrors(Instance, func, #func, true);
-#else
-#define OXR(func) OXR_CheckErrors(Instance, func, #func, false);
-#endif
-
-// static inline XrVector2f ToXrVector2f(const OVR::Vector2f& s) {
-//     XrVector2f r;
-//     r.x = s.x;
-//     r.y = s.y;
-//     return r;
-// }
-
-static inline OVR::Vector2f FromXrVector2f(const XrVector2f &s) {
-  OVR::Vector2f r;
-  r.x = s.x;
-  r.y = s.y;
-  return r;
-}
-
-// static inline OVR::Vector2f FromXrExtent2Df(const XrExtent2Df& s) {
-//     OVR::Vector2f r;
-//     r.x = s.width;
-//     r.y = s.height;
-//     return r;
-// }
-//
-// static inline XrVector3f ToXrVector3f(const OVR::Vector3f& s) {
-//     XrVector3f r;
-//     r.x = s.x;
-//     r.y = s.y;
-//     r.z = s.z;
-//     return r;
-// }
-
-static inline OVR::Vector3f FromXrVector3f(const XrVector3f &s) {
-  OVR::Vector3f r;
-  r.x = s.x;
-  r.y = s.y;
-  r.z = s.z;
-  return r;
-}
-
-// static inline OVR::Vector4f FromXrVector4f(const XrVector4f& s) {
-//     OVR::Vector4f r;
-//     r.x = s.x;
-//     r.y = s.y;
-//     r.z = s.z;
-//     r.w = s.w;
-//     return r;
-// }
-//
-// static inline OVR::Vector4f FromXrColor4f(const XrColor4f& s) {
-//     OVR::Vector4f r;
-//     r.x = s.r;
-//     r.y = s.g;
-//     r.z = s.b;
-//     r.w = s.a;
-//     return r;
-// }
-//
-// static inline XrQuaternionf ToXrQuaternionf(const OVR::Quatf& s) {
-//     XrQuaternionf r;
-//     r.x = s.x;
-//     r.y = s.y;
-//     r.z = s.z;
-//     r.w = s.w;
-//     return r;
-// }
-
-static inline OVR::Quatf FromXrQuaternionf(const XrQuaternionf &s) {
-  OVR::Quatf r;
-  r.x = s.x;
-  r.y = s.y;
-  r.z = s.z;
-  r.w = s.w;
-  return r;
-}
-
-// static inline XrPosef ToXrPosef(const OVR::Posef& s) {
-//     XrPosef r;
-//     r.orientation = ToXrQuaternionf(s.Rotation);
-//     r.position = ToXrVector3f(s.Translation);
-//     return r;
-// }
-
-static inline OVR::Posef FromXrPosef(const XrPosef &s) {
-  OVR::Posef r;
-  r.Rotation = FromXrQuaternionf(s.orientation);
-  r.Translation = FromXrVector3f(s.position);
-  return r;
-}
 
 struct xrJava {};
 
@@ -316,9 +224,7 @@ public:
   //     OVRFW::ovrFileSys* GetFileSys() {
   //         return FileSys.get();
   //     }
-  //     OVRFW::ovrSurfaceRender& GetSurfaceRender() {
-  //         return SurfaceRender;
-  //     }
+  OVRFW::ovrSurfaceRender &GetSurfaceRender() { return SurfaceRender; }
   //     OVRFW::OvrSceneView& GetScene() {
   //         return Scene;
   //     }
@@ -613,7 +519,7 @@ protected:
   uint32_t LastFrameAllButtons = 0u;
   uint32_t LastFrameAllTouches = 0u;
 
-  //     OVRFW::ovrSurfaceRender SurfaceRender;
+  OVRFW::ovrSurfaceRender SurfaceRender;
   // OVRFW::OvrSceneView Scene;
   //     std::unique_ptr<OVRFW::ovrFileSys> FileSys;
   //     std::unique_ptr<OVRFW::ModelFile> SceneModel;

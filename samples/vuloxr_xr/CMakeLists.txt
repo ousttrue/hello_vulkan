@@ -1,4 +1,4 @@
-subdirs(openxr_gl android_openxr_gles_imgui)
+subdirs(openxr_gl android_openxr_gles_imgui ovr)
 
 include(func_vk.cmake)
 include(func_gl.cmake)
@@ -74,9 +74,5 @@ set(TARGET_NAME XrHandsFB)
 add_executable(
   ${TARGET_NAME}
   #
-  XrHandsFB/main.cpp XrHandsFB/XrApp.cpp XrHandsFB/Misc/Log.c
-  XrHandsFB/Render/Egl.c XrHandsFB/Render/GlWrapperWin32.c
-  XrHandsFB/Render/Framebuffer.cpp)
-target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenXR::openxr_loader
-                                             glext OpenGL32)
-target_compile_definitions(${TARGET_NAME} PRIVATE WIN32)
+  XrHandsFB/main.cpp XrHandsFB/Renderer.cpp XrHandsFB/XrApp.cpp)
+target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)

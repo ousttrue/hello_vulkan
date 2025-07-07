@@ -28,27 +28,19 @@ rights reserved.
 
 *******************************************************************************/
 
-#include <cstdint>
-#include <cstdio>
-
+#include "OXR.h"
 #include "XrApp.h"
+
+#include "Renderer.h"
 
 static inline XrTime ToXrTime(const double timeInSeconds) {
   return (timeInSeconds * 1e9);
 }
 
-// #include "Input/SkeletonRenderer.h"
-// #include "Input/ControllerRenderer.h"
-// #include "Input/TinyUI.h"
-// #include "Input/AxisRenderer.h"
-// #include "Input/HandRenderer.h"
-// #include "Render/SimpleBeamRenderer.h"
-// #include "Render/GeometryRenderer.h"
-
 #define FORCE_ONLY_SIMPLE_CONTROLLER_PROFILE
 
 class XrHandsApp : public OVRFW::XrApp {
-private:
+
   static constexpr std::string_view kSampleExplanation =
       "OpenXR Hand Tracking:                                              \n"
       "                                                                   \n"
@@ -56,6 +48,37 @@ private:
       "Mesh: toggle rendering the hand mesh data.                         \n"
       "Joints: toggle rendering the hand joints as spheres.               \n"
       "Capsules: toggle rendering the hand capsules as rounded cylinders. \n";
+
+  Renderer m_renderer;
+
+  /// Hands - extension functions
+  PFN_xrCreateHandTrackerEXT xrCreateHandTrackerEXT_ = nullptr;
+  PFN_xrDestroyHandTrackerEXT xrDestroyHandTrackerEXT_ = nullptr;
+  PFN_xrLocateHandJointsEXT xrLocateHandJointsEXT_ = nullptr;
+  /// Hands - tracker handles
+  XrHandTrackerEXT handTrackerL_ = XR_NULL_HANDLE;
+  XrHandTrackerEXT handTrackerR_ = XR_NULL_HANDLE;
+  /// Hands - data buffers
+  XrHandJointLocationEXT jointLocationsL_[XR_HAND_JOINT_COUNT_EXT];
+  XrHandJointLocationEXT jointLocationsR_[XR_HAND_JOINT_COUNT_EXT];
+  XrHandJointVelocityEXT jointVelocitiesL_[XR_HAND_JOINT_COUNT_EXT];
+  XrHandJointVelocityEXT jointVelocitiesR_[XR_HAND_JOINT_COUNT_EXT];
+
+  bool handTrackedL_ = false;
+  bool handTrackedR_ = false;
+
+  bool lastFrameClickedL_ = false;
+  bool lastFrameClickedR_ = false;
+
+  OVR::Vector4f jointColor_{0.4, 0.5, 0.2, 0.5};
+  OVR::Vector4f capsuleColor_{0.4, 0.2, 0.2, 0.5};
+
+  bool renderMeshL_ = true;
+  bool renderMeshR_ = true;
+  bool renderJointsL_ = false;
+  bool renderJointsR_ = false;
+  bool renderCapsulesL_ = false;
+  bool renderCapsulesR_ = false;
 
 public:
   XrHandsApp() : OVRFW::XrApp() {
@@ -101,89 +124,16 @@ public:
 
   // Must return true if the application initializes successfully.
   virtual bool AppInit(const xrJava *context) override {
-    // if (false == ui_.Init(context, GetFileSys())) {
-    //     ALOG("TinyUI::Init FAILED.");
-    //     return false;
-    // }
-    /// Build UI
-    CreateSampleDescriptionPanel();
-
-    // ui_.AddLabel("OpenXR Hands + FB extensions Sample", {0.1f, 1.25f, -2.0f},
-    // {1300.0f, 100.0f})
-    //     ->SetSurfaceColor(0, {0.0f, 0.0f, 1.0f, 1.0f});
-    // ui_.AddLabel("Left Hand", {-1.0f, 2.5f, -2.0f}, {200.0f, 100.0f})
-    //     ->SetSurfaceColor(0, {0.0f, 0.0f, 1.0f, 1.0f});
-
-    // renderMeshLButton_ =
-    //     ui_.AddButton("Mesh: On", {-1.0f, 2.25f, -2.0f}, {200.0f, 100.0f},
-    //     [this]() {
-    //         renderMeshL_ = !renderMeshL_;
-    //         if (renderMeshL_) {
-    //             renderMeshLButton_->SetText("Mesh: On");
-    //         } else {
-    //             renderMeshLButton_->SetText("Mesh: Off");
-    //         }
-    //     });
-    // renderJointsLButton_ =
-    //     ui_.AddButton("Joints: Off", {-1.0f, 2.0f, -2.0f}, {200.0f, 100.0f},
-    //     [this]() {
-    //         renderJointsL_ = !renderJointsL_;
-    //         if (renderJointsL_) {
-    //             renderJointsLButton_->SetText("Joints: On");
-    //         } else {
-    //             renderJointsLButton_->SetText("Joints: Off");
-    //         }
-    //     });
-    // renderCapsulesLButton_ =
-    //     ui_.AddButton("Capsules: Off", {-1.0f, 1.75f, -2.0f}, {200.0f,
-    //     100.0f}, [this]() {
-    //         renderCapsulesL_ = !renderCapsulesL_;
-    //         if (renderCapsulesL_) {
-    //             renderCapsulesLButton_->SetText("Capsules: On");
-    //         } else {
-    //             renderCapsulesLButton_->SetText("Capsules: Off");
-    //         }
-    //     });
-    //
-    // ui_.AddLabel("Right Hand", {0.0f, 2.5f, -2.0f}, {200.0f, 100.0f})
-    //     ->SetSurfaceColor(0, {0.0f, 0.0f, 1.0f, 1.0f});
-    //
-    // renderMeshRButton_ =
-    //     ui_.AddButton("Mesh: On", {0.0f, 2.25f, -2.0f}, {200.0f, 100.0f},
-    //     [this]() {
-    //         renderMeshR_ = !renderMeshR_;
-    //         if (renderMeshR_) {
-    //             renderMeshRButton_->SetText("Mesh: On");
-    //         } else {
-    //             renderMeshRButton_->SetText("Mesh: Off");
-    //         }
-    //     });
-    // renderJointsRButton_ =
-    //     ui_.AddButton("Joints: Off", {0.0f, 2.0f, -2.0f}, {200.0f, 100.0f},
-    //     [this]() {
-    //         renderJointsR_ = !renderJointsR_;
-    //         if (renderJointsR_) {
-    //             renderJointsRButton_->SetText("Joints: On");
-    //         } else {
-    //             renderJointsRButton_->SetText("Joints: Off");
-    //         }
-    //     });
-    // renderCapsulesRButton_ =
-    //     ui_.AddButton("Capsules: Off", {0.0f, 1.75f, -2.0f}, {200.0f,
-    //     100.0f}, [this]() {
-    //         renderCapsulesR_ = !renderCapsulesR_;
-    //         if (renderCapsulesR_) {
-    //             renderCapsulesRButton_->SetText("Capsules: On");
-    //         } else {
-    //             renderCapsulesRButton_->SetText("Capsules: Off");
-    //         }
-    //     });
+    m_renderer.appInit(GetInstance());
 
     // Inspect hand tracking system properties
     XrSystemHandTrackingPropertiesEXT handTrackingSystemProperties{
-        XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT};
-    XrSystemProperties systemProperties{XR_TYPE_SYSTEM_PROPERTIES,
-                                        &handTrackingSystemProperties};
+        .type = XR_TYPE_SYSTEM_HAND_TRACKING_PROPERTIES_EXT,
+    };
+    XrSystemProperties systemProperties{
+        .type = XR_TYPE_SYSTEM_PROPERTIES,
+        .next = &handTrackingSystemProperties,
+    };
     OXR(xrGetSystemProperties(GetInstance(), GetSystemId(), &systemProperties));
     if (!handTrackingSystemProperties.supportsHandTracking) {
       // The system does not support hand tracking
@@ -205,31 +155,7 @@ public:
     OXR(xrGetInstanceProcAddr(GetInstance(), "xrLocateHandJointsEXT",
                               (PFN_xrVoidFunction *)(&xrLocateHandJointsEXT_)));
 
-    /// Hook up extensions for hand rendering
-    OXR(xrGetInstanceProcAddr(GetInstance(), "xrGetHandMeshFB",
-                              (PFN_xrVoidFunction *)(&xrGetHandMeshFB_)));
-
     return true;
-  }
-
-  void CreateSampleDescriptionPanel() {
-    // // Panel to provide sample description to the user for context
-    // auto descriptionLabel = ui_.AddLabel(
-    //     static_cast<std::string>(kSampleExplanation), {1.55f, 2.355f, -1.8f},
-    //     {750.0f, 400.0f});
-    //
-    // // Align and size the description text for readability
-    // OVRFW::VRMenuFontParms fontParams{};
-    // fontParams.Scale = 0.5f;
-    // fontParams.AlignHoriz = OVRFW::HORIZONTAL_LEFT;
-    // descriptionLabel->SetFontParms(fontParams);
-    // descriptionLabel->SetTextLocalPosition({-0.65f, 0, 0});
-    //
-    // // Tilt the description billboard 45 degrees towards the user
-    // descriptionLabel->SetLocalRotation(
-    //     OVR::Quat<float>::FromRotationVector({0, OVR::DegreeToRad(-30.0f),
-    //     0}));
-    // descriptionLabel->SetSurfaceColor(0, {0.0f, 0.0f, 1.0f, 1.0f});
   }
 
   virtual void AppShutdown(const xrJava *context) override {
@@ -237,27 +163,13 @@ public:
     xrCreateHandTrackerEXT_ = nullptr;
     xrDestroyHandTrackerEXT_ = nullptr;
     xrLocateHandJointsEXT_ = nullptr;
-    xrGetHandMeshFB_ = nullptr;
 
     OVRFW::XrApp::AppShutdown(context);
-    // ui_.Shutdown();
+    m_renderer.appShutdown();
   }
 
   virtual bool SessionInit() override {
-    /// Init session bound objects
-    // if (false == controllerRenderL_.Init(true)) {
-    //     ALOG("AppInit::Init L controller renderer FAILED.");
-    //     return false;
-    // }
-    // if (false == controllerRenderR_.Init(false)) {
-    //     ALOG("AppInit::Init R controller renderer FAILED.");
-    //     return false;
-    // }
-    // beamRenderer_.Init(GetFileSys(), nullptr, OVR::Vector4f(1.0f), 1.0f);
-
-    /// Hand rendering
-    // axisRendererL_.Init();
-    // axisRendererR_.Init();
+    m_renderer.sessionInit();
 
     /// Hand Trackers
     if (xrCreateHandTrackerEXT_) {
@@ -275,134 +187,12 @@ public:
            (long long)handTrackerR_);
 
       /// Setup skinning meshes for both hands
-      if (xrGetHandMeshFB_) {
-        for (int handIndex = 0; handIndex < 2; ++handIndex) {
-          /// Alias everything for initialization
-          const bool isLeft = (handIndex == 0);
-          auto &handTracker = isLeft ? handTrackerL_ : handTrackerR_;
-          // auto& handRenderer = isLeft ? handRendererL_ : handRendererR_;
-          // auto& handJointRenderers = isLeft ? handJointRenderersL_ :
-          // handJointRenderersR_;
-          auto *jointLocations = isLeft ? jointLocationsL_ : jointLocationsR_;
-          // auto& handCapsuleRenderers =
-          //     isLeft ? handCapsuleRenderersL_ : handCapsuleRenderersR_;
-
-          /// two-call pattern for mesh data
-          /// call 1 - figure out sizes
-
-          /// mesh
-          XrHandTrackingMeshFB mesh{XR_TYPE_HAND_TRACKING_MESH_FB};
-          mesh.next = nullptr;
-          /// mesh - skeleton
-          mesh.jointCapacityInput = 0;
-          mesh.jointCountOutput = 0;
-          mesh.jointBindPoses = nullptr;
-          mesh.jointRadii = nullptr;
-          mesh.jointParents = nullptr;
-          /// mesh - vertex
-          mesh.vertexCapacityInput = 0;
-          mesh.vertexCountOutput = 0;
-          mesh.vertexPositions = nullptr;
-          mesh.vertexNormals = nullptr;
-          mesh.vertexUVs = nullptr;
-          mesh.vertexBlendIndices = nullptr;
-          mesh.vertexBlendWeights = nullptr;
-          /// mesh - index
-          mesh.indexCapacityInput = 0;
-          mesh.indexCountOutput = 0;
-          mesh.indices = nullptr;
-          /// get mesh sizes
-          OXR(xrGetHandMeshFB_(handTracker, &mesh));
-
-          /// mesh storage - update sizes
-          mesh.jointCapacityInput = mesh.jointCountOutput;
-          mesh.vertexCapacityInput = mesh.vertexCountOutput;
-          mesh.indexCapacityInput = mesh.indexCountOutput;
-          /// skeleton
-          std::vector<XrPosef> jointBindLocations;
-          std::vector<XrHandJointEXT> parentData;
-          std::vector<float> jointRadii;
-          jointBindLocations.resize(mesh.jointCountOutput);
-          parentData.resize(mesh.jointCountOutput);
-          jointRadii.resize(mesh.jointCountOutput);
-          mesh.jointBindPoses = jointBindLocations.data();
-          mesh.jointParents = parentData.data();
-          mesh.jointRadii = jointRadii.data();
-          /// vertex
-          std::vector<XrVector3f> vertexPositions;
-          std::vector<XrVector3f> vertexNormals;
-          std::vector<XrVector2f> vertexUVs;
-          std::vector<XrVector4sFB> vertexBlendIndices;
-          std::vector<XrVector4f> vertexBlendWeights;
-          vertexPositions.resize(mesh.vertexCountOutput);
-          vertexNormals.resize(mesh.vertexCountOutput);
-          vertexUVs.resize(mesh.vertexCountOutput);
-          vertexBlendIndices.resize(mesh.vertexCountOutput);
-          vertexBlendWeights.resize(mesh.vertexCountOutput);
-          mesh.vertexPositions = vertexPositions.data();
-          mesh.vertexNormals = vertexNormals.data();
-          mesh.vertexUVs = vertexUVs.data();
-          mesh.vertexBlendIndices = vertexBlendIndices.data();
-          mesh.vertexBlendWeights = vertexBlendWeights.data();
-          /// index
-          std::vector<int16_t> indices;
-          indices.resize(mesh.indexCountOutput);
-          mesh.indices = indices.data();
-
-          /// call 2 - fill in the data
-          /// chain capsules
-          XrHandTrackingCapsulesStateFB capsuleState{
-              XR_TYPE_HAND_TRACKING_CAPSULES_STATE_FB};
-          capsuleState.next = nullptr;
-          mesh.next = &capsuleState;
-
-          /// get mesh data
-          OXR(xrGetHandMeshFB_(handTracker, &mesh));
-          // /// init renderer
-          // handRenderer.Init(&mesh, true);
-          // /// Render jointRadius for all left hand joints
-          // {
-          //     handJointRenderers.resize(XR_HAND_JOINT_COUNT_EXT);
-          //     for (int i = 0; i < XR_HAND_JOINT_COUNT_EXT; ++i) {
-          //         const OVR::Posef pose =
-          //         FromXrPosef(jointLocations[i].pose);
-          //         OVRFW::GeometryRenderer& gr = handJointRenderers[i];
-          //         gr.Init(OVRFW::BuildTesselatedCapsuleDescriptor(
-          //             mesh.jointRadii[i], 0.0f, 7, 7));
-          //         gr.SetPose(pose);
-          //         gr.DiffuseColor = jointColor_;
-          //     }
-          // }
-          /// One time init for capsules
-          // {
-          //     handCapsuleRenderers.resize(XR_FB_HAND_TRACKING_CAPSULE_COUNT);
-          //     for (int i = 0; i < XR_FB_HAND_TRACKING_CAPSULE_COUNT; ++i) {
-          //         const OVR::Vector3f p0 =
-          //             FromXrVector3f(capsuleState.capsules[i].points[0]);
-          //         const OVR::Vector3f p1 =
-          //             FromXrVector3f(capsuleState.capsules[i].points[1]);
-          //         const OVR::Vector3f d = (p1 - p0);
-          //         const float h = d.Length();
-          //         const float r = capsuleState.capsules[i].radius;
-          //         const OVR::Quatf look = OVR::Quatf::LookRotation(d, {0, 1,
-          //         0}); OVRFW::GeometryRenderer& gr = handCapsuleRenderers[i];
-          //         gr.Init(OVRFW::BuildTesselatedCapsuleDescriptor(r, h, 7,
-          //         7)); gr.SetPose(OVR::Posef(look, p0)); gr.DiffuseColor =
-          //         capsuleColor_;
-          //     }
-          // }
-          /// Print hierarchy
-          {
-            for (int i = 0; i < XR_HAND_JOINT_COUNT_EXT; ++i) {
-              const OVR::Posef pose = FromXrPosef(jointLocations[i].pose);
-              ALOG(" { {%.6f, %.6f, %.6f},  {%.6f, %.6f, %.6f, %.6f} } // "
-                   "joint = %d, parent = %d",
-                   pose.Translation.x, pose.Translation.y, pose.Translation.z,
-                   pose.Rotation.x, pose.Rotation.y, pose.Rotation.z,
-                   pose.Rotation.w, i, (int)parentData[i]);
-            }
-          }
-        }
+      for (int handIndex = 0; handIndex < 2; ++handIndex) {
+        /// Alias everything for initialization
+        const bool isLeft = (handIndex == 0);
+        auto &handTracker = isLeft ? handTrackerL_ : handTrackerR_;
+        auto *jointLocations = isLeft ? jointLocationsL_ : jointLocationsR_;
+        m_renderer.sessionInitHand(handIndex, handTracker, jointLocations);
       }
     }
 
@@ -415,13 +205,7 @@ public:
       OXR(xrDestroyHandTrackerEXT_(handTrackerL_));
       OXR(xrDestroyHandTrackerEXT_(handTrackerR_));
     }
-    // controllerRenderL_.Shutdown();
-    // controllerRenderR_.Shutdown();
-    // beamRenderer_.Shutdown();
-    // axisRendererL_.Shutdown();
-    // axisRendererR_.Shutdown();
-    // handRendererL_.Shutdown();
-    // handRendererR_.Shutdown();
+    m_renderer.sessionEnd();
   }
 
   // Update state
@@ -466,37 +250,48 @@ public:
       locationsL.next = &velocitiesL;
       locationsL.jointCount = XR_HAND_JOINT_COUNT_EXT;
       locationsL.jointLocations = jointLocationsL_;
-      /// R
-      XrHandTrackingScaleFB scaleR{XR_TYPE_HAND_TRACKING_SCALE_FB};
-      scaleR.next = nullptr;
-      scaleR.sensorOutput = 1.0f;
-      scaleR.currentOutput = 1.0f;
-      scaleR.overrideValueInput = 1.00f;
-      scaleR.overrideHandScale = XR_FALSE; // XR_TRUE;
-      XrHandTrackingCapsulesStateFB capsuleStateR{
-          XR_TYPE_HAND_TRACKING_CAPSULES_STATE_FB};
-      capsuleStateR.next = &scaleR;
-      XrHandTrackingAimStateFB aimStateR{XR_TYPE_HAND_TRACKING_AIM_STATE_FB};
-      aimStateR.next = &capsuleStateR;
-      XrHandJointVelocitiesEXT velocitiesR{XR_TYPE_HAND_JOINT_VELOCITIES_EXT};
-      velocitiesR.next = &aimStateR;
-      velocitiesR.jointCount = XR_HAND_JOINT_COUNT_EXT;
-      velocitiesR.jointVelocities = jointVelocitiesR_;
-      XrHandJointLocationsEXT locationsR{XR_TYPE_HAND_JOINT_LOCATIONS_EXT};
-      locationsR.next = &velocitiesR;
-      locationsR.jointCount = XR_HAND_JOINT_COUNT_EXT;
-      locationsR.jointLocations = jointLocationsR_;
 
       XrHandJointsLocateInfoEXT locateInfoL{
-          XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT};
-      locateInfoL.baseSpace = GetStageSpace();
-      locateInfoL.time = ToXrTime(in.PredictedDisplayTime);
+          .type = XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT,
+          .baseSpace = GetStageSpace(),
+          .time = ToXrTime(in.PredictedDisplayTime),
+      };
       OXR(xrLocateHandJointsEXT_(handTrackerL_, &locateInfoL, &locationsL));
 
+      /// R
+      XrHandTrackingScaleFB scaleR{
+          .type = XR_TYPE_HAND_TRACKING_SCALE_FB,
+          .next = nullptr,
+          .sensorOutput = 1.0f,
+          .currentOutput = 1.0f,
+          .overrideHandScale = XR_FALSE, // XR_TRUE;
+          .overrideValueInput = 1.00f,
+      };
+      XrHandTrackingCapsulesStateFB capsuleStateR{
+          .type = XR_TYPE_HAND_TRACKING_CAPSULES_STATE_FB,
+          .next = &scaleR,
+      };
+      XrHandTrackingAimStateFB aimStateR{
+          .type = XR_TYPE_HAND_TRACKING_AIM_STATE_FB,
+          .next = &capsuleStateR,
+      };
+      XrHandJointVelocitiesEXT velocitiesR{
+          .type = XR_TYPE_HAND_JOINT_VELOCITIES_EXT,
+          .next = &aimStateR,
+          .jointCount = XR_HAND_JOINT_COUNT_EXT,
+          .jointVelocities = jointVelocitiesR_,
+      };
+      XrHandJointLocationsEXT locationsR{
+          .type = XR_TYPE_HAND_JOINT_LOCATIONS_EXT,
+          .next = &velocitiesR,
+          .jointCount = XR_HAND_JOINT_COUNT_EXT,
+          .jointLocations = jointLocationsR_,
+      };
       XrHandJointsLocateInfoEXT locateInfoR{
-          XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT};
-      locateInfoR.baseSpace = GetStageSpace();
-      locateInfoR.time = ToXrTime(in.PredictedDisplayTime);
+          .type = XR_TYPE_HAND_JOINTS_LOCATE_INFO_EXT,
+          .baseSpace = GetStageSpace(),
+          .time = ToXrTime(in.PredictedDisplayTime),
+      };
       OXR(xrLocateHandJointsEXT_(handTrackerR_, &locateInfoR, &locationsR));
 
       std::vector<OVR::Posef> handJointsL;
@@ -542,7 +337,7 @@ public:
             // gr.Update();
           }
         }
-        // handRendererL_.Update(&jointLocationsL_[0]);
+        m_renderer.updateHand(0, jointLocationsL_);
         const bool didPinch = (aimStateL.status &
                                XR_HAND_TRACKING_AIM_INDEX_PINCHING_BIT_FB) != 0;
         // ui_.AddHitTestRay(FromXrPosef(aimStateL.aimPose), didPinch &&
@@ -607,118 +402,8 @@ public:
   // Render eye buffers while running
   virtual void Render(const OVRFW::ovrApplFrameIn &in,
                       OVRFW::ovrRendererOutput &out) override {
-    // /// Render UI
-    // // ui_.Render(in, out);
-    //
-    // /// Render controllers when hands are not tracked
-    // if (in.leftremotetracked && !handtrackedl_) {
-    //     controllerrenderl_.render(out.surfaces);
-    // }
-    // if (in.RightRemoteTracked && !handTrackedR_) {
-    //     controllerRenderR_.Render(out.Surfaces);
-    // }
-    //
-    // /// Render hand axes
-    // if (handTrackedL_) {
-    //     axisRendererL_.Render(OVR::Matrix4f(), in, out);
-    //
-    //     if (renderJointsL_) {
-    //         for (int i = 0; i < XR_HAND_JOINT_COUNT_EXT; ++i) {
-    //             OVRFW::GeometryRenderer& gr = handJointRenderersL_[i];
-    //             gr.Render(out.Surfaces);
-    //         }
-    //     }
-    //
-    //     if (renderCapsulesL_) {
-    //         for (int i = 0; i < XR_FB_HAND_TRACKING_CAPSULE_COUNT; ++i) {
-    //             OVRFW::GeometryRenderer& gr = handCapsuleRenderersL_[i];
-    //             gr.Render(out.Surfaces);
-    //         }
-    //     }
-    //
-    //     if (renderMeshL_) {
-    //         handRendererL_.Render(out.Surfaces);
-    //     }
-    // }
-    // if (handTrackedR_) {
-    //     axisRendererR_.Render(OVR::Matrix4f(), in, out);
-    //
-    //     if (renderJointsR_) {
-    //         for (int i = 0; i < XR_HAND_JOINT_COUNT_EXT; ++i) {
-    //             OVRFW::GeometryRenderer& gr = handJointRenderersR_[i];
-    //             gr.Render(out.Surfaces);
-    //         }
-    //     }
-    //
-    //     if (renderCapsulesR_) {
-    //         for (int i = 0; i < XR_FB_HAND_TRACKING_CAPSULE_COUNT; ++i) {
-    //             OVRFW::GeometryRenderer& gr = handCapsuleRenderersR_[i];
-    //             gr.Render(out.Surfaces);
-    //         }
-    //     }
-    //
-    //     if (renderMeshR_) {
-    //         handRendererR_.Render(out.Surfaces);
-    //     }
-    // }
-    //
-    // /// Render beams
-    // beamRenderer_.Render(in, out);
+    m_renderer.render(in, out, handTrackedL_, handTrackedR_);
   }
-
-public:
-  /// Hands - extension functions
-  PFN_xrCreateHandTrackerEXT xrCreateHandTrackerEXT_ = nullptr;
-  PFN_xrDestroyHandTrackerEXT xrDestroyHandTrackerEXT_ = nullptr;
-  PFN_xrLocateHandJointsEXT xrLocateHandJointsEXT_ = nullptr;
-  /// Hands - FB mesh rendering extensions
-  PFN_xrGetHandMeshFB xrGetHandMeshFB_ = nullptr;
-  /// Hands - tracker handles
-  XrHandTrackerEXT handTrackerL_ = XR_NULL_HANDLE;
-  XrHandTrackerEXT handTrackerR_ = XR_NULL_HANDLE;
-  /// Hands - data buffers
-  XrHandJointLocationEXT jointLocationsL_[XR_HAND_JOINT_COUNT_EXT];
-  XrHandJointLocationEXT jointLocationsR_[XR_HAND_JOINT_COUNT_EXT];
-  XrHandJointVelocityEXT jointVelocitiesL_[XR_HAND_JOINT_COUNT_EXT];
-  XrHandJointVelocityEXT jointVelocitiesR_[XR_HAND_JOINT_COUNT_EXT];
-
-private:
-  // OVRFW::ControllerRenderer controllerRenderL_;
-  // OVRFW::ControllerRenderer controllerRenderR_;
-  // OVRFW::HandRenderer handRendererL_;
-  // OVRFW::HandRenderer handRendererR_;
-  // OVRFW::TinyUI ui_;
-  // OVRFW::SimpleBeamRenderer beamRenderer_;
-  // std::vector<OVRFW::ovrBeamRenderer::handle_t> beams_;
-  // OVRFW::ovrAxisRenderer axisRendererL_;
-  // OVRFW::ovrAxisRenderer axisRendererR_;
-  bool handTrackedL_ = false;
-  bool handTrackedR_ = false;
-
-  bool lastFrameClickedL_ = false;
-  bool lastFrameClickedR_ = false;
-
-  OVR::Vector4f jointColor_{0.4, 0.5, 0.2, 0.5};
-  OVR::Vector4f capsuleColor_{0.4, 0.2, 0.2, 0.5};
-
-  bool renderMeshL_ = true;
-  bool renderMeshR_ = true;
-  bool renderJointsL_ = false;
-  bool renderJointsR_ = false;
-  bool renderCapsulesL_ = false;
-  bool renderCapsulesR_ = false;
-
-  // OVRFW::VRMenuObject* renderMeshLButton_ = nullptr;
-  // OVRFW::VRMenuObject* renderMeshRButton_ = nullptr;
-  // OVRFW::VRMenuObject* renderJointsLButton_ = nullptr;
-  // OVRFW::VRMenuObject* renderJointsRButton_ = nullptr;
-  // OVRFW::VRMenuObject* renderCapsulesLButton_ = nullptr;
-  // OVRFW::VRMenuObject* renderCapsulesRButton_ = nullptr;
-
-  // std::vector<OVRFW::GeometryRenderer> handJointRenderersL_;
-  // std::vector<OVRFW::GeometryRenderer> handJointRenderersR_;
-  // std::vector<OVRFW::GeometryRenderer> handCapsuleRenderersL_;
-  // std::vector<OVRFW::GeometryRenderer> handCapsuleRenderersR_;
 };
 
 // ENTRY_POINT(XrHandsApp)

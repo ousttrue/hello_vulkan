@@ -28,7 +28,7 @@ Language 	:	C99
  *************************************************************************************/
 
 #include "Egl.h"
-#include "../Misc/Log.h"
+#include "Misc/Log.h"
 #include "../Render/GlWrapperWin32.h"
 
 #include <string.h>
