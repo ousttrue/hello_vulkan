@@ -53,7 +53,10 @@ else()
   FetchContent_MakeAvailable(glfw)
 
   FetchContent_Populate(
-    imgui URL https://github.com/ocornut/imgui/archive/refs/tags/v1.91.9b.zip)
+    imgui
+    # URL https://github.com/ocornut/imgui/archive/refs/tags/v1.91.9b.zip
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.9b-docking)
   set(TARGET_NAME imgui)
   add_library(
     ${TARGET_NAME} STATIC
@@ -63,10 +66,13 @@ else()
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+  )
   target_include_directories(${TARGET_NAME} PUBLIC ${imgui_SOURCE_DIR}
                                                    ${imgui_SOURCE_DIR}/backends)
   target_link_libraries(${TARGET_NAME} PUBLIC Vulkan::Vulkan glfw)
+  target_compile_options(${TARGET_NAME} PUBLIC -Wno-nontrivial-memcall)
 
   FetchContent_Populate(
     glew
@@ -108,6 +114,13 @@ FetchContent_Populate(
 )
 add_library(glm INTERFACE)
 target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
+
+FetchContent_Populate(
+  asio
+  GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+  GIT_TAG asio-1-34-2)
+add_library(asio INTERFACE)
+target_include_directories(asio INTERFACE ${asio_SOURCE_DIR}/asio/include)
 
 FetchContent_Populate(
   stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
@@ -161,4 +174,4 @@ target_include_directories(glext INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/glext)
 #
 # subdirs
 #
-subdirs(samples vuloxr)
+subdirs(cuber samples vuloxr)
