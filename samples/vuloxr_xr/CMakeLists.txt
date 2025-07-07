@@ -86,3 +86,14 @@ add_executable(
   #
 )
 target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)
+
+set(TARGET_NAME XrPassthroughOcclusion)
+add_executable(
+  ${TARGET_NAME}
+  #
+  XrPassthroughOcclusion/XrPassthroughOcclusion.cpp
+  XrPassthroughOcclusion/XrPassthroughOcclusionGl.cpp
+  XrPassthroughOcclusion/XrPassthroughOcclusionInput.cpp
+  #
+)
+target_link_libraries(${TARGET_NAME} PRIVATE vuloxr OpenGL32 ovr)
