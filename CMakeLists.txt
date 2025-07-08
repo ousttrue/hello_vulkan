@@ -67,8 +67,7 @@ else()
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
-  )
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp)
   target_include_directories(${TARGET_NAME} PUBLIC ${imgui_SOURCE_DIR}
                                                    ${imgui_SOURCE_DIR}/backends)
   target_link_libraries(${TARGET_NAME} PUBLIC Vulkan::Vulkan glfw)
@@ -170,6 +169,12 @@ target_include_directories(sal INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/sal/inc)
 
 add_library(glext INTERFACE)
 target_include_directories(glext INTERFACE ${CMAKE_CURRENT_LIST_DIR}/deps/glext)
+
+FetchContent_Declare(
+  sdl2
+  URL https://github.com/libsdl-org/SDL/releases/download/release-2.32.2/SDL2-2.32.2.zip
+)
+FetchContent_MakeAvailable(sdl2)
 
 #
 # subdirs

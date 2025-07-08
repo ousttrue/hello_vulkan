@@ -83,8 +83,9 @@ export default defineConfig({
         text: "OpenXR",
         items: [
           { text: "OpenXR samples", link: "/openxr/reference" },
-          { text: "初期化", link: "/openxr/initialization" },
+          { text: "Initialize", link: "/openxr/initialization" },
           { text: "Swapchain", link: "openxr/swapchain" },
+          { text: "Composition", link: "openxr/composition" },
           {
             text: "Extensions", items: [
               { text: "Hand Tracking", link: "/openxr/extensions/hand_tracking" },
