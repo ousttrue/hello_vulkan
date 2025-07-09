@@ -22,12 +22,13 @@ note
 
 ### 1. deps
 
-- build_deps/x86_64/debug
-- build_deps/x86_64/release
+- build_deps/windows/debug
+- build_deps/windows/release
 - build_deps/arm64-v8a/debug
 - build_deps/arm64-v8a/release
-- prefix/x86_64/debug
-- prefix/x86_64/release
+
+- prefix/windows/debug
+- prefix/windows/release
 - prefix/arm64-v8a/debug
 - prefix/arm64-v8a/release
 
@@ -40,8 +41,8 @@ note
 
 ### 2. exe
 
-- build/x86_64/debug
-- build/x86_64/release
+- build/windows/debug
+- build/windows/release
 - build/arm64-v8a/debug
 - build/arm64-v8a/release
 

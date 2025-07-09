@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20.0)
 project(deps)
 
+include(../prefix.cmake)
+
 set(CMAKE_CXX_STANDARD 20)
 cmake_policy(SET CMP0177 NEW)
 cmake_policy(SET CMP0135 NEW)
@@ -16,8 +18,6 @@ if(NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
     CONTENT "*")
 endif()
 
-set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_LIST_DIR}/../prefix)
-
 # for prefix/.gitignore
 file(
   GENERATE
@@ -27,6 +27,9 @@ file(
 add_compile_options(# stop embed warning
                     -Wno-c23-extensions -D_CRT_SECURE_NO_WARNINGS)
 
+#
+# dependencies
+#
 include(FetchContent)
 
 #
@@ -41,13 +44,9 @@ FetchContent_MakeAvailable(openxr)
 #
 # glew
 #
-# FetchContent_Declare( glew GIT_REPOSITORY
-# https://github.com/Perlmint/glew-cmake.git GIT_TAG origin/master)
-# FetchContent_MakeAvailable(glew)
 FetchContent_Declare(
   glew
   # URL
-  # https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download
   URL https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0.zip
       SOURCE_SUBDIR
       build/cmake
@@ -56,14 +55,6 @@ FetchContent_Declare(
     ${CMAKE_CURRENT_BINARY_DIR}/_deps/glew-src/build/cmake/CMakeLists.txt
   UPDATE_DISCONNECTED 1)
 FetchContent_MakeAvailable(glew)
-# add_library(glew_s STATIC ${glew_SOURCE_DIR}/src/glew.c
-# ${glew_SOURCE_DIR}/src/glewinfo.c) target_include_directories(glew_s PUBLIC)
-# target_include_directories( glew_s PUBLIC
-# $<BUILD_INTERFACE:${glew_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-# target_compile_definitions( glew_s PRIVATE GLEW_BUILD PUBLIC GLEW_STATIC)
-# target_link_libraries(glew_s PUBLIC OpenGL32) install(TARGETS glew_s EXPORT
-# glew-config) install( EXPORT glew-config NAMESPACE GLEW:: FILE
-# glew-config.cmake DESTINATION cmake)
 
 #
 # SDL2
@@ -94,6 +85,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SPIRV-Headers)
 
 # set(SPIRV_TOOLS_BUILD_STATIC ON)
+set(SPIRV_SKIP_TESTS ON)
 FetchContent_Declare(
   SPIRV-Tools
   URL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/v2025.1.zip)
@@ -122,12 +114,6 @@ target_include_directories(
          $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
          $<INSTALL_INTERFACE:include>)
 
-# set_target_properties(shaderc_shared PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
-# "") target_include_directories( shaderc_shared PUBLIC #
-# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
-# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
-# $<INSTALL_INTERFACE:include>)
-
 set_target_properties(shaderc_util PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
 target_include_directories(
   shaderc_util
@@ -135,11 +121,6 @@ target_include_directories(
          $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
          $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
          $<INSTALL_INTERFACE:include>)
-
-# set_target_properties(glslc PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
-# target_include_directories( glslc PUBLIC #
-# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
-# $<INSTALL_INTERFACE:include>)
 
 install(TARGETS shaderc EXPORT shaderc-config)
 install(
@@ -152,3 +133,6 @@ install(
   EXPORT shaderc_util-config
   FILE shaderc_util-config.cmake
   DESTINATION cmake)
+
+message(STATUS "PREFIX => ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "BUILD => ${CMAKE_CURRENT_BINARY_DIR}")

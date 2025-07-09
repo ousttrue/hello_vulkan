@@ -1,0 +1,36 @@
+string(ASCII 27 Esc)
+set(ColourReset "${Esc}[m")
+set(ColourBold "${Esc}[1m")
+set(Red "${Esc}[31m")
+set(Green "${Esc}[32m")
+set(Yellow "${Esc}[33m")
+set(Blue "${Esc}[34m")
+set(Magenta "${Esc}[35m")
+set(Cyan "${Esc}[36m")
+set(White "${Esc}[37m")
+set(BoldRed "${Esc}[1;31m")
+set(BoldGreen "${Esc}[1;32m")
+set(BoldYellow "${Esc}[1;33m")
+set(BoldBlue "${Esc}[1;34m")
+set(BoldMagenta "${Esc}[1;35m")
+set(BoldCyan "${Esc}[1;36m")
+set(BoldWhite "${Esc}[1;37m")
+
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  if(ANDROID)
+    message(FATAL_ERROR "ANDROID not yet impl")
+  else()
+    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+      cmake_path(SET prefix NORMALIZE
+                 ${CMAKE_CURRENT_LIST_DIR}/../prefix/windows/debug)
+    else()
+      cmake_path(SET prefix NORMALIZE
+                 ${CMAKE_CURRENT_LIST_DIR}/../prefix/windows/release)
+    endif()
+  endif()
+
+  set(CMAKE_INSTALL_PREFIX
+      ${prefix}
+      CACHE PATH "..." FORCE)
+endif()
+set(CMAKE_PREFIX_PATH ${CMAKE_INSTALL_PREFIX})

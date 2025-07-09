@@ -1,6 +1,9 @@
-# project
 cmake_minimum_required(VERSION 3.30)
 project(hello_vulkan VERSION 0.1.0)
+
+include(prefix.cmake)
+message(STATUS "PREFIX => ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "BUILD => ${CMAKE_CURRENT_BINARY_DIR}")
 
 if(NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   # Git auto-ignore out-of-source build directory
@@ -11,10 +14,6 @@ if(NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
 endif()
 
 set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS false)
-# set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/prefix/cmake)
-set(CMAKE_INSTALL_PREFIX
-    ${CMAKE_CURRENT_LIST_DIR}/prefix
-    CACHE PATH "..." FORCE)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 set(CMAKE_POLICY_DEFAULT_CMP0148 OLD)
@@ -70,3 +69,4 @@ find_package(shaderc_util REQUIRED)
 find_package(shaderc REQUIRED)
 
 subdirs(vuloxr cuber samples)
+
