@@ -22,10 +22,10 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   else()
     if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
       cmake_path(SET prefix NORMALIZE
-                 ${CMAKE_CURRENT_LIST_DIR}/../prefix/windows/debug)
+                 ${CMAKE_CURRENT_LIST_DIR}/prefix/windows/debug)
     else()
       cmake_path(SET prefix NORMALIZE
-                 ${CMAKE_CURRENT_LIST_DIR}/../prefix/windows/release)
+                 ${CMAKE_CURRENT_LIST_DIR}/prefix/windows/release)
     endif()
   endif()
 

@@ -8,7 +8,7 @@
 #include "util_texture.h"
 #include "assertgl.h"
 
-#include <stb_image.h>
+#include <stb/stb_image.h>
 
 #if defined (USE_INPUT_CAMERA_CAPTURE)
 #include "util_camera_capture.h"

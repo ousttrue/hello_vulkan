@@ -33,6 +33,16 @@ add_compile_options(# stop embed warning
 include(FetchContent)
 
 #
+# magic enum
+#
+set(MAGIC_ENUM_OPT_INSTALL ON)
+FetchContent_Declare(
+  magic_enum
+  URL https://github.com/Neargye/magic_enum/releases/download/v0.9.7/magic_enum-v0.9.7.tar.gz
+)
+FetchContent_MakeAvailable(magic_enum)
+
+#
 # openxr
 #
 FetchContent_Declare(
@@ -55,6 +65,19 @@ FetchContent_Declare(
     ${CMAKE_CURRENT_BINARY_DIR}/_deps/glew-src/build/cmake/CMakeLists.txt
   UPDATE_DISCONNECTED 1)
 FetchContent_MakeAvailable(glew)
+
+#
+# glfw
+#
+set(BUILD_SHARED_LIBS OFF)
+set(GLFW_BUILD_EXAMPLES OFF)
+set(GLFW_BUILD_TESTS OFF)
+set(GLFW_BUILD_DOCS OFF)
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.3.8)
+FetchContent_MakeAvailable(glfw)
 
 #
 # SDL2
@@ -136,3 +159,32 @@ install(
 
 message(STATUS "PREFIX => ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "BUILD => ${CMAKE_CURRENT_BINARY_DIR}")
+
+#
+# stb
+#
+FetchContent_Populate(
+  stb URL https://github.com/nothings/stb/archive/refs/heads/master.zip)
+set(CMAKE_INCLUDE_CURRENT_DIR_IN_INTERFACE ON)
+add_library(stb INTERFACE)
+set_target_properties(stb PROPERTIES PUBLIC_HEADER
+                                     ${stb_SOURCE_DIR}/stb_image.h)
+target_compile_definitions(stb INTERFACE STB_IMAGE_IMPLEMENTATION)
+install(
+  TARGETS stb
+  EXPORT stb-config
+  INCLUDES
+  DESTINATION include
+  PUBLIC_HEADER DESTINATION include/stb)
+install(
+  EXPORT stb-config
+  FILE stb-config.cmake
+  DESTINATION cmake)
+
+#
+# DirectXMath
+#
+FetchContent_Declare(
+  DirectXMath
+  URL https://github.com/microsoft/DirectXMath/archive/refs/tags/apr2025.zip)
+FetchContent_MakeAvailable(DirectXMath)

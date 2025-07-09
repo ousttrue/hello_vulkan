@@ -1,4 +1,4 @@
-set(XR_SAMPLE_COMMON_LIBS vuloxr shaderc OpenXR::openxr_loader DirectXMath)
+set(XR_SAMPLE_COMMON_LIBS vuloxr shaderc OpenXR::openxr_loader Microsoft::DirectXMath)
 
 if(ANDROID)
   function(add_vk_sample TARGET_DIR)

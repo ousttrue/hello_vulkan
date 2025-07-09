@@ -1,4 +1,4 @@
-set(XR_SAMPLE_COMMON_LIBS vuloxr shaderc OpenXR::openxr_loader DirectXMath openxr_gl)
+set(XR_SAMPLE_COMMON_LIBS vuloxr shaderc OpenXR::openxr_loader Microsoft::DirectXMath openxr_gl)
 
 if(ANDROID)
   function(add_gl_sample TARGET_DIR)
