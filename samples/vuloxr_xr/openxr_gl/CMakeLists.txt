@@ -35,5 +35,5 @@ else()
     ${TARGET_NAME}
     PUBLIC OpenXR::openxr_loader stb
            #
-           glew_s)
+           GLEW::glew_s)
 endif()

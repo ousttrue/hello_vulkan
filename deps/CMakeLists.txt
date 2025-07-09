@@ -1,0 +1,154 @@
+cmake_minimum_required(VERSION 3.20.0)
+project(deps)
+
+set(CMAKE_CXX_STANDARD 20)
+cmake_policy(SET CMP0177 NEW)
+cmake_policy(SET CMP0135 NEW)
+
+# for compile_commands.json
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
+# for build/.gitignore
+if(NOT PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
+  file(
+    GENERATE
+    OUTPUT .gitignore
+    CONTENT "*")
+endif()
+
+set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_LIST_DIR}/../prefix)
+
+# for prefix/.gitignore
+file(
+  GENERATE
+  OUTPUT ${CMAKE_INSTALL_PREFIX}/.gitignore
+  CONTENT "*")
+
+add_compile_options(# stop embed warning
+                    -Wno-c23-extensions -D_CRT_SECURE_NO_WARNINGS)
+
+include(FetchContent)
+
+#
+# openxr
+#
+FetchContent_Declare(
+  openxr
+  GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
+  GIT_TAG release-1.1.47)
+FetchContent_MakeAvailable(openxr)
+
+#
+# glew
+#
+# FetchContent_Declare( glew GIT_REPOSITORY
+# https://github.com/Perlmint/glew-cmake.git GIT_TAG origin/master)
+# FetchContent_MakeAvailable(glew)
+FetchContent_Declare(
+  glew
+  # URL
+  # https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.tgz/download
+  URL https://github.com/nigels-com/glew/releases/download/glew-2.2.0/glew-2.2.0.zip
+      SOURCE_SUBDIR
+      build/cmake
+  PATCH_COMMAND
+    ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_LIST_DIR}/glew.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/_deps/glew-src/build/cmake/CMakeLists.txt
+  UPDATE_DISCONNECTED 1)
+FetchContent_MakeAvailable(glew)
+# add_library(glew_s STATIC ${glew_SOURCE_DIR}/src/glew.c
+# ${glew_SOURCE_DIR}/src/glewinfo.c) target_include_directories(glew_s PUBLIC)
+# target_include_directories( glew_s PUBLIC
+# $<BUILD_INTERFACE:${glew_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+# target_compile_definitions( glew_s PRIVATE GLEW_BUILD PUBLIC GLEW_STATIC)
+# target_link_libraries(glew_s PUBLIC OpenGL32) install(TARGETS glew_s EXPORT
+# glew-config) install( EXPORT glew-config NAMESPACE GLEW:: FILE
+# glew-config.cmake DESTINATION cmake)
+
+#
+# SDL2
+#
+FetchContent_Declare(
+  sdl2
+  URL https://github.com/libsdl-org/SDL/releases/download/release-2.32.2/SDL2-2.32.2.zip
+)
+FetchContent_MakeAvailable(sdl2)
+install(
+  TARGETS SDL2-static
+  EXPORT sdl2-config
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib)
+install(
+  EXPORT sdl2-config
+  FILE sdl2-config.cmake
+  DESTINATION cmake)
+install(DIRECTORY ${sdl2_SOURCE_DIR}/include/ DESTINATION include/SDL2)
+
+#
+# shaderc
+#
+FetchContent_Declare(
+  SPIRV-Headers
+  GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Headers.git
+  GIT_TAG vulkan-sdk-1.4.313.0)
+FetchContent_MakeAvailable(SPIRV-Headers)
+
+# set(SPIRV_TOOLS_BUILD_STATIC ON)
+FetchContent_Declare(
+  SPIRV-Tools
+  URL https://github.com/KhronosGroup/SPIRV-Tools/archive/refs/tags/v2025.1.zip)
+FetchContent_MakeAvailable(SPIRV-Tools)
+
+set(GLSLANG_TESTS OFF)
+set(GLSLANG_ENABLE_INSTALL ON)
+FetchContent_Declare(
+  glslang
+  URL https://github.com/KhronosGroup/glslang/archive/refs/tags/15.3.0.zip)
+FetchContent_MakeAvailable(glslang)
+
+set(SHADERC_SKIP_TESTS ON)
+set(SHADERC_SKIP_INSTALL OFF)
+FetchContent_Declare(
+  shaderc
+  GIT_REPOSITORY https://github.com/google/shaderc.git
+  GIT_TAG v2025.2)
+FetchContent_MakeAvailable(shaderc)
+
+set_target_properties(shaderc PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+target_include_directories(
+  shaderc
+  PUBLIC #
+         $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
+         $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
+         $<INSTALL_INTERFACE:include>)
+
+# set_target_properties(shaderc_shared PROPERTIES INTERFACE_INCLUDE_DIRECTORIES
+# "") target_include_directories( shaderc_shared PUBLIC #
+# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
+# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
+# $<INSTALL_INTERFACE:include>)
+
+set_target_properties(shaderc_util PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+target_include_directories(
+  shaderc_util
+  PUBLIC #
+         $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
+         $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc_util/include>
+         $<INSTALL_INTERFACE:include>)
+
+# set_target_properties(glslc PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+# target_include_directories( glslc PUBLIC #
+# $<BUILD_INTERFACE:${shaderc_SOURCE_DIR}/libshaderc/include>
+# $<INSTALL_INTERFACE:include>)
+
+install(TARGETS shaderc EXPORT shaderc-config)
+install(
+  EXPORT shaderc-config
+  FILE shaderc-config.cmake
+  DESTINATION cmake)
+
+install(TARGETS shaderc_util EXPORT shaderc_util-config)
+install(
+  EXPORT shaderc_util-config
+  FILE shaderc_util-config.cmake
+  DESTINATION cmake)

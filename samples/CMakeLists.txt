@@ -12,4 +12,7 @@ function(add_glsl TARGET SHADER)
   target_sources(${TARGET} PRIVATE ${current-output-path})
 endfunction(add_glsl)
 
-subdirs(vuloxr vuloxr_xr cuber cuber_xr vuloxr_xr/openxr-simple-example)
+subdirs(# vuloxr
+        vuloxr_xr
+        # cuber cuber_xr
+)

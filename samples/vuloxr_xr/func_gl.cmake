@@ -48,7 +48,7 @@ else()
               # windows
               glfw
               #
-              glew_s)
+              GLEW::glew_s)
     target_compile_definitions(
       ${TARGET_NAME}
       PUBLIC -DXR_USE_PLATFORM_WIN32 -DXR_USE_GRAPHICS_API_OPENGL

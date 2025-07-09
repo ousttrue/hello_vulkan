@@ -18,14 +18,52 @@ note
 - clang-20(for `#embed` macro)
 - TODO: scene compatibility OpenGL betwenn Vulkan
 
-## windows
+## build windows
+
+### 1. deps
+
+- build_deps/x86_64/debug
+- build_deps/x86_64/release
+- build_deps/arm64-v8a/debug
+- build_deps/arm64-v8a/release
+- prefix/x86_64/debug
+- prefix/x86_64/release
+- prefix/arm64-v8a/debug
+- prefix/arm64-v8a/release
 
 ```sh
-> cmake -S . -B builddir -G Ninja -DCMAKE_BUILD_TYPE=Debug
+> $env:CMAKE_BUILD_TYPE=Debug
+> cmake -S deps -B build_deps -G Ninja
+> cmake --build build_deps
+> cmake --install build_deps
 ```
 
-## android
+### 2. exe
+
+- build/x86_64/debug
+- build/x86_64/release
+- build/arm64-v8a/debug
+- build/arm64-v8a/release
 
 ```sh
-> cmake -S . -B build_android -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_NDK="${env:ANDROID_HOME}\ndk\29.0.13113456" -DCMAKE_TOOLCHAIN_FILE="${env:ANDROID_HOME}\ndk\29.0.13113456/build/cmake/android.toolchain.cmake" -G Ninja -DPLATFORM=android -DCMAKE_BUILD_TYPE=Debug
+> $env:CMAKE_BUILD_TYPE=Debug
+> cmake -S . -B build -G Ninja
+> cmake --build build
+```
+
+## build android
+
+### 1. deps
+
+```sh
+> cmake -S deps -B android_deps -G Ninja -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_NDK="${env:ANDROID_HOME}\ndk\29.0.13113456" -DCMAKE_TOOLCHAIN_FILE="${env:ANDROID_HOME}\ndk\29.0.13113456/build/cmake/android.toolchain.cmake" -G Ninja -DPLATFORM=android
+> cmake --build android_deps
+> cmake --install android_deps
+```
+
+### 2. so
+
+```sh
+> cmake -S . -B build_android -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 -DANDROID_NDK="${env:ANDROID_HOME}\ndk\29.0.13113456" -DCMAKE_TOOLCHAIN_FILE="${env:ANDROID_HOME}\ndk\29.0.13113456/build/cmake/android.toolchain.cmake" -G Ninja -DPLATFORM=android
+> cmake --build build_android
 ```

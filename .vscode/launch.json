@@ -71,6 +71,17 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "openxr-simple-example",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/samples/vuloxr_xr/openxr-simple-example/openxr-simple-example.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "xrhandsfb",
             "type": "cppvsdbg",
             "request": "launch",
